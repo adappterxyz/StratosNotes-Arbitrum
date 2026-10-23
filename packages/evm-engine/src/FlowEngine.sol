@@ -941,7 +941,8 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         r.stepsRun++;
         // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
         emit StepRun(r.pid, uint16(i), uint8(s.kind), r.signer);
-        _milestone(r, i, s);
+        // A window's milestone marks a run inside it (funding deposited), not its closing.
+        if (s.until == 0) _milestone(r, i, s);
     }
 
     function _milestone(Run memory r, uint256 i, Def.Step memory s) internal {

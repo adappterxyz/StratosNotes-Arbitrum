@@ -93,6 +93,11 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     }
     const fallback = (await this.client.readContract({ ...e, functionName: 'fallbackReporter' })).toLowerCase();
     const reports = await this.client.getContractEvents({ ...e, eventName: 'ReportProcessed', args: { pid }, fromBlock: this.dep.fromBlock ?? 0n });
+    // Economic milestones (payment made, missed, defaulted, ...): the payment schedule's status reads them.
+    const marks = await this.client.getContractEvents({ ...e, eventName: 'Milestone', args: { pid }, fromBlock: this.dep.fromBlock ?? 0n });
+    const blockTime = new Map<bigint, number>();
+    for (const m of marks) if (!blockTime.has(m.blockNumber)) blockTime.set(m.blockNumber, Number((await this.client.getBlock({ blockNumber: m.blockNumber })).timestamp));
+    const milestones = marks.map(m => ({ code: Number(m.args.code), step: Number(m.args.step), at: blockTime.get(m.blockNumber) ?? 0 }));
     const via = reports.map(r => ((r.args.reporter ?? '').toLowerCase() === fallback && fallback !== zeroAddress ? 'fallback' : 'cre') as 'cre' | 'fallback');
     return {
       id: noteId(this.chain.key, this.dep.engine, pid), chain: this.chain.key, engine: this.dep.engine.toLowerCase(), pid: pid.toString(),
@@ -102,6 +107,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
       holdings: holdings.sort((a, b) => a.asset - b.asset || a.owner.localeCompare(b.owner)),
       createdAt: Number(proc.createdAt), updatedAt: Number(proc.updatedAt),
       reports: { cre: via.filter(v => v === 'cre').length, fallback: via.filter(v => v === 'fallback').length, last: via[via.length - 1] ?? null },
+      milestones,
     };
   }
 
