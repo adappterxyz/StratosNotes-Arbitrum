@@ -14,7 +14,7 @@
 //     step and everything after it that needs nobody (coupons, autocall, redemption) in that transaction.
 import {
   bytesToHex, consensusIdenticalAggregation, CronCapability, EVMClient, encodeCallMsg, getNetwork, handler,
-  LAST_FINALIZED_BLOCK_NUMBER, prepareReportRequest, Runner, TxStatus, type Runtime,
+  LAST_FINALIZED_BLOCK_NUMBER, LATEST_BLOCK_NUMBER, prepareReportRequest, Runner, TxStatus, type Runtime,
 } from '@chainlink/cre-sdk'
 import { decodeFunctionResult, encodeFunctionData, zeroAddress, type Address, type Hex } from 'viem'
 import { z } from 'zod'
@@ -44,6 +44,12 @@ const configSchema = z.object({
     fromPid: z.number().int().positive(),
     scan: z.number().int().positive(),
     maxProcesses: z.number().int().positive(),
+    /**
+     * Block to read the engine at. 'finalized' (default) needs an RPC that serves recent historical state; public
+     * testnet RPCs (Robinhood Chain testnet) refuse it, so they read 'latest'. Safe either way: the engine re-checks
+     * on-chain that a step is due before it applies a report. Feeds are always read at a finalized block.
+     */
+    stateBlock: z.enum(['finalized', 'latest']).optional(),
   })).min(1),
   /** Reports written per run across all chains (each is one transaction). */
   maxReportsPerRun: z.number().int().positive(),
@@ -61,11 +67,11 @@ function client(name: string): EVMClient {
   return new EVMClient(network.chainSelector.selector)
 }
 
-/** One view call at the last finalized block; returns the raw result. */
-function view(runtime: Runtime<Config>, evm: EVMClient, to: string, data: Hex): Hex {
+/** One view call, at the last finalized block unless `at` is 'latest'; returns the raw result. */
+function view(runtime: Runtime<Config>, evm: EVMClient, to: string, data: Hex, at: 'finalized' | 'latest' = 'finalized'): Hex {
   const reply = evm.callContract(runtime, {
     call: encodeCallMsg({ from: zeroAddress, to: to as Address, data }),
-    blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+    blockNumber: at === 'latest' ? LATEST_BLOCK_NUMBER : LAST_FINALIZED_BLOCK_NUMBER,
   }).result()
   return bytesToHex(reply.data)
 }
@@ -79,14 +85,14 @@ function dueOn(runtime: Runtime<Config>, chain: ChainConfig, nowSec: number): Du
   for (let page = 0; page < 4; page++) {
     const raw = view(runtime, evm, chain.lens, encodeFunctionData({
       abi: lensAbi, functionName: 'running', args: [from, BigInt(chain.scan), BigInt(chain.maxProcesses)],
-    }))
+    }), chain.stateBlock ?? 'finalized')
     const [snaps, next] = decodeFunctionResult({ abi: lensAbi, functionName: 'running', data: raw })
     for (const s of snaps) {
       const p = snapshotToState({ ...s, tokens: s.tokens, values: s.values, balances: s.balances })
       if (!defs.has(p.definition)) {
         const bytes = decodeFunctionResult({
           abi: lensAbi, functionName: 'definitionBytes',
-          data: view(runtime, evm, chain.lens, encodeFunctionData({ abi: lensAbi, functionName: 'definitionBytes', args: [p.definition as Hex] })),
+          data: view(runtime, evm, chain.lens, encodeFunctionData({ abi: lensAbi, functionName: 'definitionBytes', args: [p.definition as Hex] }), chain.stateBlock ?? 'finalized'),
         })
         defs.set(p.definition, bytes === '0x' ? null : decodeEvmDef(hexToBytes(bytes)))
       }

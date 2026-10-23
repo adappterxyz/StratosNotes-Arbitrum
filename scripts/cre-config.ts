@@ -23,12 +23,16 @@ const chains = TARGETS[target];
 if (!chains) throw new Error(`target: ${Object.keys(TARGETS).join(' | ')}`);
 const config = {
   schedule: target === 'production' ? '0 * * * * *' : '*/30 * * * * *',
-  chains: chains.map(ch => {
+  // A chain not deployed yet is left out, so staging can go live one chain at a time: the workflow refuses a zero
+  // address, and listing one would stop every run. Production and local forks keep every entry.
+  chains: chains.filter(ch => target !== 'staging' || existsSync(ch.file)).map(ch => {
     const d = existsSync(ch.file) ? JSON.parse(readFileSync(ch.file, 'utf8')) as { engine: string; lens: string } : { engine: ZERO, lens: ZERO };
     return {
       chainSelectorName: ch.chainSelectorName, engine: d.engine, lens: d.lens,
       // A coupon to a full book (62 holders) measured 2.22M gas of execution; the margin covers Arbitrum's L1 data gas.
       gasLimit: '8000000', fromPid: 1, scan: 200, maxProcesses: 50,
+      // Public testnet RPCs don't serve recent historical state, so staging reads the engine at the latest block.
+      ...(target === 'staging' ? { stateBlock: 'latest' } : {}),
     };
   }),
   maxReportsPerRun: 5,

@@ -1,0 +1,26 @@
+{
+  "chains": [
+    {
+      "key": "arbitrum-sepolia",
+      "family": "evm",
+      "chainId": 421614,
+      "rpc": "https://sepolia-rollup.arbitrum.io/rpc",
+      "engine": "0x83F653e5843FfD39A3aC1DE856D838f651225ab4",
+      "startBlock": 322035310,
+      "confirmations": 3,
+      "maxRange": 2000,
+      "pollMs": 2000
+    },
+    {
+      "key": "robinhood-testnet",
+      "family": "evm",
+      "chainId": 46630,
+      "rpc": "https://rpc.testnet.chain.robinhood.com",
+      "engine": "0x4532fca7Aa4dD54FC981D62836D3852ce7bdb7B2",
+      "startBlock": 141297464,
+      "confirmations": 3,
+      "maxRange": 2000,
+      "pollMs": 2000
+    }
+  ]
+}
