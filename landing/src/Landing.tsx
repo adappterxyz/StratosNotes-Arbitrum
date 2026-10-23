@@ -257,7 +257,7 @@ export default function Landing() {
                 <div className="logo">StratosNotes on Arbitrum</div>
                 <span className="status-pill"><i />Now · Arbitrum</span>
                 <p>The same compiler and payoffs on a Solidity engine for Arbitrum Sepolia and Robinhood Chain, rebuilt around collateral and per-period funding.</p>
-                <span className="foot-note">notes.stratoslab.app</span>
+                <span className="foot-note">notes.markets</span>
               </div>
             </div>
           </div>

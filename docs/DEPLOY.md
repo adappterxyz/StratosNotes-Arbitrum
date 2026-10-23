@@ -1,4 +1,4 @@
-# Deploy runbook: Arbitrum Sepolia, Robinhood Chain testnet, notes.stratoslab.app
+# Deploy runbook: Arbitrum Sepolia, Robinhood Chain testnet, notes.markets
 
 Everything below runs from the repo root on the server. Keys live in `.keys/` (gitignored, mode 600) and are read
 from files by the scripts, never typed on a command line or printed.
@@ -66,21 +66,21 @@ A new tunnel with its own credentials directory, so the existing `/etc/cloudflar
 mkdir -p /root/.cloudflared-notes
 HOME=/root/.cloudflared-notes cloudflared tunnel login
 HOME=/root/.cloudflared-notes cloudflared tunnel create sn-arb-api
-HOME=/root/.cloudflared-notes cloudflared tunnel route dns sn-arb-api notes-api.stratoslab.app
+HOME=/root/.cloudflared-notes cloudflared tunnel route dns sn-arb-api api.notes.markets
 TID="$(HOME=/root/.cloudflared-notes cloudflared tunnel list -o json | python3 -c "import json,sys;print([t['id'] for t in json.load(sys.stdin) if t['name']=='sn-arb-api'][0])")"
 cat > /root/.cloudflared-notes/config.yml <<EOF
 tunnel: $TID
 credentials-file: /root/.cloudflared-notes/.cloudflared/$TID.json
 ingress:
-  - hostname: notes-api.stratoslab.app
+  - hostname: api.notes.markets
     service: http://127.0.0.1:8787
   - service: http_status:404
 EOF
 pm2 start cloudflared --name sn-arb-tunnel -- tunnel --no-autoupdate --config /root/.cloudflared-notes/config.yml run sn-arb-api
-curl -s https://notes-api.stratoslab.app/api/health
+curl -s https://api.notes.markets/api/health
 ```
 
-## 5. The site Worker (notes.stratoslab.app)
+## 5. The site Worker (notes.markets)
 
 ```bash
 (cd web && npm install)

@@ -4,7 +4,7 @@
 to the AI or a BPMN canvas, sold for stablecoins on Arbitrum Sepolia and Robinhood Chain testnet, with Chainlink CRE
 as the calculation and paying agent.
 
-- Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app
+- Site: https://notes.markets · App: https://notes.markets/app
 - Code: https://github.com/adappterxyz/StratosNotes-Arbitrum
 - Demo script: [DEMO.md](DEMO.md) · Runbook: [DEPLOY.md](DEPLOY.md)
 - Earlier build (Solana, TOKEN2049, won Chainlink's CRE track): https://sp.stratoslab.app
@@ -43,7 +43,7 @@ template / term sheet / AI / canvas -> BPMN -> compiler -> definition (bytes, co
                       FlowEngine on Arbitrum Sepolia and Robinhood Chain testnet (one contract, every note)
                                    ^ onReport via KeystoneForwarder
 Chainlink feeds (Ethereum, Arbitrum One) -> CRE notes-keeper-evm
-indexer (Postgres) -> API (Hono) -> app (wagmi) ; notes.stratoslab.app = one Cloudflare Worker (landing, app, AI)
+indexer (Postgres) -> API (Hono) -> app (wagmi) ; notes.markets = one Cloudflare Worker (landing, app, AI)
 ```
 
 ## Evidence

@@ -1,5 +1,5 @@
 /**
- * notes.stratoslab.app: one Cloudflare Worker for the whole site.
+ * notes.markets: one Cloudflare Worker for the whole site.
  *
  *   /             the landing page (static, from dist/)
  *   /app/*        the app (static; client-side routes fall back to /app/index.html)
@@ -55,6 +55,13 @@ async function proxy(req: Request, env: Env, url: URL): Promise<Response> {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    // One canonical host: the earlier domain and www redirect to notes.markets.
+    const host = new URL(req.url).hostname;
+    if (host === 'notes.stratoslab.app' || host === 'www.notes.markets') {
+      const to = new URL(req.url);
+      to.hostname = 'notes.markets';
+      return Response.redirect(to.toString(), 301);
+    }
     const url = new URL(req.url);
     if (url.pathname === '/api/ai' && req.method === 'POST') return ai(req, env);
     if (url.pathname.startsWith('/api/')) return proxy(req, env, url);

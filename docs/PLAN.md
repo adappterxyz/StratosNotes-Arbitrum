@@ -1,7 +1,7 @@
 # StratosNotes on Arbitrum: plan
 
 The Arbitrum Hackerhouse build: the StratosNotes EVM platform (engine, CRE keeper, indexer, API, app) on
-**Arbitrum Sepolia** and **Robinhood Chain testnet**, served at notes.stratoslab.app.
+**Arbitrum Sepolia** and **Robinhood Chain testnet**, served at notes.markets.
 
 ## Chain facts (checked 2026-10-23)
 

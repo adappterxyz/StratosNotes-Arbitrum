@@ -2,7 +2,7 @@
  * Publish the seed template library (packages/core/src/products/library.ts) to a running API, each entry signed
  * (EIP-191) by the deployer key:
  *
- *   API=https://notes.stratoslab.app npx tsx scripts/seed-templates.ts
+ *   API=https://notes.markets npx tsx scripts/seed-templates.ts
  *   API=http://127.0.0.1:8787 ORIGIN=http://127.0.0.1:5173 ONLY=TSLA npx tsx scripts/seed-templates.ts
  *
  * KEY_FILE (default .keys/deployer.json, a `cast wallet new --json` file) signs; the key is never printed. The API

@@ -6,17 +6,17 @@ a second is issued live.
 ## Before you present
 
 1. **Services up:** `pm2 status` shows `sn-arb-indexer`, `sn-arb-api`, `sn-arb-tunnel` and `sn-arb-keeper` online;
-   `curl -s https://notes.stratoslab.app/api/health` lists both chains with a moving cursor.
+   `curl -s https://notes.markets/api/health` lists both chains with a moving cursor.
 2. **A note in flight** (about 20 minutes ahead), its strike ~3 minutes into the talk:
    ```bash
    CHAIN=arbitrum-sepolia NOTE=crypto STRIKE_IN=1380 OBS_EVERY=120 npx tsx scripts/seed-note.ts
    ```
 3. **Wallet:** MetaMask (or Rabby) on Arbitrum Sepolia with a little testnet ETH; in the app's top bar, **Get tUSD**.
 4. **Tabs:**
-   1. https://notes.stratoslab.app (landing)
-   2. https://notes.stratoslab.app/app (marketplace)
+   1. https://notes.markets (landing)
+   2. https://notes.markets/app (marketplace)
    3. The in-flight note's page
-   4. https://notes.stratoslab.app/app/issue
+   4. https://notes.markets/app/issue
    5. Terminal: `pm2 logs sn-arb-keeper --lines 0`
 
 ## The talk

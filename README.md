@@ -3,7 +3,7 @@
 Structured notes on stocks and crypto that anyone can issue and sell, on **Arbitrum Sepolia** and **Robinhood Chain
 testnet**, with **Chainlink CRE** as the calculation and paying agent. Built for the Arbitrum Hackerhouse.
 
-- Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app
+- Site: https://notes.markets · App: https://notes.markets/app
 - Submission: [docs/SUBMISSION.md](docs/SUBMISSION.md) · Demo: [docs/DEMO.md](docs/DEMO.md) · Deploy: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 | Path | What it is |
