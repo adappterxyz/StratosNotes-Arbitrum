@@ -107,7 +107,9 @@ an 8M limit, under CRE's 10M per write. Anyone can also move a note past a deadl
 
 The 12-month phoenix on ETH as the app draws it: the Issuer pool (Approve Terms + Pledge Collateral, Check Terms,
 Mandate, then the Fund Payment windows and the collateral top-up, each funding window with a notice to its period's
-payment check), and the Paying Agent's strike, margin check and first period (`packages/core/src/products/instantiate.ts`):
+payment check), and the Paying Agent's strike, margin check and first period (`packages/core/src/products/instantiate.ts`;
+the layout is computed from the graph by `packages/core/src/layout.ts`: the happy path on the top row of each pool,
+branches packed below, flows routed through the gaps between steps):
 
 ![Phoenix: issuance and period 1](img/bpmn-phoenix-issuance-period1.png)
 
