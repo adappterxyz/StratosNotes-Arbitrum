@@ -457,7 +457,7 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     assets,
   };
   const built = buildWorkflow(spec);
-  const layout = Object.fromEntries(spec.pools.flatMap(pl => pl.nodes.map(nd => [nd.id, { col: nd.col, row: nd.row ?? 0 }])));
+  const layout = Object.fromEntries(spec.pools.flatMap(pl => pl.nodes.map(nd => [nd.id, { col: nd.col ?? 0, row: nd.row ?? 0 }])));
   return {
     ...built,
     layout,

@@ -7,6 +7,7 @@
  * diagrams exported from Flow import unchanged.
  */
 import { DOMParser } from '@xmldom/xmldom';
+import { layoutCollaboration, type Box, type Pt } from './layout';
 import { MILESTONES, type AssetDefinition, type IrFlow, type IrMessageFlow, type IrNode, type IrPool, type Milestone, type NodeProps, type NodeType, type PropsMap, type TemplateField, type WorkflowIR } from './types';
 
 export const FLOW_NS = 'https://stratosnotes.dev/bpmn';
@@ -122,7 +123,8 @@ export interface SpecNode {
   id: string;
   type: 'startEvent' | 'endEvent' | 'userTask' | 'serviceTask' | 'receiveTask' | 'exclusiveGateway' | 'parallelGateway';
   name: string;
-  col: number;
+  /** Layout hints. Columns and rows are computed from the graph (layout.ts); `row: 0` marks the happy path. */
+  col?: number;
   row?: number;
   props?: NodeProps;
 }
@@ -132,9 +134,6 @@ export interface SpecMessage { id: string; src: string; tgt: string; notice?: bo
 export interface BuildSpec { key: string; name: string; pools: SpecPool[]; messages: SpecMessage[]; assets: AssetDefinition[] }
 export interface BuiltWorkflow { bpmnXml: string; props: PropsMap; assets: AssetDefinition[] }
 
-const COL_W = 185, ROW_H = 125, X0 = 220, POOL_GAP = 20;
-const SIZE: Record<string, [number, number]> = { task: [150, 80], event: [36, 36], gateway: [44, 44] };
-const kindOf = (t: string) => (t === 'startEvent' || t === 'endEvent') ? 'event' : t.endsWith('Gateway') ? 'gateway' : 'task';
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export const field = (name: string, type: TemplateField['type'], extra: Partial<TemplateField> = {}): TemplateField => ({ name, type, ...extra });
@@ -154,27 +153,21 @@ function propsXml(p: NodeProps | undefined): string {
 }
 
 export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
-  const geo = new Map<string, { cx: number; cy: number; w: number; h: number; type: string }>();
+  const lay = layoutCollaboration(
+    spec.pools.map(p => ({ id: p.id, nodes: p.nodes.map(n => ({ id: n.id, type: n.type, name: n.name, rowHint: n.row })), flows: p.flows })),
+    spec.messages,
+  );
+  const bounds = (b: Box) => `<dc:Bounds x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" />`;
+  const label = (id: string) => lay.labels[id] ? `<bpmndi:BPMNLabel>${bounds(lay.labels[id])}</bpmndi:BPMNLabel>` : '';
   const shapes: string[] = [], edges: string[] = [], procs: string[] = [];
-  const maxCol = Math.max(0, ...spec.pools.flatMap(p => p.nodes.map(n => n.col)));
-  const width = X0 + maxCol * COL_W + 50;
-  let y = 80;
   for (const p of spec.pools) {
-    const rows = Math.max(0, ...p.nodes.map(n => n.row ?? 0)) + 1;
-    // An escrow pool has no steps: a thin band that still shows the account exists.
-    const h = p.nodes.length ? rows * ROW_H + 30 : 60;
-    shapes.push(`      <bpmndi:BPMNShape id="${p.id}_di" bpmnElement="${p.id}" isHorizontal="true"><dc:Bounds x="140" y="${y}" width="${width}" height="${h}" /></bpmndi:BPMNShape>`);
+    shapes.push(`      <bpmndi:BPMNShape id="${p.id}_di" bpmnElement="${p.id}" isHorizontal="true">${bounds(lay.pools[p.id])}</bpmndi:BPMNShape>`);
     for (const n of p.nodes) {
-      const [w, hh] = SIZE[kindOf(n.type)];
-      const cx = X0 + n.col * COL_W + 75;
-      const cy = y + 15 + Math.floor(ROW_H / 2) + (n.row ?? 0) * ROW_H;
-      geo.set(n.id, { cx, cy, w, h: hh, type: n.type });
       const marker = n.type === 'exclusiveGateway' ? ' isMarkerVisible="true"' : '';
-      shapes.push(`      <bpmndi:BPMNShape id="${n.id}_di" bpmnElement="${n.id}"${marker}><dc:Bounds x="${cx - Math.floor(w / 2)}" y="${cy - Math.floor(hh / 2)}" width="${w}" height="${hh}" /></bpmndi:BPMNShape>`);
+      shapes.push(`      <bpmndi:BPMNShape id="${n.id}_di" bpmnElement="${n.id}"${marker}>${bounds(lay.shapes[n.id])}${label(n.id)}</bpmndi:BPMNShape>`);
     }
-    y += h + POOL_GAP;
   }
-  const pts = (ps: Array<[number, number]>) => ps.map(([a, b]) => `<di:waypoint x="${a}" y="${b}" />`).join('');
+  const pts = (ps: Pt[]) => ps.map(([a, b]) => `<di:waypoint x="${a}" y="${b}" />`).join('');
   for (const p of spec.pools) {
     const lines = [`  <bpmn:process id="${p.proc}" isExecutable="${p.nodes.length ? 'true' : 'false'}">`];
     const defaults = new Map(p.flows.filter(f => f.isDefault).map(f => [f.src, f.id]));
@@ -188,24 +181,12 @@ export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
       lines.push(f.cond
         ? `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${esc(f.cond)}</bpmn:conditionExpression></bpmn:sequenceFlow>`
         : `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}" />`);
-      const s = geo.get(f.src)!, t = geo.get(f.tgt)!;
-      let way: Array<[number, number]>;
-      if (s.cy === t.cy) way = [[s.cx + s.w / 2, s.cy], [t.cx - t.w / 2, t.cy]];
-      else if (kindOf(s.type) === 'gateway') way = [[s.cx, t.cy > s.cy ? s.cy + s.h / 2 : s.cy - s.h / 2], [s.cx, t.cy], [t.cx - t.w / 2, t.cy]];
-      else { const mx = Math.floor((s.cx + s.w / 2 + t.cx - t.w / 2) / 2); way = [[s.cx + s.w / 2, s.cy], [mx, s.cy], [mx, t.cy], [t.cx - t.w / 2, t.cy]]; }
-      edges.push(`      <bpmndi:BPMNEdge id="${f.id}_di" bpmnElement="${f.id}">${pts(way)}</bpmndi:BPMNEdge>`);
+      edges.push(`      <bpmndi:BPMNEdge id="${f.id}_di" bpmnElement="${f.id}">${pts(lay.edges[f.id])}${label(f.id)}</bpmndi:BPMNEdge>`);
     }
     lines.push('  </bpmn:process>');
     procs.push(lines.join('\n'));
   }
-  for (const m of spec.messages) {
-    const s = geo.get(m.src)!, t = geo.get(m.tgt)!;
-    const mid = Math.floor((s.cy + t.cy) / 2);
-    const way: Array<[number, number]> = t.cy > s.cy
-      ? [[s.cx, s.cy + s.h / 2], [s.cx, mid], [t.cx, mid], [t.cx, t.cy - t.h / 2]]
-      : [[s.cx, s.cy - s.h / 2], [s.cx, mid], [t.cx, mid], [t.cx, t.cy + t.h / 2]];
-    edges.push(`      <bpmndi:BPMNEdge id="${m.id}_di" bpmnElement="${m.id}">${pts(way)}</bpmndi:BPMNEdge>`);
-  }
+  for (const m of spec.messages) edges.push(`      <bpmndi:BPMNEdge id="${m.id}_di" bpmnElement="${m.id}">${pts(lay.edges[m.id])}</bpmndi:BPMNEdge>`);
   const k = spec.key;
   const bpmnXml = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flow="${FLOW_NS}"
