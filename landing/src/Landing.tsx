@@ -193,7 +193,7 @@ export default function Landing() {
             <div className="section-head" data-reveal>
               <span className="eyebrow">Proof</span>
               <h2>Two notes, run start to finish on testnet.</h2>
-              <p>Every row links to the transaction. Each report was written by Chainlink CRE and accepted only through Chainlink's forwarder.</p>
+              <p>Every row links to the transaction. Each report was written by Chainlink CRE and accepted only through Chainlink's forwarder. The table below lists the contracts these two runs used.</p>
             </div>
             <div className="ledger">
               <table>
