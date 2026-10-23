@@ -8,6 +8,7 @@ import TasksPanel from '../components/TasksPanel';
 import EconomicsPanel from '../components/EconomicsPanel';
 import HoldersPanel from '../components/HoldersPanel';
 import BpmnView from '../components/BpmnView';
+import { useVerifiedEmail } from '../components/VerifiedEmail';
 import PayoffChart from '../components/PayoffChart';
 import { useAddress, useChains, useSigner } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
@@ -21,6 +22,7 @@ export default function OfferingPage() {
   const now = useNow(1000);
   const { byKey } = useChains();
   const signer = useSigner();
+  const emailGate = useVerifiedEmail(); // a verified email before subscribing
   const me = useAddress();
   // Phases move with the clock (the book closes at the strike date) as well as with the chain.
   const o = useMemo(() => (note && def ? noteView(def, note.state, now) : note?.view), [note, def, Math.floor(now / 5)]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -164,9 +166,10 @@ export default function OfferingPage() {
                 <input id="units" inputMode="decimal" value={units} onChange={e => setUnits(e.target.value)} />
                 <span className="hint">You pay {fmtMoney(cost)} {sym}, delivered against note units in one transaction (after a one-time approval).</span>
               </div>
-              <button className="btn primary lg" disabled={!me || busy || !(Number(units) > 0) || Number(units) > remaining} onClick={subscribe}>
+              <button className="btn primary lg" disabled={!me || busy || !(Number(units) > 0) || Number(units) > remaining} onClick={() => void emailGate.require(s.chain, subscribe)}>
                 {me ? (busy ? 'Subscribing…' : 'Subscribe') : 'Connect a wallet to subscribe'}
               </button>
+              {emailGate.dialog}
             </section>
           )}
 

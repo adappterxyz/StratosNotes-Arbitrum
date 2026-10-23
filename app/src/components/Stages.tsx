@@ -15,6 +15,7 @@ import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputVa
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
 import { useAddress, useChains, useSigner } from '../lib/chains';
+import { useVerifiedEmail } from './VerifiedEmail';
 import { errText, fmtMoney, short } from '../lib/format';
 
 export interface DocInfo {
@@ -232,6 +233,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const signer = useSigner();
   const plan = useMemo(() => { try { return built ? planIssuance(built.ir, built.c) : null; } catch (e) { return e instanceof Error ? e.message : String(e); } }, [built]);
   const [chainKey, setChainKey] = useState(config.chains[0]?.key ?? '');
+  const emailGate = useVerifiedEmail(); // a verified email before issuing
   const [values, setValues] = useState<Record<string, string>>({});
   const [size, setSize] = useState(doc.hint?.size ?? 10_000);
   const [strikeIn, setStrikeIn] = useState(5);
@@ -418,9 +420,10 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       <div className="section">
         {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar.</p>}
         {unsupported.length > 0 && <div className="notice warn">This note needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
-        <button className="btn primary lg" disabled={!me || busy || !chain} onClick={issue}>
+        <button className="btn primary lg" disabled={!me || busy || !chain} onClick={() => void emailGate.require(chainKey, issue)}>
           {me ? (busy ? 'Issuing…' : 'Publish and open the book') : 'Connect a wallet to issue'}
         </button>
+        {emailGate.dialog}
         {progress.length > 0 && <ol className="xs muted" style={{ margin: 0, paddingLeft: 18 }} data-progress>{progress.map((s, i) => <li key={i}>{s}</li>)}</ol>}
         {error && <div className="notice err" role="alert">{error}</div>}
         {chain?.cfg.explorer && <a className="xs" href={`${chain.cfg.explorer}/address/${chain.cfg.engine}`} target="_blank" rel="noreferrer">Engine on {chain.cfg.name}</a>}
