@@ -35,29 +35,7 @@ const issuerBots = Object.entries(RPCS).flatMap(([chain, [rpc, id]]) => {
 module.exports = {
   apps: [
     ...issuerBots,
-    {
-      name: 'sn-arb-indexer',
-      cwd: root,
-      script: 'npx',
-      args: 'tsx services/indexer/src/main.ts',
-      env: { INDEXER_CONFIG: 'deployments/server/indexer.json', DATABASE_URL: secrets.DATABASE_URL },
-      restart_delay: 5000,
-    },
-    {
-      name: 'sn-arb-api',
-      cwd: root,
-      script: 'npx',
-      args: 'tsx services/api/src/main.ts',
-      env: {
-        API_CONFIG: 'deployments/server/api.json', DATABASE_URL: secrets.DATABASE_URL,
-        SN_PROXY_SECRET: secrets.SN_PROXY_SECRET, PORT: '8787', HOST: '127.0.0.1',
-        // Email (docs/NOTIFICATIONS.md): alerts go out through the site Worker's /internal/email (Cloudflare Email
-        // Service); the verifier key signs on-chain email attestations. The notifier runs inside this process.
-        EMAIL_RELAY_URL: 'https://notes.markets/internal/email', EMAIL_RELAY_SECRET: secrets.EMAIL_RELAY_SECRET,
-        VERIFIER_KEY_FILE: '.keys/verifier.json', SITE_URL: 'https://notes.markets',
-      },
-      restart_delay: 5000,
-    },
+    // The indexer and the API run in the notes.markets Worker on Cloudflare D1 (services/edge); nothing to run here.
     {
       name: 'sn-arb-keeper',
       cwd: root,
