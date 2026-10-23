@@ -45,13 +45,13 @@ engine events ─▶ indexer (read model) ─▶ notifier tick (plan · dedupe �
    transaction's balance changes. `drain` sends what is due with retries and backoff, skips people who turned a
    category off or unsubscribed, drops reminders whose moment has passed, and **holds** the outbox (no attempt
    counted) while Email Sending is not set up. Storage is a small `Sql` interface with SQLite-compatible SQL
-   (Postgres today, D1 next). It runs inside the API process every 30 s (`NOTIFIER_INTERVAL`), not as its own
-   service.
+   (D1 in production). In production it runs in the Worker's one-minute cron (services/edge `notifierTick`),
+   after the indexer; the Node API (local dev only) runs the same logic every 30 s (`NOTIFIER_INTERVAL`).
 
-5. **Sending** goes through the site Worker: `POST /internal/email` with the `X-Email-Relay-Secret` header
-   (`EMAIL_RELAY_SECRET`, the same value on the Worker and the API), which calls the `EMAIL` send_email binding
-   from `alerts@notes.markets` as "notes.markets". Until notes.markets is onboarded it answers 503 and nothing is
-   lost.
+5. **Sending:** the Worker's cron sends directly through the `EMAIL` send_email binding, from
+   `alerts@notes.markets` as "notes.markets" (`EMAIL_SENDING = "on"`). The `POST /internal/email` relay (header
+   `X-Email-Relay-Secret`, `EMAIL_RELAY_SECRET`) is kept only for the Node API in local dev; production doesn't use
+   it.
 
 ## Verified emails (required to issue and to subscribe)
 
@@ -110,13 +110,13 @@ Cloudflare Email Service sending is in beta and needs the **Workers Paid** plan 
 
 | Where | Setting |
 |---|---|
-| Worker (`web/wrangler.jsonc`) | `send_email: [{ name: "EMAIL", remote: true }]`, var `EMAIL_FROM`, secret `EMAIL_RELAY_SECRET` |
-| API (`ops/ecosystem.config.cjs`, `.env.server`) | `EMAIL_RELAY_URL`, `EMAIL_RELAY_SECRET`, `VERIFIER_KEY_FILE=.keys/verifier.json`, `SITE_URL`, `NOTIFIER_INTERVAL` |
+| Worker (`web/wrangler.jsonc`), production | `send_email: [{ name: "EMAIL", remote: true }]`, vars `EMAIL_SENDING`, `EMAIL_FROM`; secret `VERIFIER_KEY` (the key in .keys/verifier.json; it signs attestations and lives only in the Worker and that file) |
+| Node API (local dev only) | `EMAIL_RELAY_URL`, `EMAIL_RELAY_SECRET`, `VERIFIER_KEY_FILE=.keys/verifier.json`, `SITE_URL`, `NOTIFIER_INTERVAL` |
 | Engine (deploy) | `VERIFIER` (the verifier key's address), `REQUIRE_EMAIL=1` (scripts/deploy-testnets.sh) |
 | Local dev | `EMAIL_SENDER=mock` (scripts/dev-local.sh; anvil account 7 is the local verifier) |
 
-## Still tied to PostgreSQL (for the D1 move)
+## Storage
 
-- The notifier tick's reads of the indexer's read model (`notes`, `events`, `definitions` in
-  services/api/src/alerts.ts `notifierTick`), which use `$n` placeholders and jsonb columns.
-- `AlertsStore` itself is SQLite-compatible; today it runs on Postgres through `pgSql`.
+Everything is on Cloudflare D1 (database `notes-markets`): `email_bindings` (emails, salts, codes hashed) and
+`email_outbox` (web/migrations/0002_email.sql), the same schema as the notifier's `AlertsStore`. The Node API runs
+the same store on Postgres for local dev only.

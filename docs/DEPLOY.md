@@ -122,6 +122,18 @@ shape) and to docs/SUBMISSION.md, then `npm run deploy` again so the landing pag
 
 ## 8. Cutover to Cloudflare D1 (the whole backend on the Worker)
 
+**Done 2026-10-23.**
+- D1 database `notes-markets` (id `33c7e4bc-596c-458e-8d67-ff0903d1978a`); the edge config is now the default
+  Worker config, so `npm run deploy` deploys it.
+- Backfilled from the v2 deployments' start blocks in proxy mode; then switched to edge.
+- Retired: `sn-arb-indexer`, `sn-arb-api` and `sn-arb-tunnel` (pm2), the `sn-arb-pg` container (its volume
+  `sn-arb-pgdata` is kept as a backup), and the `sn-arb-api` tunnel.
+- The `api.notes.markets` DNS record is still there: delete it in the Cloudflare dashboard (notes.markets → DNS),
+  since cloudflared cannot remove DNS records.
+- On the server: the CRE keeper (`sn-arb-keeper`) and the issuer bots (`sn-arb-issuer-*`) only.
+
+The steps as run, kept for re-runs:
+
 All internal data moves to D1: the indexer's read model, templates, email subscriptions (emails and salts),
 verification codes, preferences and the notification outbox (`web/migrations/`). The Worker serves the API from
 D1 and runs the indexer and the notifier on a one-minute cron (`services/edge`, wrangler environment `edge`).
