@@ -1,0 +1,16 @@
+{
+  "schedule": "0 * * * * *",
+  "chains": [
+    {
+      "chainSelectorName": "ethereum-mainnet-arbitrum-1",
+      "engine": "0x0000000000000000000000000000000000000000",
+      "lens": "0x0000000000000000000000000000000000000000",
+      "gasLimit": "2800000",
+      "fromPid": 1,
+      "scan": 200,
+      "maxProcesses": 50
+    }
+  ],
+  "maxReportsPerRun": 5,
+  "finalityAllowanceSec": 1800
+}

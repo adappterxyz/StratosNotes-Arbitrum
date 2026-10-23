@@ -1,0 +1,10 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// The API (services/api) is proxied in dev so the app and API share an origin, as in production behind one host.
+export default defineConfig({
+  plugins: [react()],
+  server: { proxy: { '/api': { target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787', changeOrigin: false } } },
+  preview: { proxy: { '/api': { target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787', changeOrigin: false } } },
+  build: { target: 'es2022', chunkSizeWarningLimit: 4000 },
+});

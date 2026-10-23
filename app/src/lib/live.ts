@@ -1,0 +1,100 @@
+/**
+ * Live reads: fetch from the API and re-fetch when the indexer reports a change (Server-Sent Events on
+ * /api/stream), with a slow poll in case the stream drops.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { decodeEvmDef, type WorkflowDef } from '@sn/core';
+import { hexToBytes } from '@sn/sdk';
+import { api, type NoteDetail, type NoteFilters, type NoteItem, type PortfolioItem } from './api';
+
+const FALLBACK_POLL_MS = 20_000;
+
+/** A counter that bumps when the stream reports a change matching `query` (debounced), or on the fallback poll. */
+function useLiveTick(query: string | null) {
+  const [tick, setTick] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (query === null) return;
+    const bump = () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setTick(x => x + 1), 250);
+    };
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/stream${query}`);
+      es.addEventListener('notes', bump);
+    } catch { /* no EventSource: the poll still runs */ }
+    const poll = setInterval(() => setTick(x => x + 1), FALLBACK_POLL_MS);
+    return () => { es?.close(); clearInterval(poll); if (timer.current) clearTimeout(timer.current); };
+  }, [query]);
+  return [tick, useCallback(() => setTick(x => x + 1), [])] as const;
+}
+
+export function useNotes(f: NoteFilters) {
+  const key = JSON.stringify(f);
+  const [tick, refresh] = useLiveTick('');
+  const [notes, setNotes] = useState<NoteItem[] | undefined>(undefined);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let live = true;
+    api.notes({ limit: 100, ...f })
+      .then(r => { if (live) { setNotes(r.notes); setError(''); } })
+      .catch(e => { if (live) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { live = false; };
+  }, [key, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { notes, error, refresh };
+}
+
+/** One note, updated the moment the indexer sees a change to it (a CRE report, a subscription, a transfer). */
+export function useNote(id: string | undefined) {
+  const [tick, refresh] = useLiveTick(id ? `?notes=${encodeURIComponent(id)}` : null);
+  const [note, setNote] = useState<NoteDetail | null | undefined>(undefined);
+  const [updatedAt, setUpdatedAt] = useState(0);
+  useEffect(() => {
+    if (!id) { setNote(null); return; }
+    let live = true;
+    api.note(id)
+      .then(n => { if (live) { setNote(n); setUpdatedAt(Date.now()); } })
+      .catch(() => { if (live) setNote(prev => (prev === undefined ? null : prev)); });
+    return () => { live = false; };
+  }, [id, tick]);
+  return { note, refresh, updatedAt };
+}
+
+export function usePortfolio(address: string | undefined) {
+  const [tick, refresh] = useLiveTick(address ? '' : null);
+  const [positions, setPositions] = useState<PortfolioItem[] | undefined>(undefined);
+  useEffect(() => {
+    if (!address) { setPositions(undefined); return; }
+    let live = true;
+    api.portfolio(address).then(r => { if (live) setPositions(r.positions); }).catch(() => { if (live) setPositions([]); });
+    return () => { live = false; };
+  }, [address, tick]);
+  return { positions, refresh };
+}
+
+/** The current time (unix seconds), re-rendered every `ms`. */
+export function useNow(ms = 5000) {
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), ms); return () => clearInterval(t); }, [ms]);
+  return now;
+}
+
+const defs = new Map<string, Promise<WorkflowDef>>();
+
+/** A note's workflow definition (content-addressed: fetched once per session). */
+export function useDefinition(chain: string | undefined, id: string | undefined) {
+  const [def, setDef] = useState<WorkflowDef | null>(null);
+  useEffect(() => {
+    if (!chain || !id) return;
+    const key = `${chain}:${id}`;
+    if (!defs.has(key)) {
+      defs.set(key, api.definition(chain, id).then(d => decodeEvmDef(hexToBytes(d.bytes))));
+      defs.get(key)!.catch(() => defs.delete(key));
+    }
+    let live = true;
+    defs.get(key)!.then(d => { if (live) setDef(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [chain, id]);
+  return def;
+}
