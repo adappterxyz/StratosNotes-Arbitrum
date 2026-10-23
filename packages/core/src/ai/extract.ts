@@ -7,7 +7,7 @@
  * the issuer is always a valid input to a verified payoff engine.
  */
 import type { AiRunner, ChatMessage } from './runner';
-import { FEEDS, PRODUCT_LABELS, productUses, validateProductParams, type ProductParams, type ProductType } from '../products/params';
+import { COLLATERAL_SYMBOLS, DEFAULT_HAIRCUT, FEEDS, PRODUCT_LABELS, productUses, validateProductParams, type CollateralSymbol, type ProductParams, type ProductType } from '../products/params';
 
 export interface Schedule {
   /** Observation spacing and count; the strike date is set when issuing. */
@@ -37,6 +37,11 @@ interface Draft {
   knockInBarrierPct: number | null;
   protectionPct: number | null;
   participationPct: number | null;
+  collateralSymbols: string[] | null;
+  collateralRatioPct: number | null;
+  haircutPcts: number[] | null;
+  settlementLagDays: number | null;
+  gracePeriodDays: number | null;
 }
 
 const num = { type: ['number', 'null'] };
@@ -61,12 +66,17 @@ const SCHEMA = {
     knockInBarrierPct: { ...num, description: '% of the initial level' },
     protectionPct: { ...num, description: 'Capital protection, % of face' },
     participationPct: num,
+    collateralSymbols: { type: ['array', 'null'], items: { type: 'string' }, description: `What the issuer pledges as collateral: ${COLLATERAL_SYMBOLS.join(', ')} (USD = the stablecoin)` },
+    collateralRatioPct: { ...num, description: 'Collateral value required, % of the outstanding notional (e.g. "fully secured" = 100)' },
+    haircutPcts: { type: ['array', 'null'], items: { type: 'number' }, description: 'Share of market value counted per collateral asset, % (same order as collateralSymbols), only if stated' },
+    settlementLagDays: { ...num, description: 'Days between an observation and its payment date, only if stated' },
+    gracePeriodDays: { ...num, description: 'Grace period for a late payment, days (0-7), only if stated' },
   },
-  required: ['productType', 'name', 'size', 'issuePricePct', 'underlyingSymbols', 'observationEveryMonths', 'observationCount', 'couponRatePct', 'couponAsStated', 'couponRateBasis', 'couponBarrierPct', 'memory', 'autocallLevelPct', 'autocallFromPeriod', 'knockInBarrierPct', 'protectionPct', 'participationPct'],
+  required: ['productType', 'name', 'size', 'issuePricePct', 'underlyingSymbols', 'observationEveryMonths', 'observationCount', 'couponRatePct', 'couponAsStated', 'couponRateBasis', 'couponBarrierPct', 'memory', 'autocallLevelPct', 'autocallFromPeriod', 'knockInBarrierPct', 'protectionPct', 'participationPct', 'collateralSymbols', 'collateralRatioPct', 'haircutPcts', 'settlementLagDays', 'gracePeriodDays'],
 };
 
 function system(today: string): string {
-  return `You extract structured-note term sheets into JSON for StratosNotes (notes issued on Solana, observed by Chainlink). Today is ${today}.
+  return `You extract structured-note term sheets into JSON for StratosNotes (notes issued on Arbitrum and Robinhood Chain, observed by Chainlink; each note is secured by collateral the issuer pledges). Today is ${today}.
 Products: ${Object.entries(PRODUCT_LABELS).map(([k, v]) => `${k} = ${v}`).join('; ')}.
 Rules:
 - Use only terms the user states or that follow directly from them. Use null for anything not stated; never invent a level.
@@ -74,6 +84,7 @@ Rules:
 - Schedule: a 12-month note observed quarterly has 4 observations every 3 months.
 - Barrier and autocall levels are % of the initial (strike) level.
 - Several underlyings ("worst of ETH and BTC", "on a basket of BTC, ETH, SOL") make a worst-of note: list every ticker.
+- Collateral: the assets the issuer pledges ("secured by USDC" -> ["USD"]; "ETH collateral" -> ["ETH"]) and the share of the notional it must cover; haircuts, settlement lag and grace period only if stated.
 - Name: short, e.g. "12M Phoenix on ETH".`;
 }
 
@@ -114,6 +125,18 @@ function toParams(d: Draft, prompt: string, notes: string[]): { params: ProductP
   if (use.knockIn && d.knockInBarrierPct !== null) params.knockInBarrierPct = d.knockInBarrierPct;
   if (use.protection && d.protectionPct !== null) params.protectionPct = d.protectionPct;
   if (use.protection && d.participationPct !== null) params.participationPct = d.participationPct;
+  // Collateral: what the request states; the haircut defaults per asset (each a visible note), never the asset.
+  const cols = [...new Set((d.collateralSymbols ?? []).map(s => cleanSymbol(s).replace(/^USDC?$|^USDG$|^STABLECOIN$/, 'USD')))].filter(s => (COLLATERAL_SYMBOLS as string[]).includes(s)) as CollateralSymbol[];
+  if (cols.length) {
+    params.collateral = cols.map((symbol, i) => {
+      const stated = d.haircutPcts?.[i];
+      if (stated === undefined || stated === null) notes.push(`${symbol} collateral haircut not stated: ${DEFAULT_HAIRCUT[symbol]}% of market value counted.`);
+      return { symbol, haircutPct: stated ?? DEFAULT_HAIRCUT[symbol] };
+    });
+  }
+  if (d.collateralRatioPct !== null) params.collateralRatioPct = d.collateralRatioPct;
+  params.settlementLagDays = dflt(d.settlementLagDays, 2, 'Settlement lag not stated: payments 2 days after each observation.');
+  params.gracePeriodDays = dflt(d.gracePeriodDays, 2, 'Grace period not stated: 2 days.');
   return { params, schedule: { every, unit: 'months', count, ...(d.size ? { size: d.size } : {}) } };
 }
 

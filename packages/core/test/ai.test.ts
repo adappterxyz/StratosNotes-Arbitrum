@@ -35,15 +35,33 @@ describe('drafts', () => {
   }
   it('patches insert, replace and remove steps; dangling links are dropped', () => {
     const d = productDraft('fcn');
-    const p = applyPatch(d, { upsert: [{ id: 'Task_Notify', party: 'Paying Agent', kind: 'auto', name: 'Notify', next: 'End_Par' }], remove: ['Task_RedeemPar'] });
+    const p = applyPatch(d, { upsert: [{ id: 'Task_Notify', party: 'Paying Agent', kind: 'auto', name: 'Notify', next: 'End_Closed' }], remove: ['S_Due4Par'] });
     expect(p.steps.find(s => s.id === 'Task_Notify')).toBeDefined();
-    expect(p.steps.some(s => s.id === 'Task_RedeemPar')).toBe(false);
-    expect(p.steps.find(s => s.id === 'GW_KnockIn')!.branches!.map(b => b.next)).not.toContain('Task_RedeemPar');
+    expect(p.steps.some(s => s.id === 'S_Due4Par')).toBe(false);
+    expect(p.steps.find(s => s.id === 'GW_KnockIn')!.branches!.map(b => b.next)).not.toContain('S_Due4Par');
+    expect(p.escrow).toEqual(['Escrow']);
+    expect(p.open).toEqual(['Investor']);
   });
   it('the validator catches a broken edit', () => {
     const d = productDraft('fcn');
-    const broken = applyPatch(d, { remove: ['End_Par'] });
+    const broken = applyPatch(d, { remove: ['End_Closed'] });
     expect(check(draftToIR(broken)).errors.map(e => e.code)).toContain('DEAD_END');
+  });
+  it('the validator refuses a payment with no funding check', () => {
+    const d = productDraft('fcn');
+    // Skip the "Funded?" check: the payment date leads straight to the payment.
+    const due = d.steps.find(s => s.id === 'S_Due1')!;
+    const skipped = applyPatch(d, { upsert: [{ ...due, next: 'Task_Pay1' }] });
+    const errs = check(draftToIR(skipped)).errors;
+    expect(errs.map(e => e.code)).toContain('UNFUNDED_PAYMENT');
+    expect(errs.find(e => e.code === 'UNFUNDED_PAYMENT')!.message).toMatch(/no funding check/);
+    // Pay holders from the issuer's own account: refused whatever precedes it.
+    const pay = d.steps.find(s => s.id === 'Task_Pay1')!;
+    const fromIssuer = applyPatch(d, { upsert: [{ ...pay, ops: pay.ops!.map(o => ({ ...o, params: { ...o.params, payer: 'Issuer' } })) }] });
+    expect(check(draftToIR(fromIssuer)).errors.find(e => e.code === 'UNFUNDED_PAYMENT')!.message).toMatch(/straight from 'Issuer'/);
+    // A fee paid automatically from the issuer to the paying agent: refused too (the old servicing-fee shape).
+    const fee = applyPatch(d, { upsert: [{ ...pay, ops: [...pay.ops!, { assetId: 'cash', operation: 'transfer', params: { from: 'Issuer', to: 'Paying Agent', amountSource: 'expr', amountExpr: 'notional / 1000' } }] }] });
+    expect(check(draftToIR(fee)).errors.map(e => e.code)).toContain('UNFUNDED_PAYMENT');
   });
 });
 
@@ -54,12 +72,19 @@ describe('AI pipeline (scripted models)', () => {
     expect(r.kind).toBe('clarify');
     if (r.kind === 'clarify') expect(r.missing).toEqual(['the coupon barrier', 'the knock-in barrier']);
   });
+  it('asks for the collateral when the request does not say', async () => {
+    const ai = fake({ intent: { choice: 'product', confidence: 0.9 }, product: { choice: 'fcn', confidence: 0.9 }, collateral: { noul: 0.1 } });
+    const r = await runAi(ai, { prompt: 'FCN on ETH, 2% quarterly, autocall 100, KI 60, 1y', today: '2026-10-06' });
+    expect(r.kind).toBe('clarify');
+    if (r.kind === 'clarify') expect(r.missing[0]).toMatch(/collateral/);
+  });
   it('extracts a product, converting an annual coupon from the quoted words', async () => {
-    const prompt = 'Phoenix on ETH, 10% p.a. paid quarterly, coupon barrier 70%, memory, autocall 100% from the 2nd quarter, knock-in 60%, one year, 50,000 USDC';
+    const prompt = 'Phoenix on ETH, 10% p.a. paid quarterly, coupon barrier 70%, memory, autocall 100% from the 2nd quarter, knock-in 60%, one year, 50,000 USDC, secured 50% by ETH collateral';
     const ai = fake({ intent: { choice: 'product', confidence: 0.9 }, product: { choice: 'phoenix', confidence: 0.9 } }, [{
       productType: 'phoenix', name: '12M Phoenix on ETH', size: 50000, issuePricePct: null, underlyingSymbols: ['ETH'], observationEveryMonths: 3, observationCount: 4,
       couponRatePct: 2.5, couponAsStated: '10% p.a. paid quarterly', couponRateBasis: 'per-annum', couponBarrierPct: 70, memory: true,
       autocallLevelPct: 100, autocallFromPeriod: 2, knockInBarrierPct: 60, protectionPct: null, participationPct: null,
+      collateralSymbols: ['ETH'], collateralRatioPct: 50, haircutPcts: null, settlementLagDays: null, gracePeriodDays: null,
     }]);
     const r = await runAi(ai, { prompt, today: '2026-10-06' });
     expect(r.kind).toBe('product');
@@ -68,32 +93,47 @@ describe('AI pipeline (scripted models)', () => {
     expect(r.params.underlyings.map(u => u.symbol)).toEqual(['ETH']);
     expect(r.schedule).toEqual({ every: 3, unit: 'months', count: 4, size: 50000 });
     expect(r.notes.join(' ')).toMatch(/10% p\.a\..*2\.5% per period/);
+    // Collateral as stated; the haircut, lag and grace defaults are said out loud.
+    expect(r.params).toMatchObject({ collateral: [{ symbol: 'ETH', haircutPct: 70 }], collateralRatioPct: 50, settlementLagDays: 2, gracePeriodDays: 2 });
+    expect(r.notes.join(' ')).toMatch(/ETH collateral haircut not stated: 70%/);
   });
   it('refuses an underlying with no Chainlink feed here', async () => {
     const ai = fake({ intent: { choice: 'product', confidence: 0.9 }, product: { choice: 'fcn', confidence: 0.9 } }, [{
       productType: 'fcn', name: 'FCN on DOGE', size: null, issuePricePct: null, underlyingSymbols: ['DOGE'], observationEveryMonths: 3, observationCount: 4,
       couponRatePct: 2, couponAsStated: null, couponRateBasis: 'per-period', couponBarrierPct: null, memory: null, autocallLevelPct: 100, autocallFromPeriod: null, knockInBarrierPct: 60, protectionPct: null, participationPct: null,
+      collateralSymbols: ['USD'], collateralRatioPct: 100, haircutPcts: null, settlementLagDays: null, gracePeriodDays: null,
     }]);
     const r = await runAi(ai, { prompt: 'FCN on DOGE, 2% quarterly, autocall 100, KI 60, 1y', today: '2026-10-06' });
     expect(r.kind).toBe('clarify');
-    if (r.kind === 'clarify') expect(r.reply).toMatch(/no Chainlink price feed for DOGE.*ETH, BTC, SOL/);
+    if (r.kind === 'clarify') expect(r.reply).toMatch(/no Chainlink price feed for DOGE.*ETH, BTC, SOL, TSLA/);
   });
   it('edits the open workflow with a patch, repairing what the validator rejects', async () => {
     const draft = productDraft('fcn');
-    const fee = { assetId: 'cash', operation: 'distribute', params: { holdingAssetId: 'note', payer: 'Issuer', amountSource: 'expr', amountExpr: '1 / 100' } };
+    const pay = draft.steps.find(s => s.id === 'Task_Pay1')!;
+    const due = draft.steps.find(s => s.id === 'S_Due1')!;
+    const bonusFromIssuer = { assetId: 'cash', operation: 'distribute', params: { holdingAssetId: 'note', payer: 'Issuer', amountSource: 'expr', amountExpr: '1 / 100' } };
+    const bonusFromEscrow = { ...bonusFromIssuer, params: { ...bonusFromIssuer.params, payer: 'Escrow' } };
     const ai = fake({ intent: { choice: 'edit', confidence: 0.9 } }, [
-      // First try: links to a step that does not exist -> the step dead-ends.
-      { upsert: [{ ...draft.steps.find(s => s.id === 'Task_Coupon1')!, next: 'Task_Bonus1' }, { id: 'Task_Bonus1', party: 'Paying Agent', kind: 'auto', name: 'Loyalty bonus', ops: [fee] }] },
-      // Repaired.
-      { upsert: [{ ...draft.steps.find(s => s.id === 'Task_Coupon1')!, next: 'Task_Bonus1' }, { id: 'Task_Bonus1', party: 'Paying Agent', kind: 'auto', name: 'Loyalty bonus', ops: [fee], next: draft.steps.find(s => s.id === 'Task_Coupon1')!.next }] },
+      // First try: a loyalty bonus paid straight from the issuer -> unfunded payment.
+      { upsert: [{ ...pay, ops: [...pay.ops!, bonusFromIssuer] }] },
+      // Second try: drops the "Payment Missed" step -> an economic step removed.
+      { upsert: [{ ...pay, ops: [...pay.ops!, bonusFromEscrow] }], remove: ['Task_Missed1'] },
+      // Repaired: paid from escrow, and the bonus is part of what the issuer funds for period 1.
+      { upsert: [
+        { ...pay, ops: [...pay.ops!, bonusFromEscrow] },
+        { ...due, fields: due.fields!.map(f => (f.name === 'dueTotal' ? { ...f, formula: 'due * sold + sold / 100' } : f)) },
+      ] },
     ]);
-    const r = await runAi(ai, { prompt: 'Pay a 1% loyalty bonus after the first coupon', today: '2026-10-06', draft });
+    const r = await runAi(ai, { prompt: 'Pay a 1% loyalty bonus with the first coupon', today: '2026-10-06', draft });
     expect(r.kind).toBe('workflow');
     if (r.kind !== 'workflow') return;
-    expect(ai.prompts[1]).toMatch(/Task_Bonus1.*no outgoing flow/);
-    expect(r.changed).toEqual(['Task_Coupon1', 'Task_Bonus1']);
+    expect(ai.prompts[1]).toMatch(/straight from 'Issuer'/);
+    expect(ai.prompts[2]).toMatch(/Task_Missed1.*payment-missed\) was removed: keep it/);
+    expect(r.changed).toEqual(['Task_Pay1', 'S_Due1']);
     const ir = parseBpmn(r.bpmnXml, draft.assets);
     expect(check(ir).errors).toEqual([]);
-    expect(ir.nodes.find(n => n.id === 'Task_Bonus1')?.props.assetOperation?.operation).toBe('distribute');
+    expect(ir.nodes.find(n => n.id === 'Task_Pay1')?.props.assetOperations?.map(o => o.params.payer)).toEqual(['Escrow', 'Escrow']);
+    // The funding, default and release steps all survive the edit.
+    for (const id of ['Task_Fund1', 'GW_Funded1', 'Recv_Grace1', 'Task_Default', 'Task_Release']) expect(ir.nodes.some(n => n.id === id)).toBe(true);
   });
 });

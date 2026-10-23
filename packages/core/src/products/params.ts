@@ -11,6 +11,18 @@
  *
  * Several underlyings make a worst-of note: every barrier, autocall and
  * redemption looks at the worst performer, min(level_i / strike_i).
+ *
+ * Economics (docs/NOTE-ECONOMICS.md): a note raises funds for the issuer against
+ * pledged collateral. Subscriptions go to the issuer, withdrawable at once. The
+ * issuer pledges collateral into the note's escrow at Approve Terms (stablecoin,
+ * or tokens valued by Chainlink feeds after a haircut), at least
+ * `collateralRatioPct` % of the outstanding notional, checked at the strike and at
+ * every observation (margin call, then default if not cured within the grace
+ * period). Each observation fixes what is owed; the issuer funds it into escrow
+ * before the payment date (observation + settlement lag) or within the grace
+ * period after it; unfunded at the end of grace, the note defaults and the escrow
+ * (collateral and any partial funding) goes to the holders pro rata. After the
+ * final payment the collateral is released to the issuer.
  */
 
 export type ProductType = 'fcn' | 'reverse-convertible' | 'phoenix' | 'snowball' | 'ppn';
@@ -26,6 +38,14 @@ export interface Underlying {
   maxPrice: number;
   /** Oldest acceptable round, seconds: the feed's heartbeat (default 3600). */
   staleness?: number;
+}
+
+/** A collateral asset the issuer may pledge: the stablecoin (USD) or a token valued by its Chainlink feed. */
+export type CollateralSymbol = 'USD' | 'ETH' | 'BTC' | 'SOL' | 'TSLA' | 'NVDA' | 'AAPL' | 'SPY';
+export interface CollateralTerm {
+  symbol: CollateralSymbol;
+  /** Value counted toward coverage, % of market value (USD 100; volatile tokens lower). Per issuance, 0–100. */
+  haircutPct: number;
 }
 
 export interface ProductParams {
@@ -51,7 +71,34 @@ export interface ProductParams {
   knockInBarrierPct?: number;
   protectionPct?: number;
   participationPct?: number;
+  /** What the issuer may pledge (up to MAX_COLLATERAL assets). Default: the stablecoin at 100%. */
+  collateral?: CollateralTerm[];
+  /** Required collateral value, % of the outstanding notional (default for the issue form; set per issuance). */
+  collateralRatioPct?: number;
+  /** Days from an observation to its payment date (default; set per issuance, in seconds, at Approve Terms). */
+  settlementLagDays?: number;
+  /** Days of grace after a missed payment date or margin call, 0–7 (default; set per issuance). */
+  gracePeriodDays?: number;
 }
+
+export const MAX_COLLATERAL = 3;
+export const MAX_GRACE_DAYS = 7;
+export const DEFAULT_HAIRCUT: Record<CollateralSymbol, number> = { USD: 100, ETH: 70, BTC: 70, SOL: 70, TSLA: 60, NVDA: 60, AAPL: 60, SPY: 60 };
+export const COLLATERAL_SYMBOLS = Object.keys(DEFAULT_HAIRCUT) as CollateralSymbol[];
+export const DEFAULT_COLLATERAL: CollateralTerm[] = [{ symbol: 'USD', haircutPct: 100 }];
+
+/** The term sheet's economics with defaults filled in. */
+export function economicsOf(p: ProductParams) {
+  return {
+    collateral: p.collateral?.length ? p.collateral : DEFAULT_COLLATERAL,
+    collateralRatioPct: p.collateralRatioPct ?? 100,
+    settlementLagDays: p.settlementLagDays ?? 2,
+    gracePeriodDays: p.gracePeriodDays ?? 2,
+  };
+}
+
+/** The token behind a collateral asset (USD: the stablecoin). */
+export const collateralToken = (c: CollateralSymbol) => (c === 'USD' ? CASH_TOKEN : DELIVERABLE[c]);
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
   'fcn': 'Fixed Coupon Note',
@@ -122,15 +169,28 @@ export function validateProductParams(p: ProductParams): string[] {
     if (!(Number(p.protectionPct) > 0 && Number(p.protectionPct) <= 100)) e.push('Protection must be between 0 and 100% of face.');
     if (!(Number(p.participationPct) >= 0)) e.push('Participation must be zero or positive.');
   }
+  const eco = economicsOf(p);
+  if (eco.collateral.length > MAX_COLLATERAL) e.push(`At most ${MAX_COLLATERAL} collateral assets.`);
+  if (new Set(eco.collateral.map(c => c.symbol)).size !== eco.collateral.length) e.push('Each collateral asset can appear once.');
+  for (const c of eco.collateral) {
+    if (!COLLATERAL_SYMBOLS.includes(c.symbol)) e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
+    if (!(c.haircutPct >= 0 && c.haircutPct <= 100)) e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
+  }
+  if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
+  if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
+  if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
+  // The engine holds 8 assets per note: the note, the stablecoin, deliverable tokens and collateral together.
+  const nAssets = 2 + (p.settlement === 'physical' ? unds.length : 0) + eco.collateral.length;
+  if (nAssets > 8) e.push(`This note would hold ${nAssets} assets; the engine holds 8 (note, stablecoin, ${p.settlement === 'physical' ? 'one deliverable token per underlying, ' : ''}and the collateral assets). Pledge fewer collateral assets.`);
   return e;
 }
 
-/** Worst-case extra cash per unit beyond par the issuer must hold for coupons (bounded products). */
-export function reservePerUnit(p: ProductParams): number | null {
+/** Most a period can call for per unit of face, excluding the final redemption (for the funding schedule). */
+export function maxCouponPerUnit(p: ProductParams, k: number): number {
   const r = (p.couponRatePct ?? 0) / 100;
-  if (p.productType === 'ppn') return null; // participation is uncapped: the issuer sizes it
-  if (p.productType === 'snowball') return r * p.observations;
-  return r * p.observations;
+  if (p.productType === 'phoenix') return p.memory ? r * k : r;
+  if (p.productType === 'fcn' || p.productType === 'reverse-convertible') return r;
+  return 0;
 }
 
 /** Test tokens on the Arbitrum testnets (packages/evm-engine/src/test-tokens): cash and each underlying's

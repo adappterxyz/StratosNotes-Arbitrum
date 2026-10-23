@@ -92,15 +92,21 @@ export const SEED_TEMPLATES: Array<{ name: string; description: string; source: 
   },
   {
     name: '12M Phoenix on BTC with servicing fee',
-    description: 'Custom: a BTC phoenix (2.5% memory coupon above 70%, autocall 100% from Q2, 60% knock-in) where the issuer pays the paying agent 0.1% of the issue size with each coupon; the fees are deposited with the reserve.',
+    description: 'Custom: a BTC phoenix (2.5% memory coupon above 70%, autocall 100% from Q2, 60% knock-in) where the issuer also pays the paying agent 0.1% of the issue size with each coupon. The fee is part of each payment the issuer funds: unfunded, the note defaults like any missed coupon.',
     source: custom(btcPhoenix, '12M Phoenix on BTC with servicing fee', d => {
-      // The issuer funds the fees up front with the coupon reserve (one per observation at most),
-      // so paying them can never leave the redemption short.
-      const terms = step(d, 'Task_ApproveTerms');
-      terms.ops = (terms.ops ?? []).map(o => (o.operation === 'deposit'
-        ? { ...o, params: { amountSource: 'expr' as const, amountExpr: `reserve + notional * ${btcPhoenix.observations} / 1000` } } : o));
-      for (const s of d.steps.filter(x => /^Task_Coupon\d+$/.test(x.id))) {
-        s.ops = [...(s.ops ?? []), { assetId: 'cash', operation: 'transfer', params: { from: 'Issuer', to: 'Paying Agent', amountSource: 'expr', amountExpr: 'notional * 1 / 1000' } }];
+      // Every payment block: its amount due grows by the fee whenever a coupon is paid (cpn > 0), so the
+      // issuer funds coupon and fee together and the "Funded?" check covers both; the payment pays the
+      // fee to the paying agent from escrow alongside the holders.
+      const FEE = 'notional * 1 / 1000 * min(cpn * 1000000, 1)';
+      for (const s of d.steps.filter(x => /^S_Due\d+/.test(x.id))) {
+        s.fields = [
+          ...(s.fields ?? []).filter(f => f.name !== 'dueTotal'),
+          { name: 'fee', type: 'Decimal', formula: FEE },
+          { name: 'dueTotal', type: 'Decimal', formula: 'due * sold + fee' },
+        ];
+      }
+      for (const s of d.steps.filter(x => /^Task_Pay\d+/.test(x.id))) {
+        s.ops = [...(s.ops ?? []), { assetId: 'cash', operation: 'transfer', params: { from: 'Escrow', to: 'Paying Agent', amountSource: 'field', amountField: 'fee' } }];
         s.name = `${s.name} + Servicing Fee`;
       }
     }),

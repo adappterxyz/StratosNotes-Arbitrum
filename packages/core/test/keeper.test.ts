@@ -36,7 +36,10 @@ describe('keeper: what is due', () => {
   });
 
   it('ignores user tasks: subscriptions are investors\' to make', () => {
-    expect(dueReports(state(phoenix, ['Task_Subscribe'], { strikeDate: 1 }), phoenix.def, 5000)).toEqual([]);
+    expect(dueReports(state(phoenix, ['Task_Subscribe', 'Task_Fund1'], { strikeDate: 6000 }), phoenix.def, 5000)).toEqual([]);
+    // A closed window advances only when nothing else holds the note (closing it is what finishes it).
+    expect(dueReports(state(phoenix, ['Task_Subscribe', 'Task_FixStrike'], { strikeDate: 6000 }), phoenix.def, 7000).map(d => d.stepId)).toEqual(['Task_FixStrike']);
+    expect(dueReports(state(phoenix, ['Task_Subscribe'], { strikeDate: 6000 }), phoenix.def, 7000).map(d => d.stepId)).toEqual(['advance']);
   });
 
   it('reports an observation on its own date', () => {

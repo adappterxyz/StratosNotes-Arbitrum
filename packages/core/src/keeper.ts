@@ -3,14 +3,17 @@
  * workflow's WASM (cre/notes-keeper-evm) and the fallback keeper (services/keeper-fallback), and unit-tested
  * here, so both agents decide exactly the same thing.
  *
- * Input: a running process's state as the engine holds it (definition, BPMN tokens, captured values) and its
- * decoded definition. Output: the reports that are due now. A report either runs one oracle step (a strike
- * fixing or an observation: the keeper reads each capture's price feed) and everything after it, or only
- * advances (STEP_ADVANCE) when a plain timer is due and nothing else would move the note.
+ * Input: a running process's state as the engine holds it (definition, BPMN tokens, captured values, account
+ * balances) and its decoded definition. Output: the reports that are due now. A report either runs one oracle
+ * step (a strike fixing or an observation: the keeper reads each capture's price feed, collateral prices
+ * included) and everything after it, or only advances (STEP_ADVANCE) when time alone moves the note: a payment
+ * date, the end of a grace period or of a margin call, a funding window closing.
  */
 import type { WorkflowDef } from './def-types';
+import { evalExpr } from './eval';
 
-const KIND_SERVICE = 3, KIND_CATCH = 7, SRC_ORACLE = 1;
+const KIND_SERVICE = 3, KIND_RECEIVE = 4, KIND_CATCH = 7, SRC_ORACLE = 1;
+const NO_EXPR = 0xffff;
 
 /** Report step that only runs what is due (FlowEngine.STEP_ADVANCE). */
 export const STEP_ADVANCE = 0xffff;
@@ -29,6 +32,11 @@ export interface ProcessState {
   /** Step indexes holding a BPMN token (a step may appear more than once). */
   tokens: number[];
   numbers: Array<bigint | undefined>;
+  /**
+   * Every role's balance of every asset, engine fixed point: balances[role * nAssets + asset] (NotesLens).
+   * Lets the keeper see what a guard such as "Funded?" sees; without it, guards that read balances wait.
+   */
+  balances?: bigint[];
 }
 
 /** Where a capture's price comes from: a Chainlink feed on a named chain (CRE chain-selector name). */
@@ -68,18 +76,47 @@ function timerAt(def: WorkflowDef, p: ProcessState, step: number): number | unde
   return v === undefined ? undefined : Number(v);
 }
 
+/** A step's guard (receive task) as the engine would evaluate it now: true, false, or null if not knowable. */
+export function guardHolds(p: ProcessState, def: WorkflowDef, step: number, nowSec: number): boolean | null {
+  const g = def.steps[step]?.guard;
+  if (g === undefined || g === NO_EXPR) return true;
+  const nAssets = def.assets.length;
+  const v = evalExpr(def.exprs[g], def.fields.map(f => f.kind), f => p.numbers[f] ?? null, {
+    balance: (role, asset) => (p.balances ? p.balances[role * nAssets + asset] ?? 0n : null),
+    now: () => nowSec,
+  });
+  return v === null ? null : v !== 0n;
+}
+
 /**
  * The reports due for one process at `nowSec`: each due oracle step once (lowest step first), then at most
- * one STEP_ADVANCE if a token waits on a due timer step that captures nothing from an oracle.
+ * one STEP_ADVANCE if a token waits on something time has now released: a due timer step that captures nothing
+ * from an oracle (a payment date), a waiting step whose guard now holds (the end of a grace period or of a
+ * margin call), or a repeatable window whose closing date has passed.
  */
 export function dueReports(p: ProcessState, def: WorkflowDef, nowSec: number): DueReport[] {
   if (p.status !== STATUS_RUNNING) return [];
   const oracles = oracleFeeds(def);
   const out: DueReport[] = [];
   let advance = false;
+  // Windows (funding, the book) that closed: worth a transaction only when nothing else holds the note, i.e.
+  // closing them is what finishes it (a later report or payment passes them on anyway).
+  const closed = (t: number) => {
+    const u = def.steps[t]?.until;
+    if (!u) return false;
+    const at = u.kind === 0 ? Number(u.at) : p.numbers[u.field] === undefined ? undefined : Number(p.numbers[u.field]);
+    return at !== undefined && nowSec >= at;
+  };
+  if (p.tokens.length && p.tokens.every(t => def.steps[t]?.until) && p.tokens.some(closed)) advance = true;
   for (const t of [...new Set(p.tokens)].sort((a, b) => a - b)) {
     const s = def.steps[t];
-    if (!s || (s.kind !== KIND_SERVICE && s.kind !== KIND_CATCH)) continue; // tasks and gateways: not the keeper's
+    if (!s) continue;
+    if (s.until) continue;
+    if (s.kind === KIND_RECEIVE) {
+      if (s.guard !== NO_EXPR && guardHolds(p, def, t, nowSec) === true) advance = true;
+      continue;
+    }
+    if (s.kind !== KIND_SERVICE && s.kind !== KIND_CATCH) continue; // tasks and gateways: not the keeper's
     const caps = s.captures.filter(c => c.source === SRC_ORACLE);
     if (!s.timer && !caps.length) continue; // runs by itself
     const at = timerAt(def, p, t);
