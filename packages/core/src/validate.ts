@@ -5,6 +5,7 @@
  */
 import { compile, CompileError } from './compile';
 import { parseExpr, parsePred } from './expr';
+import { checkNotify } from './notify';
 import type { AssetOperation, Issue, IrNode, WorkflowIR } from './types';
 
 const isTask = (t: string) => ['userTask', 'serviceTask', 'task', 'receiveTask', 'sendTask'].includes(t);
@@ -21,6 +22,12 @@ export function validate(ir: WorkflowIR): { errors: Issue[]; warnings: Issue[] }
   for (const n of ir.nodes) for (const f of n.props.templateFields ?? []) fieldTypes.set(f.name, f.type);
 
   if (!ir.nodes.some(n => n.type === 'startEvent')) err('NO_START', 'The workflow needs a start event.');
+  // Email notifications (notify.ts): well-formed, on a step that can trigger them, to a known audience.
+  const poolNames = ir.pools.map(p => p.name);
+  for (const n of ir.nodes) {
+    if (!n.props.notify) continue;
+    for (const m of checkNotify(n.props.notify, n.type, poolNames)) err('BAD_NOTIFY', `${label(n)} notification: ${m}`, n.id);
+  }
   for (const p of ir.pools) {
     if (p.escrow) continue; // an escrow account holds no steps (compile checks it has none)
     const own = ir.nodes.filter(n => n.pool === p.id);

@@ -211,7 +211,11 @@ export function compile(ir: WorkflowIR, meta: unknown = {}): Compiled {
   }
   const def: WorkflowDef = {
     // Step names and pools, so any definition can be redrawn and labelled from chain alone.
-    version: DEF_VERSION, name: ir.name, meta: JSON.stringify({ ...(meta as object), oracles, names: Object.fromEntries(ir.nodes.map(n => [n.id, n.name])) }),
+    // Notifications (notify.ts) are for people: META only, so the engine runs the same CORE without them.
+    version: DEF_VERSION, name: ir.name, meta: JSON.stringify({
+      ...(meta as object), oracles, names: Object.fromEntries(ir.nodes.map(n => [n.id, n.name])),
+      ...(ir.nodes.some(n => n.props.notify?.length) ? { notify: Object.fromEntries(ir.nodes.filter(n => n.props.notify?.length).map(n => [n.id, n.props.notify])) } : {}),
+    }),
     roles: ir.pools.map(p => p.name), roleFlags: ir.pools.map(p => (p.escrow ? ROLE_ESCROW : 0)), fields,
     assets: ir.assets.map(a => ({ name: a.name, kind: AKIND[a.kind], decimals: a.decimals ?? 0 })),
     exprs, steps,

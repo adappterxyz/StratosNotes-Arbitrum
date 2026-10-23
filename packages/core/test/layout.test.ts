@@ -94,6 +94,6 @@ describe('diagram layout', () => {
   it('layout is deterministic and does not touch the compiled definition', () => {
     const a = instantiateProduct(EXAMPLE_PRODUCTS.fcn).bpmnXml, b = instantiateProduct(EXAMPLE_PRODUCTS.fcn).bpmnXml;
     expect(a).toBe(b);
-    expect(definitionId(compileTemplate({ product: EXAMPLE_PRODUCTS.fcn }))).toBe('0xae267580d9ab941617419e5e1fec9984d626c072e4545d08bdf11ba5702f3d8c');
+    expect(definitionId(compileTemplate({ product: EXAMPLE_PRODUCTS.fcn }))).toBe('0x94a57fe4d8b3e1acd887409c453e46914a6796b6f83a89cc89e073c8d7c918d0');
   });
 });

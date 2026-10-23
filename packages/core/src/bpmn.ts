@@ -55,6 +55,8 @@ function readProps(el: El): NodeProps {
       if (!(ms in MILESTONES)) throw new Error(`${el.getAttribute('id')}: unknown milestone '${ms}'`);
       props.milestone = ms as Milestone;
     }
+    const notify = json<NodeProps['notify']>('notify');
+    if (notify?.length) props.notify = notify;
   }
   // Standard BPMN timer (any tool): <timerEventDefinition><timeDate>.
   const td = kids(el, 'timerEventDefinition')[0];
@@ -149,6 +151,7 @@ function propsXml(p: NodeProps | undefined): string {
   if (p.timer) attrs.push(`timer="${esc(JSON.stringify(p.timer))}"`);
   if (p.receiveGuard) attrs.push(`receiveGuard="${esc(p.receiveGuard)}"`);
   if (p.milestone) attrs.push(`milestone="${p.milestone}"`);
+  if (p.notify?.length) attrs.push(`notify="${esc(JSON.stringify(p.notify))}"`);
   return attrs.length ? `<bpmn:extensionElements><flow:Properties ${attrs.join(' ')} /></bpmn:extensionElements>` : '';
 }
 

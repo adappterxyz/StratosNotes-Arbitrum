@@ -6,6 +6,7 @@
  * the BPMN and its layout are then produced deterministically.
  */
 import { buildWorkflow, type SpecFlow, type SpecNode, type SpecPool } from './bpmn';
+import type { NotifyDecl } from './notify';
 import type { AssetDefinition, AssetOperation, IrFlow, IrNode, Milestone, NodeType, TemplateField, WorkflowIR } from './types';
 
 export type StepKind = 'start' | 'task' | 'auto' | 'receive' | 'decision' | 'parallel' | 'end';
@@ -29,6 +30,8 @@ export interface DraftStep {
   ops?: AssetOperation[];
   /** The business event this step announces (collateral pledged, payment made, defaulted, ...). */
   milestone?: Milestone;
+  /** Email notifications (notify.ts): when, to whom, and which template. Keep them when editing a step. */
+  notify?: NotifyDecl[];
 }
 export interface WorkflowDraft {
   name: string;
@@ -74,6 +77,7 @@ export function irToDraft(ir: WorkflowIR): WorkflowDraft {
     const notices = ir.messageFlows.filter(m => m.source === n.id && m.notice).map(m => m.target);
     if (notices.length) s.noticeTo = notices;
     if (p.milestone) s.milestone = p.milestone;
+    if (p.notify?.length) s.notify = p.notify;
     if (p.timer?.dateField) s.timerField = p.timer.dateField;
     if (p.timer?.date) s.timerDate = p.timer.date;
     if (p.until?.dateField) s.untilField = p.until.dateField;
@@ -112,6 +116,7 @@ export function draftToIR(d: WorkflowDraft): WorkflowIR {
       ...(s.untilField ? { until: { dateField: s.untilField } } : {}),
       ...(s.guard ? { receiveGuard: s.guard } : {}),
       ...(s.milestone ? { milestone: s.milestone } : {}),
+      ...(s.notify?.length ? { notify: s.notify } : {}),
     };
     if (s.branches?.length) {
       for (const b of s.branches) addFlow(s.id, b);

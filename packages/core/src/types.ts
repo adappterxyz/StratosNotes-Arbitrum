@@ -4,6 +4,8 @@
  * compiler works on.
  */
 
+import type { NotifyDecl } from './notify';
+
 export type FieldType = 'Decimal' | 'Int' | 'Date' | 'Text' | 'Party' | 'Bool';
 
 export interface TemplateField {
@@ -72,6 +74,8 @@ export interface NodeProps {
    * funded, made or missed, a margin call opened or cured, a default.
    */
   milestone?: Milestone;
+  /** Email notifications declared on this step (notify.ts). For people only: compiled into META, never CORE. */
+  notify?: NotifyDecl[];
 }
 
 export const MILESTONES = {

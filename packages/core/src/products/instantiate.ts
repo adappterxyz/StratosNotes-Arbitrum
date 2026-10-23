@@ -33,6 +33,7 @@
  * and compare the worst performance perfK = min(obsK_i / initialLevel_i) with each level.
  */
 import { buildWorkflow, chain, field, type BuildSpec, type BuiltWorkflow, type SpecFlow, type SpecMessage, type SpecNode } from '../bpmn';
+import { productNotifications } from '../notify';
 import type { AssetDefinition, AssetOperation, NodeProps, TemplateField } from '../types';
 import {
   CASH_TOKEN, collateralToken, DELIVERABLE, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
@@ -456,6 +457,11 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     ],
     assets,
   };
+  // Email notifications on the payment cycle (notify.ts): declared on the BPMN, compiled into META only.
+  for (const pool of spec.pools) for (const n of pool.nodes) {
+    const notify = productNotifications(n.id);
+    if (notify) n.props = { ...(n.props ?? {}), notify };
+  }
   const built = buildWorkflow(spec);
   const layout = Object.fromEntries(spec.pools.flatMap(pl => pl.nodes.map(nd => [nd.id, { col: nd.col ?? 0, row: nd.row ?? 0 }])));
   return {
