@@ -1,14 +1,15 @@
 /**
  * How to issue a workflow, read from the workflow itself, so it works for stock products and custom notes
  * alike (ported from the hackathon app):
- *  - roles: a pool with a repeatable window (the subscription book) is OPEN to anyone; every other pool is held
- *    by the issuer;
+ *  - roles: an OPEN pool (the investors' book) is anyone's (address 0); an escrow pool is the engine's (address 0
+ *    too: the engine assigns its escrow account); every other pool is held by the issuer;
  *  - the issuer starts at the start event of a pool it holds (Issuer first);
  *  - the pre-trade steps are the user tasks that follow that start event in the same pool (a product's Approve
- *    Terms and Mandate Paying Agent, physical delivery reserves). Their input fields become the issue form, and
- *    a step that deposits cash pulls it from the issuer's wallet.
+ *    Terms + Pledge Collateral, then Mandate Paying Agent), stepping over automatic steps (Check Terms) and
+ *    stopping at the funding windows. Their input fields become the issue form, and a step that deposits
+ *    (the collateral pledge) pulls it from the issuer's wallet.
  */
-import { evalExpr, FKIND, OP, SRC, type Compiled, type WorkflowDef, type WorkflowIR } from '@sn/core';
+import { evalExpr, FKIND, OP, openPoolIds, SRC, type Compiled, type WorkflowDef, type WorkflowIR } from '@sn/core';
 
 export interface PlanInput { field: number; name: string; kind: number }
 export interface PlanStep {
@@ -27,13 +28,15 @@ export interface IssuePlan {
   heldPools: string[];
   /** Per role: true when anyone may act in it (the investors' book). */
   openRoles: boolean[];
+  /** Per role: true for an escrow account the engine holds (startProcess takes address 0 for it). */
+  escrowRoles: boolean[];
   cashAssets: number[];
   /** Product-shaped schedule: a strike date and observation dates. */
   dateFields: string[];
 }
 
 export function planIssuance(ir: WorkflowIR, c: Compiled): IssuePlan {
-  const open = new Set(ir.nodes.filter(n => n.props.until).map(n => n.pool));
+  const open = openPoolIds(ir);
   const starts = ir.nodes.filter(n => n.type === 'startEvent' && !open.has(n.pool));
   const poolName = (id: string) => ir.pools.find(p => p.id === id)?.name ?? id;
   const start = starts.find(n => /issuer/i.test(poolName(n.pool))) ?? starts[0];
@@ -55,8 +58,11 @@ export function planIssuance(ir: WorkflowIR, c: Compiled): IssuePlan {
   while (at && !seen.has(at)) {
     seen.add(at);
     const n = ir.nodes.find(x => x.id === at);
-    if (!n || n.type !== 'userTask' || n.pool !== start.pool) break;
-    steps.push(step(n.id));
+    if (!n || n.pool !== start.pool) break;
+    // Automatic steps (e.g. Check Terms) run in the same transaction as the step before them.
+    const automatic = n.type === 'serviceTask' && !(n.props.templateFields ?? []).some(f => !f.oracle && !f.formula);
+    if (!automatic && (n.type !== 'userTask' || n.props.until)) break; // windows (funding, top-ups) open after issuance
+    if (!automatic) steps.push(step(n.id));
     const out = flowsFrom(n.id);
     at = out.length === 1 ? out[0].target : undefined;
   }
@@ -66,6 +72,7 @@ export function planIssuance(ir: WorkflowIR, c: Compiled): IssuePlan {
     start: step(start.id), steps,
     openPools: ir.pools.filter(p => open.has(p.id)).map(p => p.name), heldPools: ir.pools.filter(p => !open.has(p.id)).map(p => p.name),
     openRoles: ir.pools.map(p => open.has(p.id)),
+    escrowRoles: ir.pools.map(p => !!p.escrow),
     cashAssets: ir.assets.map((a, i) => (a.kind === 'cash' ? i : -1)).filter(i => i >= 0),
     dateFields: all.filter(f => f.kind === FKIND.Date && /^(strikeDate|obsDate\d+)$/.test(f.name)).map(f => f.name),
   };
@@ -88,5 +95,19 @@ export function depositAmounts(def: WorkflowDef, step: PlanStep, known: Map<numb
 export const obsIndex = (name: string) => (name === 'strikeDate' ? 0 : Number(name.replace('obsDate', '')));
 
 export const FIELD_LABEL: Record<string, string> = {
-  isin: 'ISIN / reference', notional: 'Size (units of 1 USDC)', strikeDate: 'Strike date (book closes)', reserve: 'Coupon reserve (USDC)', units: 'Units',
+  isin: 'ISIN / reference', notional: 'Size (units of 1 USDC)', strikeDate: 'Strike date (book closes)', units: 'Units',
+  lag: 'Settlement lag (seconds after each observation)', grace: 'Grace period (seconds, up to 7 days)',
+  collateralRatio: 'Collateral ratio (share of the notional, e.g. 1 = 100%)', fundAmount: 'Amount (USDC)',
 };
+
+/** Labels for the per-asset fields of a collateralised note (haircut_ETH, pledge_ETH, topUp_ETH, fundDelivery_ETH). */
+export function fieldLabel(name: string): string {
+  if (FIELD_LABEL[name]) return FIELD_LABEL[name];
+  const m = /^(haircut|pledge|topUp|fundDelivery)_([A-Z]+)$/.exec(name);
+  if (m) {
+    const sym = m[2] === 'USD' ? 'USDC' : `t${m[2]}`;
+    return { haircut: `${sym} collateral haircut (share of value counted, e.g. 0.7)`, pledge: `${sym} collateral pledged`, topUp: `Top up ${sym} collateral`, fundDelivery: `Fund ${sym} delivery` }[m[1]]!;
+  }
+  if (/^obsDate\d+$/.test(name)) return `Observation ${name.slice(7)} date`;
+  return name;
+}

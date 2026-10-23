@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compile, dec, EXAMPLE_PRODUCTS, instantiateProduct, parseBpmn, reservePerUnit } from '@sn/core';
-import { applyEvent, depositAmounts, noteId, noteView, parseNoteId, planIssuance, type NoteEvent, type NoteState } from '../src';
+import { compile, dec, EXAMPLE_PRODUCTS, instantiateProduct, MILESTONES, parseBpmn } from '@sn/core';
+import { applyEvent, depositAmounts, issuerActions, noteId, noteView, parseNoteId, planIssuance, type NoteEvent, type NoteState } from '../src';
 
 const p = EXAMPLE_PRODUCTS.phoenix;
 const prod = instantiateProduct(p);
@@ -19,16 +19,19 @@ describe('note ids', () => {
 });
 
 describe('issuance plan', () => {
-  it('reads the pre-trade steps, open roles and the reserve deposit from the workflow', () => {
+  it('reads the pre-trade steps, open and escrow roles and the collateral pledge from the workflow', () => {
     const plan = planIssuance(ir, c);
+    // Check Terms runs by itself after Approve Terms; the funding windows open after issuance.
     expect(plan.steps.map(s => s.id)).toEqual(['Task_ApproveTerms', 'Task_Mandate']);
     expect(plan.openRoles).toEqual(c.def.roles.map(r => r === 'Investor'));
+    expect(plan.escrowRoles).toEqual(c.def.roles.map(r => r === 'Escrow'));
     expect(plan.dateFields).toEqual(['strikeDate', 'obsDate1', 'obsDate2', 'obsDate3', 'obsDate4']);
     const terms = plan.steps[0];
-    const known = new Map<number, bigint>([[field('notional'), dec(1000)], [field('reserve'), dec(1000 * reservePerUnit(p)!)]]);
+    expect(terms.inputs.map(i => i.name)).toContain('pledge_USD');
+    const known = new Map<number, bigint>([[field('notional'), dec(1000)], [field('pledge_USD'), dec(1000)]]);
     const [d] = depositAmounts(c.def, terms, known);
-    expect(d.asset).toBe(1);
-    expect(d.amount).toBe(dec(100)); // 4 coupons x 2.5% x 1,000
+    expect(d.asset).toBe(c.assetIndex.col_USD);
+    expect(d.amount).toBe(dec(1000)); // the pledge, locked in escrow
   });
 });
 
@@ -58,5 +61,41 @@ describe('events -> note state', () => {
     expect(v.phase).toBe('book');
     expect(v.reports).toEqual({ cre: 1, fallback: 0, last: 'cre' });
     expect(s!.holdings.find(h => h.owner === investor)?.balance).toBe(dec(600).toString());
+  });
+
+  it('reads the economics: collateral in escrow, coverage, the payment schedule and a default', () => {
+    const escrow = '0x00000000000000000000000000000000000000e5';
+    const roles = ['0x00000000000000000000000000000000000000b1', '0x00000000000000000000000000000000000000b1', '0x0000000000000000000000000000000000000000', escrow];
+    const E = (x: number) => dec(x).toString();
+    const set = (name: string, value: bigint | number) => ({ name: 'FieldSet' as const, pid: '1', field: field(name), value: { tag: 1 as const, value: (typeof value === 'bigint' ? value : BigInt(value)).toString() } });
+    const live: NoteEvent[] = [
+      { name: 'ProcessStarted', pid: '1', definition: '0xd1', creator: roles[0], ref: '1', roles, assetTokens: [] },
+      set('notional', dec(1000)), set('strikeDate', 100), set('obsDate1', 200), set('obsDate2', 300), set('obsDate3', 400), set('obsDate4', 500),
+      set('lag', 10), set('grace', 20), set('collateralRatio', dec(1)), set('haircut_USD', dec(1)),
+      { name: 'HoldingChanged', pid: '1', asset: c.assetIndex.col_USD, owner: escrow, balance: E(1000) },
+      set('initialLevel', dec(2000)), set('sold', dec(1000)), set('required', dec(1000)),
+      set('obs1', dec(1600)), // 80%: a 2.5% coupon is due at 1
+      { name: 'TokensUpdated', pid: '1', status: 0, stepsRun: 20, tokens: [c.stepIndex.S_Due1] },
+    ];
+    let s: NoteState | null = null;
+    for (const e of live) s = applyEvent(s, e, ctx);
+    let v = noteView(c.def, s!, 205);
+    expect(v.economics).toMatchObject({ state: 'active', ratio: 1, required: 1000, coverage: 1000, coveragePct: 1, escrowCash: 0 });
+    expect(v.economics!.periods[0]).toMatchObject({ k: 1, payDate: 210, graceEnd: 230, status: 'due', perUnit: 0.025, total: 25 });
+    expect(v.economics!.nextCall).toMatchObject({ period: 1, total: 25, funded: false });
+    expect(issuerActions(c.def, { tokens: [c.stepIndex.Task_Fund1, c.stepIndex.Task_TopUp_USD] })).toEqual({
+      fund: [{ step: c.stepIndex.Task_Fund1, period: 1 }], topUp: [{ step: c.stepIndex.Task_TopUp_USD, symbol: 'USD' }], delivery: [],
+    });
+    // Missed, grace runs out: the default distributes the escrow.
+    for (const e of [
+      { name: 'Milestone' as const, pid: '1', code: MILESTONES['payment-missed'], step: c.stepIndex.Task_Missed1, actor: '0x0' },
+      { name: 'Milestone' as const, pid: '1', code: MILESTONES.defaulted, step: c.stepIndex.Task_Default, actor: '0x0' },
+      { name: 'TokensUpdated' as const, pid: '1', status: 1, stepsRun: 30, tokens: [] },
+    ]) s = applyEvent(s, e, { ...ctx, at: 240 });
+    v = noteView(c.def, s!, 250);
+    expect(v.phase).toBe('defaulted');
+    expect(v.economics!.state).toBe('defaulted');
+    expect(v.economics!.periods.map(p => p.status)).toEqual(['missed', 'cancelled', 'cancelled', 'cancelled']);
+    expect(v.economics!.milestones.map(m => m.name)).toEqual(['payment-missed', 'defaulted']);
   });
 });

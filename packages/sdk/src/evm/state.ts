@@ -12,6 +12,8 @@ export interface EvmSnapshot {
   tokens: readonly number[];
   tags: bigint;
   values: readonly `0x${string}`[];
+  /** Every role's balance of every asset (NotesLens): balances[role * nAssets + asset]. */
+  balances?: readonly bigint[];
 }
 
 /** Field f's tag: 0 unset, 1 number, 2 text, 3 party. */
@@ -19,7 +21,7 @@ export const tagOf = (tags: bigint, field: number) => Number((tags >> BigInt(2 *
 
 export function snapshotToState(s: EvmSnapshot): ProcessState {
   const numbers: Array<bigint | undefined> = s.values.map((v, f) => (tagOf(s.tags, f) === 1 ? BigInt.asIntN(256, BigInt(v)) : undefined));
-  return { id: s.pid.toString(), definition: s.definition, status: s.status, tokens: [...s.tokens], numbers };
+  return { id: s.pid.toString(), definition: s.definition, status: s.status, tokens: [...s.tokens], numbers, ...(s.balances ? { balances: [...s.balances] } : {}) };
 }
 
 export const hexToBytes = (h: string): Uint8Array => {

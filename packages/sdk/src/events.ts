@@ -23,6 +23,8 @@ export type EngineEvent =
   /** `via`: which agent submitted the report, classified when ingested. */
   | { name: 'ReportProcessed'; pid: string; step: number; values: string[]; reporter: string; via: 'cre' | 'fallback' }
   | { name: 'ProcessCompleted'; pid: string }
+  /** A business event the workflow marks on a step (core MILESTONES): collateral, funding, payments, default. */
+  | { name: 'Milestone'; pid: string; code: number; step: number; actor: string }
   | { name: 'FallbackReporterUpdated'; previous: string; next: string };
 
 export type NoteEvent = Extract<EngineEvent, { pid: string }>;
@@ -50,7 +52,7 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
       definition: e.definition, creator: normAccount(e.creator), ref: e.ref,
       roles: e.roles.map(normAccount), assetTokens: e.assetTokens.map(normAccount),
       status: 0, tokens: [], stepsRun: 0, values: {}, holdings: [], createdAt: ctx.at, updatedAt: ctx.at,
-      reports: { cre: 0, fallback: 0, last: null },
+      reports: { cre: 0, fallback: 0, last: null }, milestones: [],
     };
   }
   if (!s) return null; // an event for a process whose start we have not seen (e.g. before the start block)
@@ -74,6 +76,11 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
       break;
     case 'ProcessCompleted':
       n.status = 1;
+      break;
+    case 'Milestone':
+      // Absolute positions would need a sequence number; milestones only append, and a reorg rebuilds the note
+      // from its remaining events, so appending is exact.
+      n.milestones = [...(s.milestones ?? []), { code: e.code, step: e.step, at: ctx.at }];
       break;
     default:
       break; // StepRun, deposits, withdrawals and transfers are history; their effects arrive as HoldingChanged

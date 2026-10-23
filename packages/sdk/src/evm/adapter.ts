@@ -193,7 +193,8 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     const tx: string[] = [];
     const reg = await this.registerDefinition(w, req.definition, onProgress);
     tx.push(...reg.tx);
-    const roles = req.plan.openRoles.map(open => (open ? zeroAddress : issuer));
+    // Open roles (the book) are anyone's and escrow is the engine's: both are address 0 at the start.
+    const roles = req.plan.openRoles.map((open, i) => (open || req.plan.escrowRoles?.[i] ? zeroAddress : issuer));
     const assetTokens = req.def.assets.map((a, i) => (a.kind === 1 ? (req.cashTokens[i] ?? zeroAddress) : zeroAddress)) as Address[];
     const known = new Map<number, bigint>();
     const start = await this.runStep(w, req.def, null, req.plan.start, req.inputs[req.plan.start.index] ?? {}, known, req.cashTokens, onProgress);

@@ -12,8 +12,8 @@
  * since the phase depends on the time) and the app.
  */
 import {
-  normalizeParams, PRODUCT_LABELS, SCALE, simulatePerf, totalPerUnit, underlyingLabel,
-  type ProductParams, type WorkflowDef,
+  economicsOf, MILESTONE_NAMES, MILESTONES, normalizeParams, PRODUCT_LABELS, SCALE, simulateNote, simulatePerf, totalPerUnit, underlyingLabel,
+  type Milestone, type ProductParams, type WorkflowDef,
 } from '@sn/core';
 
 export type ChainFamily = 'evm';
@@ -90,15 +90,17 @@ export interface NoteState {
   createdAt: number;
   updatedAt: number;
   reports: ReportStats;
+  /** Business events in order (FlowEngine Milestone): code (core MILESTONES), the step, the block time. */
+  milestones?: Array<{ code: number; step: number; at: number }>;
 }
 
 export const NOTE_ASSET = 0;
 export const CASH_ASSET = 1;
 export const STATUS_COMPLETED = 1;
 
-export type Phase = 'book' | 'fixing' | 'live' | 'redeemed';
-export const PHASES: Phase[] = ['book', 'fixing', 'live', 'redeemed'];
-export const PHASE_LABEL: Record<Phase, string> = { book: 'Book open', fixing: 'Fixing strike', live: 'Live', redeemed: 'Redeemed' };
+export type Phase = 'book' | 'fixing' | 'live' | 'redeemed' | 'defaulted';
+export const PHASES: Phase[] = ['book', 'fixing', 'live', 'redeemed', 'defaulted'];
+export const PHASE_LABEL: Record<Phase, string> = { book: 'Book open', fixing: 'Fixing strike', live: 'Live', redeemed: 'Redeemed', defaulted: 'Defaulted' };
 
 export interface UnderlyingState {
   symbol: string;
@@ -137,8 +139,67 @@ export interface NoteView {
   outcome: { calledAt?: number; finished: boolean; perUnit: number } | null;
   /** Paid out so far per unit (cash distributed to holders, from the ledger). */
   reports: ReportStats;
+  /** Collateral, coverage, the issuer's payment schedule and default state (null for workflows without escrow). */
+  economics: NoteEconomics | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CollateralLine {
+  symbol: string;
+  asset: number;
+  /** In escrow now (token units). */
+  amount: number;
+  /** Share of value counted (0..1). */
+  haircut: number;
+  /** Latest price CRE reported (USD: 1); null before the strike. */
+  price: number | null;
+  /** amount x price x haircut. */
+  value: number | null;
+}
+
+export type PeriodStatus = 'upcoming' | 'nothing-due' | 'due' | 'paid' | 'grace' | 'missed' | 'cancelled';
+
+/** One period's payment, as the issuer must fund it and holders see it. */
+export interface PaymentPeriod {
+  k: number;
+  obsDate: number;
+  /** Payment date: observation + settlement lag. */
+  payDate: number;
+  /** End of grace: the payment's last moment before default. */
+  graceEnd: number;
+  /** Cash per unit expected (reference payoff along the observed path; exact once the payment ran). */
+  perUnit: number | null;
+  /** What the issuer must fund: per unit x units sold (+ fees in custom workflows). */
+  total: number | null;
+  deliver?: { symbol: string; perUnit: number };
+  status: PeriodStatus;
+}
+
+export type EconomicState = 'pending' | 'active' | 'margin-call' | 'grace' | 'defaulted' | 'released' | 'cancelled';
+
+export interface NoteEconomics {
+  state: EconomicState;
+  /** Required coverage as a share of the outstanding notional. */
+  ratio: number | null;
+  /** Required collateral value: ratio x units sold (stablecoin). */
+  required: number | null;
+  /** Collateral value now: escrowed amounts x latest prices x haircuts. */
+  coverage: number | null;
+  /** coverage / required. */
+  coveragePct: number | null;
+  collateral: CollateralLine[];
+  /** Stablecoin the issuer has funded into escrow and not yet paid out. */
+  escrowCash: number;
+  /** Seconds. */
+  lag: number;
+  grace: number;
+  marginCall: { period: number; deadline: number } | null;
+  inGrace: { period: number; deadline: number } | null;
+  periods: PaymentPeriod[];
+  /** The next funding call: what the issuer must put in escrow, and by when. */
+  nextCall: { period: number; total: number; payDate: number; graceEnd: number; funded: boolean } | null;
+  milestones: Array<{ name: Milestone; stepId: string; at: number }>;
 }
 
 const fixed = (s: string | undefined) => (s === undefined ? NaN : Number(BigInt(s)) / Number(SCALE));
@@ -207,19 +268,127 @@ export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000
   }
   const label = hasTerms ? (custom ? `Custom ${PRODUCT_LABELS[params.productType]}` : PRODUCT_LABELS[params.productType]) : 'Custom workflow';
   const isin = fieldOf(def, s, 'isin');
+  const economics = economicsView(def, s, params, hasTerms && !custom, perfs, unds, now);
+  const sold2 = num('sold');
+  const soldNow = Number.isFinite(sold2) ? sold2 : sold;
+  const finalPhase: Phase = economics?.state === 'defaulted' ? 'defaulted' : phase;
   return {
     id: s.id, chain: s.chain, name: params.name || def.name, params, hasTerms, custom, label,
     underlyingText: hasTerms ? underlyingLabel(params) : '—', issuer,
-    isin: typeof isin === 'string' ? isin : '', notional: Number.isFinite(notional) ? notional : 0, sold,
-    strikeDate, obsDates, unds, strikeFixed, perfs, phase, activeSteps, outcome, reports: s.reports,
-    createdAt: s.createdAt, updatedAt: s.updatedAt,
+    isin: typeof isin === 'string' ? isin : '', notional: Number.isFinite(notional) ? notional : 0, sold: soldNow,
+    strikeDate, obsDates, unds, strikeFixed, perfs, phase: finalPhase, activeSteps, outcome, reports: s.reports,
+    economics, createdAt: s.createdAt, updatedAt: s.updatedAt,
   };
 }
 
-/** A holder's position in one note: units held and cash it can withdraw (both as numbers for display). */
-export function positionOf(s: NoteState, owner: string) {
-  const bal = (asset: number) => s.holdings.find(h => h.asset === asset && h.owner.toLowerCase() === owner.toLowerCase())?.balance ?? '0';
-  return { units: fixed(bal(NOTE_ASSET)), cash: fixed(bal(CASH_ASSET)), cashRaw: BigInt(bal(CASH_ASSET)) };
+/** "Collateral tETH" -> ETH; "Collateral tUSD" -> USD. */
+const collateralSymbol = (assetName: string) => {
+  const m = /^Collateral t?([A-Z]+)$/.exec(assetName);
+  return m ? (m[1] === 'USDC' ? 'USD' : m[1]) : null;
+};
+
+/**
+ * The note's economics from its state: collateral in escrow and its coverage, the payment schedule with each
+ * period's status, and whether the note is in a margin call, a grace period, defaulted or released.
+ */
+export function economicsView(def: WorkflowDef, s: NoteState, params: ProductParams, reference: boolean, perfs: number[], unds: UnderlyingState[], now: number): NoteEconomics | null {
+  const escrowRole = def.roleFlags?.findIndex(f => (f & 1) === 1) ?? -1;
+  if (escrowRole < 0) return null;
+  const escrow = s.roles[escrowRole]?.toLowerCase();
+  const bal = (asset: number) => fixed(s.holdings.find(h => h.asset === asset && h.owner === escrow)?.balance ?? '0');
+  const num = (name: string) => { const v = fieldOf(def, s, name); return typeof v === 'bigint' ? Number(v) / Number(SCALE) : null; };
+  const int = (name: string) => { const v = fieldOf(def, s, name); return typeof v === 'bigint' ? Number(v) : null; };
+  const stepId = (i: number) => def.steps[i]?.id ?? '';
+  const at = (prefix: string) => s.tokens.map(stepId).find(id => id.startsWith(prefix));
+  const milestones = (s.milestones ?? []).map(m => ({ name: MILESTONE_NAMES[m.code], stepId: stepId(m.step), at: m.at }));
+  const has = (name: Milestone) => milestones.some(m => m.name === name);
+
+  const collateral: CollateralLine[] = def.assets.flatMap((a, i) => {
+    const symbol = collateralSymbol(a.name);
+    if (!symbol) return [];
+    const haircut = num(`haircut_${symbol}`) ?? 0;
+    const price = symbol === 'USD' ? 1 : num(`px_${symbol}`);
+    const amount = bal(i);
+    return [{ symbol, asset: i, amount, haircut, price, value: price === null ? null : amount * price * haircut }];
+  });
+  const ratio = num('collateralRatio');
+  const sold = num('sold');
+  const required = num('required') ?? (ratio !== null && sold !== null ? ratio * sold : null);
+  const coverage = collateral.every(c => c.value !== null) ? collateral.reduce((a, c) => a + (c.value ?? 0), 0) : null;
+  const lag = int('lag') ?? 0, grace = int('grace') ?? 0;
+  const cashAsset = def.assets.findIndex(a => a.name === 'USDC');
+  const escrowCash = cashAsset >= 0 ? bal(cashAsset) : 0;
+
+  // What each period owes: the reference payoff along the observed path (the engine's own numbers once paid).
+  const n = params.observations;
+  let calls: ReturnType<typeof simulateNote>['calls'] = [];
+  if (reference && perfs.length && sold) {
+    const path = [...perfs, ...new Array(Math.max(0, n - perfs.length)).fill(perfs[perfs.length - 1])];
+    const worst = unds.length ? unds.reduce((w, u, i) => ((u.observed[n - 1] ?? Infinity) / (u.strike ?? 1) < (unds[w].observed[n - 1] ?? Infinity) / (unds[w].strike ?? 1) ? i : w), 0) : 0;
+    calls = simulateNote(params, {
+      perfs: path, sold, ratio: 0, collateral: [], // the schedule only: collateral is read from the chain
+      worstAtMaturity: params.settlement === 'physical' && unds[worst]?.strike ? { symbol: unds[worst].symbol, strike: unds[worst].strike! } : undefined,
+    }).calls;
+  }
+  const defaulted = has('defaulted');
+  const released = has('collateral-released');
+  const periods: PaymentPeriod[] = Array.from({ length: n }, (_, i) => {
+    const k = i + 1;
+    const obsDate = int(`obsDate${k}`) ?? 0;
+    const payDate = obsDate + lag, graceEnd = payDate + grace;
+    const observed = !!unds.length && unds.every(u => u.observed.length >= k);
+    const call = calls.find(c => c.period === k);
+    const paid = milestones.some(m => m.name === 'payment-made' && new RegExp(`^Task_Pay${k}(\\D|$)`).test(m.stepId));
+    const missed = milestones.some(m => m.name === 'payment-missed' && new RegExp(`^Task_Missed${k}(\\D|$)`).test(m.stepId));
+    let status: PeriodStatus;
+    if (paid) status = 'paid';
+    else if (at(`Recv_Grace${k}`)) status = 'grace';
+    else if (missed && defaulted) status = 'missed';
+    else if (defaulted || (released && !observed)) status = 'cancelled';
+    else if (!observed) status = 'upcoming';
+    else if (at(`S_Due${k}`) || (call && !paid)) status = 'due';
+    else status = 'nothing-due';
+    return { k, obsDate, payDate, graceEnd, perUnit: call ? call.perUnit : observed ? 0 : null, total: call ? call.total : observed ? 0 : null, ...(call?.deliver ? { deliver: call.deliver } : {}), status };
+  });
+  const marginAt = at('Recv_MarginCure');
+  const marginPeriod = marginAt ? Number(marginAt.replace('Recv_MarginCure', '')) : null;
+  const graceAt = at('Recv_Grace');
+  const gracePeriod = graceAt ? Number(/^Recv_Grace(\d+)/.exec(graceAt)![1]) : null;
+  const next = periods.find(p => p.status === 'due' || p.status === 'grace');
+  const state: EconomicState = defaulted ? 'defaulted' : released ? (sold ? 'released' : 'cancelled')
+    : marginPeriod !== null ? 'margin-call' : gracePeriod !== null ? 'grace' : sold === null ? 'pending' : 'active';
+  return {
+    state, ratio, required, coverage, coveragePct: coverage !== null && required ? coverage / required : null,
+    collateral, escrowCash, lag, grace,
+    marginCall: marginPeriod !== null ? { period: marginPeriod, deadline: (marginPeriod === 0 ? int('strikeDate') ?? 0 : int(`obsDate${marginPeriod}`) ?? 0) + grace } : null,
+    inGrace: gracePeriod !== null ? { period: gracePeriod, deadline: periods[gracePeriod - 1]?.graceEnd ?? 0 } : null,
+    periods,
+    nextCall: next && next.total !== null ? { period: next.k, total: next.total, payDate: next.payDate, graceEnd: next.graceEnd, funded: escrowCash + 1e-9 >= next.total } : null,
+    milestones,
+  };
+}
+
+/** Steps an issuer acts on during the note's life, by kind (from the workflow's own step ids). */
+export function issuerActions(def: WorkflowDef, s: Pick<NoteState, 'tokens'>) {
+  const open = (prefix: string) => def.steps.map((st, i) => ({ st, i })).filter(({ st, i }) => st.id.startsWith(prefix) && s.tokens.includes(i));
+  return {
+    fund: open('Task_Fund').filter(({ st }) => /^Task_Fund\d+$/.test(st.id)).map(({ st, i }) => ({ step: i, period: Number(st.id.slice(9)) })),
+    topUp: open('Task_TopUp_').map(({ st, i }) => ({ step: i, symbol: st.id.slice(11) })),
+    delivery: open('Task_FundDelivery_').map(({ st, i }) => ({ step: i, symbol: st.id.slice(18) })),
+  };
+}
+
+export { MILESTONES };
+
+/**
+ * A holder's position in one note: units held, cash it can withdraw, and every other asset it can withdraw
+ * (delivered tokens; collateral received on a default), as numbers for display.
+ */
+export function positionOf(s: NoteState, owner: string, def?: WorkflowDef) {
+  const mine = s.holdings.filter(h => h.owner.toLowerCase() === owner.toLowerCase());
+  const bal = (asset: number) => mine.find(h => h.asset === asset)?.balance ?? '0';
+  const other = mine.filter(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n).map(h => ({ asset: h.asset, name: def?.assets[h.asset]?.name ?? `asset ${h.asset}`, amount: fixed(h.balance), raw: BigInt(h.balance) }));
+  return { units: fixed(bal(NOTE_ASSET)), cash: fixed(bal(CASH_ASSET)), cashRaw: BigInt(bal(CASH_ASSET)), other };
 }
 
 /** One line describing the payoff, from the term sheet. */

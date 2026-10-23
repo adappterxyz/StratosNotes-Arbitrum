@@ -52,6 +52,7 @@ export function decodeEngineLog(log: { data: Hex; topics: readonly Hex[] }, isFa
       return { name: 'ReportProcessed', pid: s('pid'), step: Number(a.step), values: (a.values as bigint[]).map(String), reporter, via: isFallback(reporter) ? 'fallback' : 'cre' };
     }
     case 'ProcessCompleted': return { name: 'ProcessCompleted', pid: s('pid') };
+    case 'Milestone': return { name: 'Milestone', pid: s('pid'), code: Number(a.code), step: Number(a.step), actor: lc(s('actor')) };
     case 'FallbackReporterUpdated': return { name: 'FallbackReporterUpdated', previous: lc(s('previous')), next: lc(s('next')) };
     default: return null;
   }

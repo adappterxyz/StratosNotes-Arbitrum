@@ -82,7 +82,7 @@ function dueOn(runtime: Runtime<Config>, chain: ChainConfig, nowSec: number): Du
     }))
     const [snaps, next] = decodeFunctionResult({ abi: lensAbi, functionName: 'running', data: raw })
     for (const s of snaps) {
-      const p = snapshotToState({ ...s, tokens: s.tokens, values: s.values })
+      const p = snapshotToState({ ...s, tokens: s.tokens, values: s.values, balances: s.balances })
       if (!defs.has(p.definition)) {
         const bytes = decodeFunctionResult({
           abi: lensAbi, functionName: 'definitionBytes',

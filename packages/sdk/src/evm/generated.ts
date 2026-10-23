@@ -31,6 +31,19 @@ export const flowEngineAbi = [
  },
  {
   "type": "function",
+  "name": "ESCROW",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "MAX_ADVANCE",
   "inputs": [],
   "outputs": [
@@ -1163,6 +1176,37 @@ export const flowEngineAbi = [
  },
  {
   "type": "event",
+  "name": "Milestone",
+  "inputs": [
+   {
+    "name": "pid",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "code",
+    "type": "uint8",
+    "indexed": true,
+    "internalType": "uint8"
+   },
+   {
+    "name": "step",
+    "type": "uint16",
+    "indexed": false,
+    "internalType": "uint16"
+   },
+   {
+    "name": "actor",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "OwnershipTransferStarted",
   "inputs": [
    {
@@ -1871,6 +1915,11 @@ export const notesLensAbi = [
       "name": "values",
       "type": "bytes32[]",
       "internalType": "bytes32[]"
+     },
+     {
+      "name": "balances",
+      "type": "int256[]",
+      "internalType": "int256[]"
      }
     ]
    },
@@ -1932,6 +1981,11 @@ export const notesLensAbi = [
       "name": "values",
       "type": "bytes32[]",
       "internalType": "bytes32[]"
+     },
+     {
+      "name": "balances",
+      "type": "int256[]",
+      "internalType": "int256[]"
      }
     ]
    }

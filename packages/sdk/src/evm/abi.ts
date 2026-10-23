@@ -27,10 +27,12 @@ export const engineAbi = parseAbi([
   'event ProcessStarted(uint256 indexed pid, bytes32 indexed definition, address indexed creator, uint64 ref, address[] roles, address[] assetTokens)',
   'event ReportProcessed(uint256 indexed pid, uint16 indexed step, int256[] values, address reporter)',
   'event ProcessCompleted(uint256 indexed pid)',
+  'event Milestone(uint256 indexed pid, uint8 indexed code, uint16 step, address actor)',
+  'function ESCROW() view returns (address)',
 ]);
 
 export const lensAbi = parseAbi([
-  'struct Snapshot { uint256 pid; bytes32 definition; uint8 status; uint40 updatedAt; uint16[] tokens; uint128 tags; bytes32[] values; }',
+  'struct Snapshot { uint256 pid; bytes32 definition; uint8 status; uint40 updatedAt; uint16[] tokens; uint128 tags; bytes32[] values; int256[] balances; }',
   'function publish(bytes data) returns (bytes32 id)',
   'function isPublished(bytes32 id) view returns (bool)',
   'function definitionBytes(bytes32 id) view returns (bytes)',

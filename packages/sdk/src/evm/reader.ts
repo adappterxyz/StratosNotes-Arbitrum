@@ -21,7 +21,7 @@ export async function readRunning(n: EvmNotes, opts: { from?: bigint; scan?: big
     const [snaps, next] = await n.client.readContract({
       address: n.lens, abi: lensAbi, functionName: 'running', args: [from, opts.scan ?? 200n, opts.max ?? 50n], blockTag: n.blockTag ?? 'latest',
     });
-    for (const s of snaps) out.push(snapshotToState({ ...s, tokens: s.tokens, values: s.values }));
+    for (const s of snaps) out.push(snapshotToState({ ...s, tokens: s.tokens, values: s.values, balances: s.balances }));
     if (next === 0n || (snaps.length === 0 && next === from)) break;
     from = next;
   }
