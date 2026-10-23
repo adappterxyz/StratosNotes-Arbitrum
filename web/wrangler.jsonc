@@ -31,7 +31,7 @@
   ],
   "d1_databases": [
     // All internal data: the read model, templates, email subscriptions (salted), codes, preferences, outbox.
-    { "binding": "DB", "database_name": "notes-markets", "database_id": "REPLACE-WITH-D1-DATABASE-ID", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "notes-markets", "database_id": "33c7e4bc-596c-458e-8d67-ff0903d1978a", "migrations_dir": "migrations" }
   ],
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
