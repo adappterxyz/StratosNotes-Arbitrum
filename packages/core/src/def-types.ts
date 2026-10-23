@@ -11,9 +11,13 @@ export interface Edge { target: number; cond: number; isDefault: boolean }
 export interface StepDef {
   id: string; kind: number; role: number; timer: Due | null; guard: number; captures: Capture[];
   ops: AssetOpDef[]; until: Due | null; next: Edge[]; sends: number[]; join: number;
+  /** FlowEngine `Milestone` code announced when the step completes (0 = none; types.ts MILESTONES). */
+  milestone: number;
 }
 export interface WorkflowDef {
   version: number; name: string; meta: string; roles: string[];
+  /** Per role: bit 0 = escrow (an account the engine holds for the note; nobody signs for it). */
+  roleFlags: number[];
   fields: Array<{ name: string; kind: number }>;
   assets: Array<{ name: string; kind: number; decimals: number }>;
   exprs: Op[][];

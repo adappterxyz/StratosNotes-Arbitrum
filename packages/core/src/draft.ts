@@ -6,7 +6,7 @@
  * the BPMN and its layout are then produced deterministically.
  */
 import { buildWorkflow, type SpecFlow, type SpecNode, type SpecPool } from './bpmn';
-import type { AssetDefinition, AssetOperation, IrFlow, IrNode, NodeType, TemplateField, WorkflowIR } from './types';
+import type { AssetDefinition, AssetOperation, IrFlow, IrNode, Milestone, NodeType, TemplateField, WorkflowIR } from './types';
 
 export type StepKind = 'start' | 'task' | 'auto' | 'receive' | 'decision' | 'parallel' | 'end';
 export interface DraftBranch { label?: string; condition?: string; next: string; default?: boolean }
@@ -19,16 +19,24 @@ export interface DraftStep {
   next?: string;
   branches?: DraftBranch[];
   sendTo?: string[];
+  /** Notice message flows (drawn, not token handoffs): e.g. a funding window informing the paying agent. */
+  noticeTo?: string[];
   timerField?: string;
   timerDate?: string;
   /** Repeatable window until this Date field (user tasks: e.g. a subscription book). */
   untilField?: string;
   guard?: string;
   ops?: AssetOperation[];
+  /** The business event this step announces (collateral pledged, payment made, defaulted, ...). */
+  milestone?: Milestone;
 }
 export interface WorkflowDraft {
   name: string;
   parties: string[];
+  /** Parties that are escrow accounts the engine holds (no steps, nobody signs for them). */
+  escrow?: string[];
+  /** Parties anyone may act in (e.g. the investors' subscription book). */
+  open?: string[];
   assets: AssetDefinition[];
   steps: DraftStep[];
 }
@@ -61,8 +69,11 @@ export function irToDraft(ir: WorkflowIR): WorkflowDraft {
     if ((kind === 'decision' || kind === 'parallel') && outs.length > 1) {
       s.branches = outs.map(f => ({ ...(f.name ? { label: f.name } : {}), ...(f.condition ? { condition: f.condition } : {}), next: f.target, ...(n.defaultFlow === f.id ? { default: true } : {}) }));
     } else if (outs.length) s.next = outs[0].target;
-    const sends = ir.messageFlows.filter(m => m.source === n.id).map(m => m.target);
+    const sends = ir.messageFlows.filter(m => m.source === n.id && !m.notice).map(m => m.target);
     if (sends.length) s.sendTo = sends;
+    const notices = ir.messageFlows.filter(m => m.source === n.id && m.notice).map(m => m.target);
+    if (notices.length) s.noticeTo = notices;
+    if (p.milestone) s.milestone = p.milestone;
     if (p.timer?.dateField) s.timerField = p.timer.dateField;
     if (p.timer?.date) s.timerDate = p.timer.date;
     if (p.until?.dateField) s.untilField = p.until.dateField;
@@ -71,11 +82,15 @@ export function irToDraft(ir: WorkflowIR): WorkflowDraft {
     if (ops.length) s.ops = ops;
     return s;
   });
-  return { name: ir.name, parties: ir.pools.map(p => p.name), assets: ir.assets, steps };
+  const escrow = ir.pools.filter(p => p.escrow).map(p => p.name);
+  const open = ir.pools.filter(p => p.open).map(p => p.name);
+  return { name: ir.name, parties: ir.pools.map(p => p.name), ...(escrow.length ? { escrow } : {}), ...(open.length ? { open } : {}), assets: ir.assets, steps };
 }
 
 export function draftToIR(d: WorkflowDraft): WorkflowIR {
-  const pools = d.parties.map(name => ({ id: poolId(name), name }));
+  const escrow = new Set(d.escrow ?? []);
+  const open = new Set(d.open ?? []);
+  const pools = d.parties.map(name => ({ id: poolId(name), name, ...(escrow.has(name) ? { escrow: true } : {}), ...(open.has(name) ? { open: true } : {}) }));
   const flows: IrFlow[] = [];
   const nodes: IrNode[] = d.steps.map(s => ({ id: s.id, type: KIND_TO_TYPE[s.kind] ?? 'serviceTask', name: s.name, pool: poolId(s.party), props: {}, incoming: [], outgoing: [] }));
   const byId = new Map(nodes.map(n => [n.id, n]));
@@ -96,6 +111,7 @@ export function draftToIR(d: WorkflowDraft): WorkflowIR {
       ...(s.timerField ? { timer: { dateField: s.timerField } } : s.timerDate ? { timer: { date: s.timerDate } } : {}),
       ...(s.untilField ? { until: { dateField: s.untilField } } : {}),
       ...(s.guard ? { receiveGuard: s.guard } : {}),
+      ...(s.milestone ? { milestone: s.milestone } : {}),
     };
     if (s.branches?.length) {
       for (const b of s.branches) addFlow(s.id, b);
@@ -106,7 +122,10 @@ export function draftToIR(d: WorkflowDraft): WorkflowIR {
       }
     } else if (s.next) addFlow(s.id, { next: s.next });
   }
-  const messageFlows = d.steps.flatMap(s => (s.sendTo ?? []).map(t => ({ id: `M_${s.id}_${t}`, source: s.id, target: t })));
+  const messageFlows = d.steps.flatMap(s => [
+    ...(s.sendTo ?? []).map(t => ({ id: `M_${s.id}_${t}`, source: s.id, target: t })),
+    ...(s.noticeTo ?? []).map(t => ({ id: `N_${s.id}_${t}`, source: s.id, target: t, notice: true })),
+  ]);
   return { name: d.name, pools, nodes, flows, messageFlows, assets: d.assets };
 }
 
@@ -122,10 +141,12 @@ export function applyPatch(base: WorkflowDraft, patch: DraftPatch): WorkflowDraf
     ...(s.next && !ids.has(s.next) ? { next: undefined } : {}),
     ...(s.branches ? { branches: s.branches.filter(b => ids.has(b.next)) } : {}),
     ...(s.sendTo ? { sendTo: s.sendTo.filter(t => ids.has(t)) } : {}),
+    ...(s.noticeTo ? { noticeTo: s.noticeTo.filter(t => ids.has(t)) } : {}),
   }));
-  const parties = [...new Set([...(patch.parties?.length ? patch.parties : base.parties), ...clean.map(s => s.party)])];
+  // Escrow parties stay even though no step names them (they hold no steps).
+  const parties = [...new Set([...(patch.parties?.length ? patch.parties : base.parties), ...(base.escrow ?? []), ...clean.map(s => s.party)])];
   const assets = patch.assets?.length ? [...base.assets.filter(a => !patch.assets!.some(p => p.id === a.id)), ...patch.assets] : base.assets;
-  return { name: patch.name || base.name, parties, assets, steps: clean };
+  return { name: patch.name || base.name, parties, ...(base.escrow?.length ? { escrow: base.escrow } : {}), ...(base.open?.length ? { open: base.open } : {}), assets, steps: clean };
 }
 
 /**
@@ -175,7 +196,7 @@ export function irToBpmn(ir: WorkflowIR, key = 'WF'): { bpmnXml: string } {
     pos.set(n.id, { col: col.get(n.id) ?? 0, row: r });
   }
   const pools: SpecPool[] = ir.pools.map(p => ({
-    id: p.id, name: p.name, proc: `Proc_${p.id}`,
+    id: p.id, name: p.name, proc: `Proc_${p.id}`, ...(p.escrow ? { escrow: true } : {}), ...(p.open ? { open: true } : {}),
     nodes: ir.nodes.filter(n => n.pool === p.id).map((n): SpecNode => ({
       id: n.id, type: (n.type === 'task' || n.type === 'sendTask' || n.type === 'intermediateCatchEvent' ? 'serviceTask' : n.type) as SpecNode['type'],
       name: n.name, col: pos.get(n.id)!.col, row: pos.get(n.id)!.row, ...(Object.keys(n.props).length ? { props: n.props } : {}),
@@ -185,5 +206,5 @@ export function irToBpmn(ir: WorkflowIR, key = 'WF'): { bpmnXml: string } {
       return { id: f.id, src: f.source, tgt: f.target, ...(f.name ? { name: f.name } : {}), ...(f.condition ? { cond: f.condition } : {}), ...(src.defaultFlow === f.id ? { isDefault: true } : {}) };
     }),
   }));
-  return { bpmnXml: buildWorkflow({ key, name: ir.name, pools, messages: ir.messageFlows.map(m => ({ id: m.id, src: m.source, tgt: m.target })), assets: ir.assets }).bpmnXml };
+  return { bpmnXml: buildWorkflow({ key, name: ir.name, pools, messages: ir.messageFlows.map(m => ({ id: m.id, src: m.source, tgt: m.target, ...(m.notice ? { notice: true } : {}) })), assets: ir.assets }).bpmnXml };
 }

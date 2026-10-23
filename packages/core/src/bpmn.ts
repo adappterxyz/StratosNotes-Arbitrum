@@ -7,7 +7,7 @@
  * diagrams exported from Flow import unchanged.
  */
 import { DOMParser } from '@xmldom/xmldom';
-import type { AssetDefinition, IrFlow, IrNode, IrPool, NodeProps, NodeType, PropsMap, TemplateField, WorkflowIR } from './types';
+import { MILESTONES, type AssetDefinition, type IrFlow, type IrMessageFlow, type IrNode, type IrPool, type Milestone, type NodeProps, type NodeType, type PropsMap, type TemplateField, type WorkflowIR } from './types';
 
 export const FLOW_NS = 'https://stratosnotes.dev/bpmn';
 
@@ -49,6 +49,11 @@ function readProps(el: El): NodeProps {
     if (guard) props.receiveGuard = guard;
     const ctrl = p.getAttribute('controllers');
     if (ctrl) props.controllers = ctrl.split(',').map(s => s.trim()).filter(Boolean);
+    const ms = p.getAttribute('milestone');
+    if (ms) {
+      if (!(ms in MILESTONES)) throw new Error(`${el.getAttribute('id')}: unknown milestone '${ms}'`);
+      props.milestone = ms as Milestone;
+    }
   }
   // Standard BPMN timer (any tool): <timerEventDefinition><timeDate>.
   const td = kids(el, 'timerEventDefinition')[0];
@@ -68,7 +73,9 @@ export function parseBpmn(xml: string, assets: AssetDefinition[] = []): Workflow
   const procToPool = new Map<string, IrPool>();
   const pools: IrPool[] = [];
   for (const part of collab ? kids(collab, 'participant') : []) {
-    const pool = { id: part.getAttribute('id') || '', name: part.getAttribute('name') || part.getAttribute('id') || '' };
+    const pool: IrPool = { id: part.getAttribute('id') || '', name: part.getAttribute('name') || part.getAttribute('id') || '' };
+    if (part.getAttribute('flow:escrow') === 'true') pool.escrow = true;
+    if (part.getAttribute('flow:open') === 'true') pool.open = true;
     pools.push(pool);
     const ref = part.getAttribute('processRef');
     if (ref) procToPool.set(ref, pool);
@@ -99,7 +106,10 @@ export function parseBpmn(xml: string, assets: AssetDefinition[] = []): Workflow
     byId.get(f.source)?.outgoing.push(f.id);
     byId.get(f.target)?.incoming.push(f.id);
   }
-  const messageFlows = (collab ? kids(collab, 'messageFlow') : []).map(m => ({ id: m.getAttribute('id') || '', source: m.getAttribute('sourceRef') || '', target: m.getAttribute('targetRef') || '' }));
+  const messageFlows = (collab ? kids(collab, 'messageFlow') : []).map((m): IrMessageFlow => ({
+    id: m.getAttribute('id') || '', source: m.getAttribute('sourceRef') || '', target: m.getAttribute('targetRef') || '',
+    ...(m.getAttribute('flow:notice') === 'true' ? { notice: true } : {}),
+  }));
   const defs = root.getAttribute('id') || 'Workflow';
   return { name: collab?.getAttribute('name') || defs.replace(/^Definitions_/, ''), pools, nodes, flows, messageFlows, assets };
 }
@@ -117,8 +127,9 @@ export interface SpecNode {
   props?: NodeProps;
 }
 export interface SpecFlow { id: string; src: string; tgt: string; name?: string; cond?: string; isDefault?: boolean }
-export interface SpecPool { id: string; name: string; proc: string; nodes: SpecNode[]; flows: SpecFlow[] }
-export interface BuildSpec { key: string; name: string; pools: SpecPool[]; messages: Array<{ id: string; src: string; tgt: string }>; assets: AssetDefinition[] }
+export interface SpecPool { id: string; name: string; proc: string; nodes: SpecNode[]; flows: SpecFlow[]; escrow?: boolean; open?: boolean }
+export interface SpecMessage { id: string; src: string; tgt: string; notice?: boolean }
+export interface BuildSpec { key: string; name: string; pools: SpecPool[]; messages: SpecMessage[]; assets: AssetDefinition[] }
 export interface BuiltWorkflow { bpmnXml: string; props: PropsMap; assets: AssetDefinition[] }
 
 const COL_W = 185, ROW_H = 125, X0 = 220, POOL_GAP = 20;
@@ -138,18 +149,20 @@ function propsXml(p: NodeProps | undefined): string {
   if (p.until) attrs.push(`until="${esc(JSON.stringify(p.until))}"`);
   if (p.timer) attrs.push(`timer="${esc(JSON.stringify(p.timer))}"`);
   if (p.receiveGuard) attrs.push(`receiveGuard="${esc(p.receiveGuard)}"`);
+  if (p.milestone) attrs.push(`milestone="${p.milestone}"`);
   return attrs.length ? `<bpmn:extensionElements><flow:Properties ${attrs.join(' ')} /></bpmn:extensionElements>` : '';
 }
 
 export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
   const geo = new Map<string, { cx: number; cy: number; w: number; h: number; type: string }>();
   const shapes: string[] = [], edges: string[] = [], procs: string[] = [];
-  const maxCol = Math.max(...spec.pools.flatMap(p => p.nodes.map(n => n.col)));
+  const maxCol = Math.max(0, ...spec.pools.flatMap(p => p.nodes.map(n => n.col)));
   const width = X0 + maxCol * COL_W + 50;
   let y = 80;
   for (const p of spec.pools) {
-    const rows = Math.max(...p.nodes.map(n => n.row ?? 0)) + 1;
-    const h = rows * ROW_H + 30;
+    const rows = Math.max(0, ...p.nodes.map(n => n.row ?? 0)) + 1;
+    // An escrow pool has no steps: a thin band that still shows the account exists.
+    const h = p.nodes.length ? rows * ROW_H + 30 : 60;
     shapes.push(`      <bpmndi:BPMNShape id="${p.id}_di" bpmnElement="${p.id}" isHorizontal="true"><dc:Bounds x="140" y="${y}" width="${width}" height="${h}" /></bpmndi:BPMNShape>`);
     for (const n of p.nodes) {
       const [w, hh] = SIZE[kindOf(n.type)];
@@ -163,7 +176,7 @@ export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
   }
   const pts = (ps: Array<[number, number]>) => ps.map(([a, b]) => `<di:waypoint x="${a}" y="${b}" />`).join('');
   for (const p of spec.pools) {
-    const lines = [`  <bpmn:process id="${p.proc}" isExecutable="true">`];
+    const lines = [`  <bpmn:process id="${p.proc}" isExecutable="${p.nodes.length ? 'true' : 'false'}">`];
     const defaults = new Map(p.flows.filter(f => f.isDefault).map(f => [f.src, f.id]));
     for (const n of p.nodes) {
       const d = defaults.has(n.id) ? ` default="${defaults.get(n.id)}"` : '';
@@ -202,8 +215,8 @@ export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                   id="Definitions_${k}" targetNamespace="${FLOW_NS}">
   <bpmn:collaboration id="Collab_${k}" name="${esc(spec.name)}">
-${spec.pools.map(p => `    <bpmn:participant id="${p.id}" name="${esc(p.name)}" processRef="${p.proc}" />`).join('\n')}
-${spec.messages.map(m => `    <bpmn:messageFlow id="${m.id}" sourceRef="${m.src}" targetRef="${m.tgt}" />`).join('\n')}
+${spec.pools.map(p => `    <bpmn:participant id="${p.id}" name="${esc(p.name)}" processRef="${p.proc}"${p.escrow ? ' flow:escrow="true"' : ''}${p.open ? ' flow:open="true"' : ''} />`).join('\n')}
+${spec.messages.map(m => `    <bpmn:messageFlow id="${m.id}"${m.notice ? ' flow:notice="true"' : ''} sourceRef="${m.src}" targetRef="${m.tgt}" />`).join('\n')}
   </bpmn:collaboration>
 ${procs.join('\n')}
   <bpmndi:BPMNDiagram id="BPMNDiagram_${k}">

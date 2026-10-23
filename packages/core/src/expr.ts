@@ -4,8 +4,12 @@
  *
  *   expr    := term (('+' | '-') term)*
  *   term    := factor (('*' | '/') factor)*
- *   factor  := NUMBER | IDENT | FN '(' expr (',' expr)+ ')' | '(' expr ')' | '-' factor
+ *   factor  := NUMBER | IDENT | FN '(' expr (',' expr)+ ')' | 'balance' '(' ROLE ',' ASSET ')' | 'now'
+ *            | '(' expr ')' | '-' factor
  *   FN      := 'min' | 'max'   (e.g. worst-of: min(eth / ethStrike, btc / btcStrike))
+ *   balance(Escrow, cash): what a pool's account holds of an asset in this note, now (engine fixed point).
+ *     Pools are named by their pool name or id; open pools (anyone) have no account and cannot be read.
+ *   now: the block time, unix seconds (compare with Date fields: `now >= payDate + grace`).
  *   pred    := cmpChain (('or' | '||') cmpChain)*      ('and' binds tighter)
  *   cmpChain:= cmp (('and' | '&&') cmp)*
  *   cmp     := expr OP expr      OP in > < >= <= == !=
@@ -17,7 +21,12 @@ export type ExprAst =
   | { k: 'ref'; name: string }
   | { k: 'neg'; a: ExprAst }
   | { k: 'bin'; op: '+' | '-' | '*' | '/'; a: ExprAst; b: ExprAst }
-  | { k: 'fn'; f: 'min' | 'max'; a: ExprAst; b: ExprAst };
+  | { k: 'fn'; f: 'min' | 'max'; a: ExprAst; b: ExprAst }
+  | { k: 'bal'; role: string; asset: string }
+  | { k: 'now' };
+
+/** Words the language reserves: no field may be named after them. */
+export const RESERVED_WORDS = ['min', 'max', 'balance', 'now', 'and', 'or'];
 
 export type PredAst =
   | { k: 'cmp'; op: '>' | '<' | '>=' | '<=' | '==' | '!='; a: ExprAst; b: ExprAst }
@@ -25,12 +34,14 @@ export type PredAst =
   | { k: 'or'; a: PredAst; b: PredAst }
   | { k: 'not'; a: PredAst };
 
-export type Parsed<T> = { ok: true; ast: T; refs: string[] } | { ok: false; error: string; pos: number };
+/** `refs`: the fields an expression reads; `balances`: the "Role.asset" accounts it reads. */
+export type Parsed<T> = { ok: true; ast: T; refs: string[]; balances: string[] } | { ok: false; error: string; pos: number };
 
 export function parseExpr(src: string): Parsed<ExprAst> {
   const s = src.trim();
   let i = 0;
   const refs = new Set<string>();
+  const bals = new Set<string>();
   let err: { ok: false; error: string; pos: number } | null = null;
   const fail = (error: string) => { err = { ok: false, error, pos: i }; return null; };
   const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
@@ -55,6 +66,26 @@ export function parseExpr(src: string): Parsed<ExprAst> {
     if (id) {
       i += id[0].length;
       ws();
+      if (id[0] === 'balance' && s[i] === '(') {
+        i++;
+        ws();
+        const role = /^[a-zA-Z_][a-zA-Z0-9_]*/.exec(s.slice(i));
+        if (!role) return fail('balance(...) needs a pool name first, e.g. balance(Escrow, cash)');
+        i += role[0].length;
+        ws();
+        if (s[i] !== ',') return fail("expected ',' after the pool in balance(...)");
+        i++;
+        ws();
+        const asset = /^[a-zA-Z_][a-zA-Z0-9_]*/.exec(s.slice(i));
+        if (!asset) return fail('balance(...) needs an asset id second, e.g. balance(Escrow, cash)');
+        i += asset[0].length;
+        ws();
+        if (s[i] !== ')') return fail("expected ')' after balance(pool, asset)");
+        i++;
+        bals.add(`${role[0]}.${asset[0]}`);
+        return { k: 'bal', role: role[0], asset: asset[0] };
+      }
+      if (id[0] === 'now') return { k: 'now' };
       if ((id[0] === 'min' || id[0] === 'max') && s[i] === '(') {
         i++;
         const args: ExprAst[] = [];
@@ -99,7 +130,7 @@ export function parseExpr(src: string): Parsed<ExprAst> {
   if (!ast) return { ok: false, error: 'empty expression', pos: i };
   ws();
   if (i < s.length) return { ok: false, error: `unexpected trailing input '${s.slice(i)}'`, pos: i };
-  return { ok: true, ast, refs: [...refs].sort() };
+  return { ok: true, ast, refs: [...refs].sort(), balances: [...bals].sort() };
 }
 
 function splitTopLevel(s: string, symbols: string[], words: string[]): string[] {
@@ -142,7 +173,7 @@ function parseCmp(src: string): Parsed<PredAst> {
   if (!a.ok) return { ok: false, error: `left of ${found.op}: ${a.error}`, pos: a.pos };
   const b = parseExpr(src.slice(found.at + found.op.length));
   if (!b.ok) return { ok: false, error: `right of ${found.op}: ${b.error}`, pos: found.at + b.pos };
-  return { ok: true, ast: { k: 'cmp', op: found.op, a: a.ast, b: b.ast }, refs: [...new Set([...a.refs, ...b.refs])].sort() };
+  return { ok: true, ast: { k: 'cmp', op: found.op, a: a.ast, b: b.ast }, refs: [...new Set([...a.refs, ...b.refs])].sort(), balances: [...new Set([...a.balances, ...b.balances])].sort() };
 }
 
 export function parsePred(src: string): Parsed<PredAst> {
@@ -150,6 +181,7 @@ export function parsePred(src: string): Parsed<PredAst> {
   if (!s) return { ok: false, error: 'empty condition', pos: 0 };
   let ast: PredAst | null = null;
   const refs = new Set<string>();
+  const bals = new Set<string>();
   for (const orPart of splitTopLevel(s, ['||'], ['or'])) {
     let and: PredAst | null = null;
     for (const atom of splitTopLevel(orPart, ['&&'], ['and'])) {
@@ -157,12 +189,13 @@ export function parsePred(src: string): Parsed<PredAst> {
       const c = parseCmp(atom);
       if (!c.ok) return c;
       c.refs.forEach(r => refs.add(r));
+      c.balances.forEach(b => bals.add(b));
       and = and ? { k: 'and', a: and, b: c.ast } : c.ast;
     }
     if (!and) return { ok: false, error: 'empty term beside and/or', pos: 0 };
     ast = ast ? { k: 'or', a: ast, b: and } : and;
   }
-  return ast ? { ok: true, ast, refs: [...refs].sort() } : { ok: false, error: 'empty condition', pos: 0 };
+  return ast ? { ok: true, ast, refs: [...refs].sort(), balances: [...bals].sort() } : { ok: false, error: 'empty condition', pos: 0 };
 }
 
 export type { Op } from './op';
@@ -171,9 +204,19 @@ import type { Op } from './op';
 const BIN: Record<string, number> = { '+': 2, '-': 3, '*': 4, '/': 5 };
 const FN: Record<string, number> = { min: 16, max: 17 };
 const CMPC: Record<string, number> = { '<': 7, '<=': 8, '>': 9, '>=': 10, '==': 11, '!=': 12 };
+/** balance(role, asset): op 18, field = role << 8 | asset. now: op 19. */
+export const OP_BALANCE = 18;
+export const OP_NOW = 19;
+
+/** Resolves a pool name to its role index and an asset id to its index (for balance(...)). */
+export interface AccountResolver { role: (name: string) => number; asset: (name: string) => number }
+const noAccounts: AccountResolver = {
+  role: n => { throw new Error(`balance(${n}, ...) is not available here`); },
+  asset: n => { throw new Error(`balance(..., ${n}) is not available here`); },
+};
 
 /** Compile to RPN; `fieldIndex` resolves a field name (throws if unknown). */
-export function compileExpr(ast: ExprAst, fieldIndex: (name: string) => number): Op[] {
+export function compileExpr(ast: ExprAst, fieldIndex: (name: string) => number, accounts: AccountResolver = noAccounts): Op[] {
   const out: Op[] = [];
   const walk = (n: ExprAst): void => {
     if (n.k === 'num') {
@@ -182,6 +225,8 @@ export function compileExpr(ast: ExprAst, fieldIndex: (name: string) => number):
       out.push({ code: 0, field: 0, value: v });
     }
     else if (n.k === 'ref') out.push({ code: 1, field: fieldIndex(n.name), value: 0n });
+    else if (n.k === 'bal') out.push({ code: OP_BALANCE, field: (accounts.role(n.role) << 8) | accounts.asset(n.asset), value: 0n });
+    else if (n.k === 'now') out.push({ code: OP_NOW, field: 0, value: 0n });
     else if (n.k === 'neg') { walk(n.a); out.push({ code: 6, field: 0, value: 0n }); }
     else if (n.k === 'fn') { walk(n.a); walk(n.b); out.push({ code: FN[n.f], field: 0, value: 0n }); }
     else { walk(n.a); walk(n.b); out.push({ code: BIN[n.op], field: 0, value: 0n }); }
@@ -190,10 +235,10 @@ export function compileExpr(ast: ExprAst, fieldIndex: (name: string) => number):
   return out;
 }
 
-export function compilePred(ast: PredAst, fieldIndex: (name: string) => number): Op[] {
+export function compilePred(ast: PredAst, fieldIndex: (name: string) => number, accounts: AccountResolver = noAccounts): Op[] {
   const out: Op[] = [];
   const walk = (n: PredAst): void => {
-    if (n.k === 'cmp') { out.push(...compileExpr(n.a, fieldIndex), ...compileExpr(n.b, fieldIndex), { code: CMPC[n.op], field: 0, value: 0n }); }
+    if (n.k === 'cmp') { out.push(...compileExpr(n.a, fieldIndex, accounts), ...compileExpr(n.b, fieldIndex, accounts), { code: CMPC[n.op], field: 0, value: 0n }); }
     else if (n.k === 'not') { walk(n.a); out.push({ code: 15, field: 0, value: 0n }); }
     else { walk(n.a); walk(n.b); out.push({ code: n.k === 'and' ? 13 : 14, field: 0, value: 0n }); }
   };

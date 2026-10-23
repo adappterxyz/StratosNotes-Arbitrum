@@ -8,11 +8,33 @@ import type { Op } from './op';
 
 const F_DECIMAL = 0, F_INT = 1, F_DATE = 2, F_BOOL = 5;
 
-/** `value(f)`: field f's raw value (engine form: fixed point for decimals, plain for ints/dates), or null if unset. */
-export function evalExpr(ops: Op[], fieldKinds: number[], value: (field: number) => bigint | null): bigint | null {
+/** What an expression may read besides fields: account balances (balance(role, asset)) and the time. */
+export interface EvalEnv {
+  /** A role's balance of an asset, engine fixed point; null when unknown (an open role has no account). */
+  balance?: (role: number, asset: number) => bigint | null;
+  /** Unix seconds (FlowEngine reads block.timestamp). */
+  now?: () => number;
+}
+
+/**
+ * `value(f)`: field f's raw value (engine form: fixed point for decimals, plain for ints/dates), or null if unset.
+ * Null as a result: something the expression reads is not known yet (the engine waits in that case).
+ */
+export function evalExpr(ops: Op[], fieldKinds: number[], value: (field: number) => bigint | null, env: EvalEnv = {}): bigint | null {
   const st: bigint[] = [];
   for (const op of ops) {
     if (op.code === 0) { st.push(op.value); continue; }
+    if (op.code === 18) {
+      const b = env.balance ? env.balance(op.field >> 8, op.field & 0xff) : null;
+      if (b === null) return null;
+      st.push(b);
+      continue;
+    }
+    if (op.code === 19) {
+      if (!env.now) return null;
+      st.push(BigInt(Math.floor(env.now())) * SCALE);
+      continue;
+    }
     if (op.code === 1) {
       const raw = value(op.field);
       if (raw === null) return null;

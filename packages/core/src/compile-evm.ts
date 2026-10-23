@@ -25,11 +25,13 @@
  * CORE < 64 KiB):
  *
  *   header (12)   version u8 | nRoles u8 | nFields u8 | nAssets u8 | nExprs u16 | nSteps u16 | coreLen u32
+ *   roleFlags     nRoles × u8    (bit 0: escrow, an account the engine holds for the note)
  *   fieldKinds    nFields × u8
  *   assets        nAssets × (kind u8, decimals u8)
  *   exprOffsets   nExprs × u16   -> program: nOps u8, then nOps × (code u8, field u16, value i64)   [11 bytes/op]
+ *                 (code 18 balance: field = role << 8 | asset; code 19 now)
  *   stepOffsets   nSteps × u16   -> step record:
- *       kind u8 | role u8 | join u8 | flags u8 (1 = timer, 2 = until) | guard u16
+ *       kind u8 | role u8 | join u8 | flags u8 (1 = timer, 2 = until, high nibble = milestone) | guard u16
  *       | nCaptures u8 | nOps u8 | nNext u8 | nSends u8                                    [10]
  *       | timer (kind u8, at i64, field u16)            if flags & 1                         [11]
  *       | until (kind u8, at i64, field u16)            if flags & 2                         [11]
@@ -41,7 +43,7 @@
  */
 import type { Due, StepDef, WorkflowDef } from './def-types';
 
-export const EVM_DEF_VERSION = 2;
+export const EVM_DEF_VERSION = 3;
 export const EVM_HEADER = 12;
 
 class W {
@@ -80,6 +82,7 @@ export function encodeEvmDef(d: WorkflowDef): Uint8Array {
   w.u16(d.exprs.length);
   w.u16(d.steps.length);
   w.u32(0); // coreLen, patched below
+  d.roles.forEach((_, i) => w.u8(d.roleFlags?.[i] ?? 0));
   d.fields.forEach(f => w.u8(f.kind));
   d.assets.forEach(a => { w.u8(a.kind); w.u8(a.decimals); });
   const exprTable = w.length;
@@ -94,7 +97,8 @@ export function encodeEvmDef(d: WorkflowDef): Uint8Array {
   const due = (x: Due) => { w.u8(x.kind); w.i64(x.at); w.u16(x.field); };
   d.steps.forEach((s, i) => {
     w.set16(stepTable + 2 * i, w.length);
-    w.u8(s.kind); w.u8(s.role); w.u8(s.join); w.u8((s.timer ? 1 : 0) | (s.until ? 2 : 0));
+    if (s.milestone < 0 || s.milestone > 15) throw new Error(`milestone out of range: ${s.milestone}`);
+    w.u8(s.kind); w.u8(s.role); w.u8(s.join); w.u8((s.timer ? 1 : 0) | (s.until ? 2 : 0) | ((s.milestone ?? 0) << 4));
     w.u16(s.guard);
     w.u8(s.captures.length); w.u8(s.ops.length); w.u8(s.next.length); w.u8(s.sends.length);
     if (s.timer) due(s.timer);
@@ -134,6 +138,7 @@ export function decodeEvmDef(bytes: Uint8Array): WorkflowDef {
   const coreLen = evmCoreLength(bytes);
   o = EVM_HEADER;
   const m = JSON.parse(new TextDecoder().decode(bytes.subarray(coreLen))) as Meta;
+  const roleFlags = Array.from({ length: nRoles }, u8);
   const fieldKinds = Array.from({ length: nFields }, u8);
   const assets = Array.from({ length: nAssets }, (_, i) => ({ name: m.assets[i], kind: u8(), decimals: u8() }));
   const exprOff = Array.from({ length: nExprs }, u16);
@@ -150,11 +155,11 @@ export function decodeEvmDef(bytes: Uint8Array): WorkflowDef {
     const ops = Array.from({ length: no }, () => ({ kind: u8(), asset: u8(), fromRole: u8(), toRole: u8(), amount: u16(), asset2: u8(), fromRole2: u8(), toRole2: u8(), amount2: u16(), retire: u8() !== 0 }));
     const next = Array.from({ length: nn }, () => ({ target: u16(), cond: u16(), isDefault: u8() !== 0 }));
     const sends = Array.from({ length: ns }, u16);
-    return { id: m.steps[i], kind, role, timer, guard, captures, ops, until, next, sends, join };
+    return { id: m.steps[i], kind, role, timer, guard, captures, ops, until, next, sends, join, milestone: flags >> 4 };
   });
   if (m.roles.length !== nRoles) throw new Error('definition meta does not match its core');
   return {
-    version: 1, name: m.name, meta: m.meta, roles: m.roles,
+    version: 1, name: m.name, meta: m.meta, roles: m.roles, roleFlags,
     fields: fieldKinds.map((kind, i) => ({ name: m.fields[i], kind })),
     assets, exprs, steps,
   };

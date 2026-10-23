@@ -66,7 +66,26 @@ export interface NodeProps {
   receiveGuard?: string;
   /** Kept from Flow imports; on Solana a step's role is its pool. */
   controllers?: string[];
+  /**
+   * A business event the engine announces when this step completes (FlowEngine `Milestone`), so an indexer
+   * can follow the note's economics without knowing its workflow: collateral pledged or released, a payment
+   * funded, made or missed, a margin call opened or cured, a default.
+   */
+  milestone?: Milestone;
 }
+
+export const MILESTONES = {
+  'collateral-pledged': 1,
+  'collateral-released': 2,
+  'funding-deposited': 3,
+  'margin-call': 4,
+  'margin-cured': 5,
+  'payment-made': 6,
+  'payment-missed': 7,
+  'defaulted': 8,
+} as const;
+export type Milestone = keyof typeof MILESTONES;
+export const MILESTONE_NAMES = Object.fromEntries(Object.entries(MILESTONES).map(([k, v]) => [v, k])) as Record<number, Milestone>;
 
 export type PropsMap = Record<string, NodeProps>;
 
@@ -102,14 +121,38 @@ export interface IrNode {
 
 export interface IrFlow { id: string; source: string; target: string; name?: string; condition?: string }
 
-export interface IrPool { id: string; name: string }
+/**
+ * A pool. `escrow`: an account the engine holds for the note itself (pledged collateral, funded payments).
+ * Nobody signs for it: no person can run its steps, withdraw from it or move its balances; only the
+ * workflow's own operations do (FlowEngine.ESCROW). An escrow pool has no steps.
+ */
+export interface IrPool { id: string; name: string; escrow?: boolean; open?: boolean }
+
+/**
+ * Pools anyone may act in (OPEN roles: the engine takes address(0) for them), e.g. the investors' book. Marked
+ * `open` in the BPMN; workflows without the mark (older drafts) use the old rule: a pool with a repeatable
+ * window and no start event.
+ */
+export function openPoolIds(ir: Pick<WorkflowIR, 'pools' | 'nodes'>): Set<string> {
+  if (ir.pools.some(p => p.open)) return new Set(ir.pools.filter(p => p.open).map(p => p.id));
+  const windows = new Set(ir.nodes.filter(n => n.props.until).map(n => n.pool));
+  const starts = new Set(ir.nodes.filter(n => n.type === 'startEvent').map(n => n.pool));
+  return new Set(ir.pools.filter(p => windows.has(p.id) && !starts.has(p.id) && !p.escrow).map(p => p.id));
+}
+
+/**
+ * A message flow between pools. `notice`: drawn for people (e.g. the issuer's funding window informing the
+ * paying agent) but not a token handoff: the receiving pool reads the state it needs (an escrow balance)
+ * itself, so the engine ignores it.
+ */
+export interface IrMessageFlow { id: string; source: string; target: string; notice?: boolean }
 
 export interface WorkflowIR {
   name: string;
   pools: IrPool[];
   nodes: IrNode[];
   flows: IrFlow[];
-  messageFlows: Array<{ id: string; source: string; target: string }>;
+  messageFlows: IrMessageFlow[];
   assets: AssetDefinition[];
 }
 

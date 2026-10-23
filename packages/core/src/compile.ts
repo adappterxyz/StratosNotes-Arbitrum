@@ -5,10 +5,10 @@
  * workflow compiles to the same account (Flow's __PKGHASH__, on Solana).
  */
 import { sha256 } from '@noble/hashes/sha256';
-import { compileExpr, compilePred, parseExpr, parsePred, type Op } from './expr';
+import { compileExpr, compilePred, parseExpr, parsePred, RESERVED_WORDS, type AccountResolver, type Op } from './expr';
 import { dec } from './decimal';
 import { encodeEvmDef } from './compile-evm';
-import type { AssetOperation, IrNode, Issue, TemplateField, WorkflowIR } from './types';
+import { MILESTONES, openPoolIds, type AssetOperation, type IrNode, type Issue, type TemplateField, type WorkflowIR } from './types';
 
 export const DEF_VERSION = 1;
 export const NO_EXPR = 0xffff;
@@ -19,6 +19,10 @@ export const SRC = { INPUT: 0, ORACLE: 1, EXPR: 2 } as const;
 export const OP = { NONE: 0, MINT: 1, BURN: 2, TRANSFER: 3, SWAP: 4, DEPOSIT: 5, DISTRIBUTE: 6 } as const;
 export const AKIND = { issued: 0, cash: 1 } as const;
 export const CARRIED = '__carried__';
+/** Role flags (WorkflowDef.roleFlags). */
+export const ROLE_ESCROW = 1;
+/** Engine caps (FlowEngine.MAX_*): a definition past them is refused on-chain, so compile refuses it first. */
+export const LIMITS = { roles: 8, fields: 64, assets: 8, coreBytes: 24_575 } as const;
 
 export type { Due, Capture, AssetOpDef, Edge, StepDef, WorkflowDef } from './def-types';
 import type { Due, Capture, AssetOpDef, StepDef, WorkflowDef } from './def-types';
@@ -56,6 +60,7 @@ export function compile(ir: WorkflowIR, meta: unknown = {}): Compiled {
   for (const n of ir.nodes) for (const f of n.props.templateFields ?? []) {
     const k = FKIND[f.type];
     if (k === undefined) { bad('FIELD_TYPE', `${n.name}: unknown field type ${f.type}`, n.id); continue; }
+    if (RESERVED_WORDS.includes(f.name)) { bad('FIELD_RESERVED', `'${f.name}' is a reserved word in expressions; rename the field`, n.id); continue; }
     if (f.name in fieldIndex) {
       if (fields[fieldIndex[f.name]].kind !== k) bad('FIELD_TYPE_CONFLICT', `Field '${f.name}' is declared with two types`, n.id);
       continue;
@@ -89,15 +94,26 @@ export function compile(ir: WorkflowIR, meta: unknown = {}): Compiled {
     if (!exprKey.has(k)) { exprKey.set(k, exprs.length); exprs.push(ops); }
     return exprKey.get(k)!;
   };
+  // balance(Pool, asset): a pool by name or id that has an account (not an open role), an asset by id.
+  const openPools = openPoolIds(ir);
+  const accounts = (nodeId: string): AccountResolver => ({
+    role: name => {
+      const pool = ir.pools.find(p => p.name === name || p.id === name || p.name.replace(/[^A-Za-z0-9_]/g, '') === name);
+      if (!pool) return bad('UNKNOWN_ROLE', `balance(${name}, ...): '${name}' is not a pool`, nodeId);
+      if (openPools.has(pool.id)) return bad('OPEN_ROLE_BALANCE', `balance(${name}, ...): '${pool.name}' is open to anyone, so it has no single account to read`, nodeId);
+      return roleIndex[pool.name];
+    },
+    asset: name => assetOf(name, nodeId),
+  });
   const expr = (src: string, nodeId: string) => {
     const r = parseExpr(src);
     if (!r.ok) return bad('BAD_EXPR', `'${src}': ${r.error}`, nodeId);
-    return intern(compileExpr(r.ast, n => fieldOf(n, nodeId)));
+    return intern(compileExpr(r.ast, n => fieldOf(n, nodeId), accounts(nodeId)));
   };
   const pred = (src: string, nodeId: string) => {
     const r = parsePred(src);
     if (!r.ok) return bad('BAD_CONDITION', `'${src}': ${r.error}`, nodeId);
-    return intern(compilePred(r.ast, n => fieldOf(n, nodeId)));
+    return intern(compilePred(r.ast, n => fieldOf(n, nodeId), accounts(nodeId)));
   };
   const amountExpr = (src: AssetOperation['params']['amountSource'], literal: string | undefined, fieldName: string | undefined, e: string | undefined, nodeId: string) => {
     if (src === 'field') return expr(fieldName ?? '', nodeId);
@@ -176,10 +192,16 @@ export function compile(ir: WorkflowIR, meta: unknown = {}): Compiled {
         const f = flowById.get(fid)!;
         return { target: stepIndex[f.target], cond: f.condition ? pred(f.condition, n.id) : NO_EXPR, isDefault: n.defaultFlow === fid };
       }),
-      sends: ir.messageFlows.filter(m => m.source === n.id && m.target in stepIndex).map(m => stepIndex[m.target]),
+      // Notice flows are drawn for people, not token handoffs (types.ts IrMessageFlow).
+      sends: ir.messageFlows.filter(m => m.source === n.id && !m.notice && m.target in stepIndex).map(m => stepIndex[m.target]),
       join: kind === KIND.AND && n.incoming.length > 1 ? n.incoming.length : 0,
+      milestone: n.props.milestone ? MILESTONES[n.props.milestone] ?? bad('BAD_MILESTONE', `${n.name}: unknown milestone '${n.props.milestone}'`, n.id) : 0,
     };
   });
+  for (const p of ir.pools) if (p.escrow && ir.nodes.some(n => n.pool === p.id)) bad('ESCROW_STEPS', `Pool '${p.name}' is an escrow account: nobody acts in it, so it holds no steps`);
+  if (ir.pools.length > LIMITS.roles) bad('TOO_MANY_POOLS', `${ir.pools.length} pools; the engine runs at most ${LIMITS.roles}`);
+  if (fields.length > LIMITS.fields) bad('TOO_MANY_FIELDS', `${fields.length} fields; the engine holds at most ${LIMITS.fields} per note (use fewer observations or underlyings)`);
+  if (ir.assets.length > LIMITS.assets) bad('TOO_MANY_ASSETS', `${ir.assets.length} assets; the engine holds at most ${LIMITS.assets} per note (note, cash, deliverable tokens and collateral together)`);
 
   if (issues.length) throw new CompileError(issues);
   // Which price feed backs each oracle field: the CRE workflow reads it here.
@@ -190,11 +212,13 @@ export function compile(ir: WorkflowIR, meta: unknown = {}): Compiled {
   const def: WorkflowDef = {
     // Step names and pools, so any definition can be redrawn and labelled from chain alone.
     version: DEF_VERSION, name: ir.name, meta: JSON.stringify({ ...(meta as object), oracles, names: Object.fromEntries(ir.nodes.map(n => [n.id, n.name])) }),
-    roles: ir.pools.map(p => p.name), fields,
+    roles: ir.pools.map(p => p.name), roleFlags: ir.pools.map(p => (p.escrow ? ROLE_ESCROW : 0)), fields,
     assets: ir.assets.map(a => ({ name: a.name, kind: AKIND[a.kind], decimals: a.decimals ?? 0 })),
     exprs, steps,
   };
   const bytes = encodeDef(def);
+  const coreLen = ((bytes[8] << 24) >>> 0) + (bytes[9] << 16) + (bytes[10] << 8) + bytes[11];
+  if (coreLen > LIMITS.coreBytes) throw new CompileError([{ code: 'TOO_LARGE', message: `The compiled workflow is ${coreLen.toLocaleString('en-US')} bytes; the engine stores at most ${LIMITS.coreBytes.toLocaleString('en-US')} (use fewer observations or underlyings)` }]);
   return { def, bytes, hash: sha256(bytes), stepIndex, fieldIndex, roleIndex, assetIndex };
 }
 
