@@ -99,8 +99,11 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
   const missIdx = Math.min(missAt, sched.length - 1);
   const missed = sched[missIdx];
   const paidBefore = sched.slice(0, missIdx).reduce((a, c) => a + c.amount, 0);
-  const owedFrom = sched.slice(missIdx).reduce((a, c) => a + c.amount, 0);
-  const recoveryPerUnit = pledge / notional;
+  // The engine's default rule (cap-at-owed): holders are owed the missed payment plus par (a missed redemption
+  // already includes par); they take that from the collateral and the issuer gets any excess back.
+  const owedPerUnit = missed ? missed.amount + (/redemption/.test(missed.label) ? 0 : 1) : 0;
+  const recoveryPerUnit = Math.min(pledge / notional, owedPerUnit);
+  const excessBack = Math.max(0, pledge - recoveryPerUnit * notional);
 
   const physicalToken = basket ? `the worst performer's token` : DELIVERABLE[terms.syms[0]]?.token ?? terms.syms[0];
   const ret = o.total - 1;
@@ -234,7 +237,7 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
             })}
           </div>
           <p className="xs-explain">{explain(terms, o)}</p>
-          <p className="xs-note">Backed by collateral the issuer pledged and cannot withdraw. If the issuer misses a payment, holders receive that collateral pro rata: see the issuer view.</p>
+          <p className="xs-note">Backed by collateral the issuer pledged and cannot withdraw. If the issuer misses a payment, holders take what they are owed from that collateral: see the issuer view.</p>
         </div>
       ) : (
         <div className="xs-out" key={`s-${terms.type}`}>
@@ -302,8 +305,9 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
               </label>
               <p>
                 Month {missed.month} plus {grace} day{grace === 1 ? '' : 's'} of grace pass unfunded, so the note <b>defaults</b>. The {money(pledge)} of {coll.label} you pledged
-                is paid to holders pro rata: <b className="num">{pc(recoveryPerUnit, 1)}</b> of face per unit, against <b className="num">{pc(owedFrom, 1)}</b> still owed
-                {paidBefore > 0 ? ` (they had already received ${pc(paidBefore, 1)})` : ''}. The note is closed and marked defaulted for everyone to see.
+                goes to holders up to what they are owed: <b className="num">{pc(recoveryPerUnit, 1)}</b> of face per unit, against <b className="num">{pc(owedPerUnit, 1)}</b> owed
+                (the missed payment plus par){paidBefore > 0 ? `, after ${pc(paidBefore, 1)} already received` : ''}.
+                {excessBack > 0 ? <> The remaining <b className="num">{money(excessBack)}</b> goes back to you.</> : ' Nothing is left over for you.'} The note is closed and marked defaulted for everyone to see.
               </p>
               <span className="xs-hint">Collateral valued at pledge-time prices; in a real default its value is whatever Chainlink prices it at that day.</span>
             </>}
