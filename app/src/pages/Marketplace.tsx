@@ -18,7 +18,9 @@ export default function Marketplace() {
   const [und, setUnd] = useState('');
   const [chain, setChain] = useState('');
   const [q, setQ] = useState('');
-  const status = phases.has('redeemed') ? (phases.size === 1 ? 'redeemed' : 'all') : 'active';
+  // Redeemed and defaulted notes are both finished on-chain: the API's "redeemed" status covers both.
+  const finished = [...phases].filter(p => p === 'redeemed' || p === 'defaulted').length;
+  const status = finished ? (finished === phases.size ? 'redeemed' : 'all') : 'active';
   const { notes, error } = useNotes({ status, product: type || undefined, underlying: und || undefined, chain: chain || undefined, q: q.trim() || undefined });
   const shown = useMemo(() => (notes ?? []).filter(n => phases.has(n.view.phase)), [notes, phases]);
   const counts = useMemo(() => Object.fromEntries(PHASES.map(p => [p, (notes ?? []).filter(n => n.view.phase === p).length])) as Record<Phase, number>, [notes]);
@@ -65,7 +67,7 @@ export default function Marketplace() {
         : shown.length === 0 ? (
           <div className="empty">
             <strong>{notes.length ? 'No notes match these filters.' : 'No notes yet.'}</strong>
-            <span className="small">{phases.has('redeemed') ? 'Try another product or underlying.' : 'Completed notes are hidden: select Redeemed to include them.'}</span>
+            <span className="small">{finished ? 'Try another product or underlying.' : 'Finished notes are hidden: select Redeemed or Defaulted to include them.'}</span>
             <Link to="/issue" className="btn">Issue a note</Link>
           </div>
         ) : (

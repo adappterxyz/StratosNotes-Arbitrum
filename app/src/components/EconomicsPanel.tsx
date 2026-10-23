@@ -36,8 +36,8 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
   const actions = issuerActions(def, state, now);
   const running = state.status === 0;
 
-  const run = async (key: string, step: number, field: string, label: string) => {
-    const raw = (amounts[key] ?? '').trim();
+  const run = async (key: string, step: number, field: string, label: string, proposed = '') => {
+    const raw = (amounts[key] ?? proposed).trim(); // the amount shown when the issuer typed nothing
     setBusy(key); setMsg(null);
     try {
       if (!(Number(raw) > 0)) throw new Error('Enter an amount.');
@@ -45,7 +45,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
       const w = await signer(state.chain);
       await byKey[state.chain].adapter.executeStep(w, state.id, step, { [f]: { kind: 'number', value: dec(raw) } }, undefined, t => setMsg({ kind: 'ok', text: `${t}…` }));
       setMsg({ kind: 'ok', text: `${label}: ${raw} moved into escrow.` });
-      setAmounts(a => ({ ...a, [key]: '' }));
+      setAmounts(a => { const { [key]: _, ...rest } = a; return rest; }); // back to the proposed amount
       onDone();
     } catch (err) { setMsg({ kind: 'err', text: errText(err) }); }
     finally { setBusy(''); }
@@ -53,6 +53,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
 
   const call = e.nextCall;
   const shortfall = call ? Math.max(0, call.total - e.escrowCash) : 0;
+  const proposed = (Math.ceil(shortfall * 1e6 - 1e-6) / 1e6).toString(); // rounded up: never short by a fraction
   const fundStep = call ? actions.fund.find(f => f.period === call.period) : undefined;
   const covered = e.coveragePct === null ? null : e.coveragePct >= 1;
 
@@ -128,8 +129,8 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
               <div className="small">{call.funded ? <span className="row"><ShieldCheck className="i" />Funded: holders are paid on the payment date.</span> : `Still to fund: ${fmtMoney(shortfall)} ${sym}.`}</div>
               {!call.funded && (
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
-                  <input aria-label="Amount to fund" inputMode="decimal" value={amounts.fund ?? shortfall.toFixed(2)} onChange={ev => setAmounts(a => ({ ...a, fund: ev.target.value }))} />
-                  <button className="btn primary" disabled={!!busy} onClick={() => run('fund', fundStep.step, 'fundAmount', `Payment ${call.period} funded`)} data-fund>{busy === 'fund' ? 'Funding…' : 'Fund'}</button>
+                  <input aria-label="Amount to fund" inputMode="decimal" value={amounts.fund ?? proposed} onChange={ev => setAmounts(a => ({ ...a, fund: ev.target.value }))} />
+                  <button className="btn primary" disabled={!!busy} onClick={() => run('fund', fundStep.step, 'fundAmount', `Payment ${call.period} funded`, proposed)} data-fund>{busy === 'fund' ? 'Funding…' : 'Fund'}</button>
                 </div>
               )}
             </div>

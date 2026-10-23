@@ -279,6 +279,8 @@ export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000
   const label = hasTerms ? (custom ? `Custom ${PRODUCT_LABELS[params.productType]}` : PRODUCT_LABELS[params.productType]) : 'Custom workflow';
   const isin = fieldOf(def, s, 'isin');
   const economics = economicsView(def, s, params, hasTerms && !custom, perfs, unds, now);
+  // With an issuer in the loop, "paid so far" is what the paid periods paid, not the payoff projected forward.
+  if (outcome && economics) outcome.perUnit = economics.periods.reduce((a, p) => a + (p.status === 'paid' ? p.perUnit ?? 0 : 0), 0);
   const sold2 = num('sold');
   const soldNow = Number.isFinite(sold2) ? sold2 : sold;
   const finalPhase: Phase = economics?.state === 'defaulted' ? 'defaulted' : phase;
