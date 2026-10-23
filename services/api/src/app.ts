@@ -12,6 +12,7 @@
  *   POST /api/ai                         term sheet -> note, edits to the open workflow, questions
  *   POST /api/faucet                     dev chains only: mint the mock stablecoin
  *   GET  /api/stream?notes=a,b|chain=x   Server-Sent Events: `notes` when the indexer commits changes
+ *   /api/alerts/*                        verified emails and email alerts (alerts.ts)
  */
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -27,6 +28,7 @@ import {
 } from '@sn/core';
 import { CHAINS, mockErc20Abi, noteView, parseNoteId, positionOf, type NoteState } from '@sn/sdk';
 import { loadDef, NOTIFY_CHANNEL, type Db } from '@sn/indexer';
+import { alertsRoutes, type AlertsDeps } from './alerts';
 import type { ApiConfig } from './config';
 import { RateLimiter } from './ratelimit';
 
@@ -43,6 +45,8 @@ export interface AppDeps {
    * so a caller reaching the API directly cannot spoof its IP past the rate limits. */
   proxySecret?: string;
   now?: () => number;
+  /** Verified emails and email alerts (alerts.ts); off when absent. */
+  alerts?: AlertsDeps;
 }
 
 const err = (c: Context, status: 400 | 401 | 403 | 404 | 409 | 413 | 429 | 500 | 502 | 503, error: string) => c.json({ error }, status);
@@ -123,6 +127,8 @@ export function createApp(deps: AppDeps) {
     console.error(e);
     return err(c, 500, 'Something went wrong on our side.');
   });
+
+  if (deps.alerts) alertsRoutes(app, deps.alerts, { config, limiter, ipOf, now });
 
   app.get('/api/health', async c => {
     const chains = await db.query<{ chain: string; cursor: string; head: string | null; updated_at: string }>('SELECT chain, cursor, head, updated_at FROM chains ORDER BY chain');

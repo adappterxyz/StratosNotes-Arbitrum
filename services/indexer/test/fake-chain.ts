@@ -54,7 +54,7 @@ export class FakeChain implements ChainSource {
     for (const b of this.blocks.slice(Number(from), Number(to) + 1)) {
       b.events.forEach((e, i) => {
         const { data, topics } = encodeLog(e);
-        out.push({ block: b.number, blockHash: b.hash, logIndex: i, tx: keccak256(toHex(`${b.hash}:${i}`)), data, topics });
+        out.push({ block: b.number, blockHash: b.hash, logIndex: i, tx: keccak256(toHex(`${b.hash}:tx`)), data, topics }); // one transaction per block: a step's events share it
       });
     }
     return out;
