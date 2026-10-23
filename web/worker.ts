@@ -26,8 +26,8 @@ import indexerJson from '../deployments/server/indexer.json';
 
 interface Env {
   ASSETS: { fetch(req: Request | string): Promise<Response> };
-  AI: Parameters<typeof workersAiRunner>[0];
-  AI_LIMIT: { limit(o: { key: string }): Promise<{ success: boolean }> };
+  AI?: Parameters<typeof workersAiRunner>[0];
+  AI_LIMIT?: { limit(o: { key: string }): Promise<{ success: boolean }> };
   API_ORIGIN: string;
   SN_PROXY_SECRET?: string;
   /** D1: the read model, templates, subscriptions, outbox (the `edge` environment). */
@@ -71,13 +71,13 @@ async function ai(req: Request, env: Env): Promise<Response> {
   const origin = req.headers.get('Origin');
   if (origin && origin !== new URL(req.url).origin) return json({ error: 'Not allowed from this origin.' }, 403);
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
-  if (!(await env.AI_LIMIT.limit({ key: ip })).success) return json({ error: 'Too many AI requests; wait a minute and try again.' }, 429);
+  if (env.AI_LIMIT && !(await env.AI_LIMIT.limit({ key: ip })).success) return json({ error: 'Too many AI requests; wait a minute and try again.' }, 429);
   const body = await req.json().catch(() => null) as { prompt?: string; draft?: WorkflowDraft } | null;
   const prompt = (body?.prompt ?? '').trim();
   if (!prompt) return json({ error: 'Say what you want: a note from terms, a change to the workflow, or a question.' }, 400);
   if (prompt.length > 4000) return json({ error: 'Keep the request under 4,000 characters.' }, 400);
   try {
-    return json(await runAi(workersAiRunner(env.AI), { prompt, today: new Date().toISOString().slice(0, 10), draft: body?.draft }));
+    return json(await runAi(workersAiRunner(env.AI!), { prompt, today: new Date().toISOString().slice(0, 10), draft: body?.draft }));
   } catch (e) {
     return json({ kind: 'error', error: e instanceof Error ? e.message : String(e) }, 502);
   }
@@ -107,7 +107,10 @@ export default {
       return Response.redirect(to.toString(), 301);
     }
     const url = new URL(req.url);
-    if (url.pathname === '/api/ai' && req.method === 'POST') return ai(req, env);
+    if (url.pathname === '/api/ai' && req.method === 'POST') {
+      if (!env.AI) return json({ error: 'The AI assistant is not configured here.' }, 503);
+      return ai(req, env);
+    }
     if (url.pathname.startsWith('/api/')) {
       if (env.DB && env.API_MODE !== 'proxy') return edgeApp(env).fetch(req);
       return proxy(req, env, url);
