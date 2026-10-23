@@ -24,24 +24,23 @@ const q = (s: string) => `<span class="st">${s}</span>`;
 
 export const STEPS: LifecycleStep[] = [
   {
-    id: 'terms', type: 'event', x: 8, y: 50, label: 'Term sheet',
-    tag: 'Pre-trade · Issuer', title: 'Approve Terms', actor: 'Issuer',
-    desc: 'Size, strike date and observation dates are set per issuance, not when the product is designed. The coupon reserve is deposited in the same step.',
+    id: 'terms', type: 'event', x: 8, y: 50, label: 'Terms + collateral',
+    tag: 'Pre-trade · Issuer', title: 'Approve Terms, pledge collateral', actor: 'Issuer',
+    desc: 'Size, dates, settlement lag, grace period (0-7 days) and the collateral ratio are set per issuance. The issuer pledges collateral in the same step: it is locked in the note\'s escrow, which no key controls.',
     code: {
       evm: `${c('// The Issuer runs its user task on FlowEngine (Arbitrum Sepolia or Robinhood testnet)')}
 engine.${f('executeStep')}(pid, Task_ApproveTerms, ${q('0')}, [
-  isin, notional, strikeDate,
-  obsDate1, obsDate2, obsDate3, obsDate4,
-  reserve,
+  isin, notional, strikeDate, obsDate1, obsDate2, obsDate3, obsDate4,
+  lag, grace, collateralRatio, haircut_USD, pledge_USD,
 ])
-${c('// captures the fields, then the deposit op pulls `reserve`')}
-${c('// tUSD from the issuer (approved for exactly that amount)')}`,
+${c('// ops: deposit(col_USD, pledge_USD); transfer(Issuer → Escrow)')}
+${c('// Check Terms: grace <= 7 days, deadlines before the next observation')}`,
     },
   },
   {
     id: 'book', type: 'box', x: 25, y: 26, label: 'Subscribe',
-    tag: 'Open book · Investors', title: 'Subscribe (DvP)', actor: 'Any investor',
-    desc: 'Anyone subscribes until the strike date. Each subscription swaps stablecoins for note units atomically; units can later be transferred in whole or in part.',
+    tag: 'Open book · Investors', title: 'Subscribe: funds to the issuer', actor: 'Any investor',
+    desc: 'Anyone subscribes until the strike date, swapping stablecoins for note units atomically. The stablecoin is the issuer\'s at once: the money the note raises. Units can be transferred in whole or in part.',
     code: {
       evm: `${c('// An OPEN role: anyone may run it, again and again,')}
 ${c('// until the strike date (a repeatable window)')}
@@ -49,66 +48,63 @@ Task_Subscribe: until = strikeDate
   ops = [
     ${f('deposit')}(tUSD, units * ${q('100 / 100')}),           ${c('// investor → engine')}
     ${f('swap')}(note: Issuer → Investor, units,
-         tUSD: Investor → Issuer, units * ${q('100 / 100')}),
-  ]
-${c('// later: engine.transferUnits(pid, 0, to, amount): whole or part')}`,
+         tUSD: Investor → Issuer, units * ${q('100 / 100')}),  ${c('// the issuer may withdraw it')}
+  ]`,
     },
   },
   {
     id: 'strike', type: 'box', x: 42, y: 74, label: 'Fix strike',
-    tag: 'Oracle step · Chainlink CRE', title: 'Fix Strike', actor: 'Chainlink CRE',
-    desc: 'On the strike date the CRE workflow reads the Chainlink price feed at the finalized block and writes a DON-signed report; the ledger accepts it only from Chainlink and within the declared bounds.',
+    tag: 'Oracle step · Chainlink CRE', title: 'Fix Strike, check the collateral', actor: 'Chainlink CRE',
+    desc: 'On the strike date CRE reads the Chainlink feeds at a finalized block and writes a DON-signed report: strikes, and the collateral\'s prices. Coverage below ratio x units sold opens a margin call: top up within grace, or default.',
     code: {
       evm: `${c('// cre/notes-keeper-evm (Chainlink CRE)')}
 ${k('const')} values = due.feeds.${f('map')}(f => ${f('readFeed')}(runtime, f))  ${c('// at a finalized block')}
 evm.${f('writeReport')}(runtime, {
   receiver: engine,                ${c('// through the KeystoneForwarder')}
   report: runtime.${f('report')}(${f('encodeAbiParameters')}(pid, Task_FixStrike, values)),
-  gasConfig: { gasLimit: ${q('2800000')} },
+  gasConfig: { gasLimit: ${q('6000000')} },
 })
-${c('// FlowEngine.onReport: only the forwarder may call it;')}
-${c('// every value bounds-checked, then straight-through')}`,
+${c('// sold = notional - balance(Issuer, note); required = ratio * sold')}
+${c('// GW_Margin0: coverage >= required, else Margin Call → top up or default')}`,
     },
   },
   {
     id: 'observe', type: 'box', x: 60, y: 26, label: 'Observe k',
-    tag: 'Oracle step · Chainlink CRE', title: 'Observe on each date', actor: 'Chainlink CRE',
-    desc: 'Each observation waits for its own date, set at pre-trade. One report runs the observation and everything after it that needs nobody: coupon, memory, autocall check.',
+    tag: 'Oracle step · Chainlink CRE', title: 'Observe: what is owed', actor: 'Chainlink CRE',
+    desc: 'Each observation waits for its own date. One report runs the observation and everything after it: the margin check, the coupon (with memory), the autocall check. That fixes what the issuer must fund by the payment date (observation + lag).',
     code: {
-      evm: `${c('// The same workflow, every date. The engine runs the step,')}
-${c('// then everything after it in the same transaction:')}
-Task_Observe2  timer = obsDate2, captures obs2 (oracle)
+      evm: `Task_Observe2  timer = obsDate2, captures obs2 + collateral prices (oracle)
+               payDate = obsDate2 + lag
 GW_Coupon2     ${k('if')} perf2 >= ${q('70 / 100')}       ${c('// perf = min(ETH, BTC) vs strike')}
-Task_Coupon2   ${f('distribute')}(tUSD per unit ${q('2.5 / 100')} * (missed1 + 1))
-GW_Autocall2   ${k('if')} perf2 >= ${q('100 / 100')}
-${c('// a coupon to 30 holders: 1.18M gas (forge, cold)')}`,
+                 cpn = ${q('2.5 / 100')} * (missed + 1)
+GW_Autocall2   ${k('if')} perf2 >= ${q('100 / 100')} → due = cpn + 1
+${c('// the issuer funds dueTotal = due * sold through "Fund Payment 2"')}`,
     },
   },
   {
-    id: 'autocall', type: 'gateway', x: 77, y: 74, label: 'Autocall?',
-    tag: 'Gateway · predicate', title: 'Autocall check', actor: 'The ledger',
-    desc: 'A gateway with a price predicate. The ledger evaluates it in exact decimal arithmetic; nobody chooses the branch, so nobody can choose the wrong one.',
+    id: 'funded', type: 'gateway', x: 77, y: 74, label: 'Funded?',
+    tag: 'Gateway · escrow balance', title: 'Funded by the payment date?', actor: 'The ledger',
+    desc: 'On the payment date the ledger checks the escrow. Funded: holders are paid. Not funded: a grace period runs; cured in it, holders are paid; not cured, the note defaults and everything in escrow goes to the holders, pro rata.',
     code: {
-      evm: `${c('// BPMN exclusive gateway → engine predicate (fixed point, int256)')}
-GW_Autocall2:
-  Autocall  ${k('when')} perf2 >= ${q('100 / 100')}
-  Continue  ${k('default')}
-${c('// a branch is taken only when its fields are set;')}
-${c('// nobody can override a conditioned gateway')}`,
+      evm: `GW_Funded2:
+  Funded       ${k('when')} balance(Escrow, cash) >= dueTotal
+  Not funded   ${k('default')} → Payment Missed → Grace
+Recv_Grace2    ${k('waits for')} funded ${k('or')} now >= payDate + grace
+GW_Cured2:     funded → pay ${k('|')} ${k('default')} → Default: collateral to holders
+${c('// the validator refuses any payment without this check')}`,
     },
   },
   {
-    id: 'redeem', type: 'end', x: 93, y: 50, label: 'Redeem',
-    tag: 'Settlement · every holder', title: 'Redeem and withdraw', actor: 'Holders',
-    desc: 'Every holder of the note is paid units × per-unit amount, complete by construction, and the units are retired. Holders withdraw tUSD when they like.',
+    id: 'redeem', type: 'end', x: 93, y: 50, label: 'Pay, release',
+    tag: 'Settlement · every holder', title: 'Pay from escrow, release', actor: 'Holders, issuer',
+    desc: 'Every holder is paid units × per-unit amount from escrow, complete by construction. After the final payment the collateral is released to the issuer. Holders withdraw tUSD (or delivered tokens, or collateral after a default) when they like.',
     code: {
-      evm: `${c('// distribute + retire: every holder in the ledger')}
-Task_Autocall2   ${f('distribute')}(tUSD per unit ${q('1')}, retire)
+      evm: `Task_Pay2Call    ${f('distribute')}(tUSD per unit due, payer Escrow, retire)
+Task_Release     ${f('transfer')}(Escrow → Issuer, balance(Escrow, col_USD))
 ${c('// then, by each holder, whenever they like:')}
-engine.${f('withdraw')}(pid, CASH, owed)
-${c('// local fork run: 600 / 400 units → 630 / 420 tUSD')}`,
+engine.${f('withdraw')}(pid, CASH, owed)`,
     },
   },
 ];
 
-export const EDGES: Array<[string, string]> = [['terms', 'book'], ['book', 'strike'], ['strike', 'observe'], ['observe', 'autocall'], ['autocall', 'redeem']];
+export const EDGES: Array<[string, string]> = [['terms', 'book'], ['book', 'strike'], ['strike', 'observe'], ['observe', 'funded'], ['funded', 'redeem']];

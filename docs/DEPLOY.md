@@ -9,6 +9,10 @@ from files by the scripts, never typed on a command line or printed.
 | `.keys/keeper.json` | `0xcA06AbE78eCBcC861a8eE12fd980035dC91d118f` | Pays gas for the CRE simulator's `--broadcast` reports |
 | `.keys/investor1.json`, `investor2.json` | created by `scripts/seed-note.ts` | Demo investors in the seeded notes (the deployer sends each 0.001 ETH for gas) |
 
+The deployer is also the **issuer** of the seeded notes: it pledges their tUSD collateral and, through
+`scripts/issuer-bot.ts` (pm2 `sn-arb-issuer-<chain>`), funds each payment as it falls due, minting test tUSD as the
+token's owner. Each funding costs about 0.22M gas.
+
 ## 1. Fund the two addresses
 
 Measured on a local fork of Arbitrum Sepolia (`REHEARSAL=1 bash scripts/deploy-testnets.sh`): the whole deployment
@@ -19,7 +23,7 @@ Sepolia 0.020 gwei, Robinhood Chain testnet 0.010 gwei.
 | Address | Arbitrum Sepolia | Robinhood Chain testnet | What it covers |
 |---|---|---|---|
 | Deployer `0x298a…de0a` | **0.02 ETH** | **0.02 ETH** | Deployment (~0.0003 ETH at today's price), two seeded notes, 0.002 ETH passed to the demo investors, and room for gas-price spikes |
-| Keeper `0xcA06…118f` | **0.03 ETH** | **0.03 ETH** | Reports: 0.2–0.4M gas each for a small book, up to 2.8M for a full one; several hundred reports at today's prices |
+| Keeper `0xcA06…118f` | **0.03 ETH** | **0.03 ETH** | Reports: 0.2–0.5M gas each for a small book; a coupon to a full book of 62 holders 2.3M, a default distributing three assets to 62 holders 4.8M (6M limit); several hundred reports at today's prices |
 
 Faucets: Arbitrum Sepolia, https://faucets.chain.link/arbitrum-sepolia (or bridge Sepolia ETH); Robinhood Chain
 testnet, https://faucet.testnet.chain.robinhood.com.
@@ -94,7 +98,10 @@ npm run deploy        # landing-proof from deployments/*.json, build landing + a
 ```bash
 cd cre && cre whoami && cd ..                          # the CRE CLI must be logged in
 pm2 start ops/ecosystem.config.cjs --only sn-arb-keeper
+pm2 start ops/ecosystem.config.cjs --only sn-arb-issuer-arbitrum-sepolia,sn-arb-issuer-robinhood-testnet  # the issuer funds its notes
 bash scripts/seed.sh                                   # one demo note per chain + the template library
+# To show a default: leave one note's payment unfunded, e.g. pid 2's first payment on Arbitrum Sepolia
+MISS=2:1 pm2 restart sn-arb-issuer-arbitrum-sepolia --update-env
 pm2 logs sn-arb-keeper --lines 20                      # "... Task_FixStrike [...] -> written 0x…"
 ```
 

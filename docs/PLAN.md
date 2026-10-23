@@ -24,5 +24,6 @@ NYSE hours), which CRE reads as `ethereum-mainnet-arbitrum-1`. Ethereum mainnet 
 | Retarget to Arbitrum Sepolia + Robinhood testnet; equity feeds; test tokens + faucet; physical delivery in the app | Done |
 | Site Worker (landing at /, app at /app/, AI, API proxy); landing reframed for Arbitrum | Done, not deployed |
 | CRE e2e on an Arbitrum Sepolia fork, crypto and equity notes | Done (payouts match the reference) |
-| Testnet deployment, hosting, keeper, seed data | Waiting for funding and approval (docs/DEPLOY.md) |
+| Note economics: subscriptions to the issuer, collateral in an engine-held escrow, per-period funding calls, margin calls, grace, default to holders, release ([NOTE-ECONOMICS.md](NOTE-ECONOMICS.md)) | Done: drawn in every product and template, refused by the validator when unfunded, 19 engine timelines green |
+| Testnet deployment, hosting, keeper, issuer bots, seed data | Waiting for funding and approval (docs/DEPLOY.md) |
 | Demo video, evidence tables | After deployment |

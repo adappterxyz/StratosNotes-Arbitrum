@@ -1,7 +1,9 @@
 # StratosNotes on Arbitrum
 
 Structured notes on stocks and crypto that anyone can issue and sell, on **Arbitrum Sepolia** and **Robinhood Chain
-testnet**, with **Chainlink CRE** as the calculation and paying agent. Built for the Arbitrum Hackerhouse.
+testnet**, with **Chainlink CRE** as the calculation agent. A note raises funds for the issuer against collateral
+locked in the note; the issuer funds each payment before it falls due, or the collateral goes to the holders
+([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Built for the Arbitrum Hackerhouse.
 
 - Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app
 - Submission: [docs/SUBMISSION.md](docs/SUBMISSION.md) · Demo: [docs/DEMO.md](docs/DEMO.md) · Deploy: [docs/DEPLOY.md](docs/DEPLOY.md)
@@ -14,6 +16,7 @@ testnet**, with **Chainlink CRE** as the calculation and paying agent. Built for
 | `cre/notes-keeper-evm` | the Chainlink CRE workflow |
 | `services/indexer`, `services/api` | Postgres read model and the REST/SSE API |
 | `services/keeper-fallback` | the same keeper logic for chains without CRE (off by default) |
+| `scripts/issuer-bot.ts` | the issuer's side, automated for demos and tests: funds payments as they fall due (or leaves one unfunded) |
 | `app`, `landing`, `web` | the app, the landing page, and the Cloudflare Worker that serves both |
 
 ```bash

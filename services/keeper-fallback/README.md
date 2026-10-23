@@ -38,7 +38,7 @@ KEEPER_CONFIG=config.json KEEPER_KEY_FILE=/run/secrets/fallback-key npm run once
 { "chain": { "name": "robinhood-mainnet", "chainId": 4663, "rpc": "https://rpc.mainnet.chain.robinhood.com",
              "engine": "0x...", "lens": "0x..." },
   "feedRpcs": { "ethereum-mainnet": "https://..." },
-  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "2800000",
+  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "6000000",
   "intervalSec": 60, "feedRoutes": {} }
 ```
 
