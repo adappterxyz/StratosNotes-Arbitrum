@@ -46,7 +46,11 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     onProgress?.(label);
     const account = w.account;
     if (!account) throw new Error('The wallet has no account connected.');
-    const hash = await w.writeContract({ ...req, account, chain: w.chain } as never);
+    // Gas with headroom: a step's cost depends on the block it lands in (timers and windows read the block time),
+    // so the estimate made a block earlier can be just short. An exact estimate ran out of gas in the e2e.
+    const est = await this.client.estimateContractGas({ ...req, account } as never);
+    const gas = (est * 125n) / 100n + 30_000n;
+    const hash = await w.writeContract({ ...req, account, chain: w.chain, gas } as never);
     const r = await this.client.waitForTransactionReceipt({ hash });
     if (r.status !== 'success') throw new Error(`${label}: the transaction reverted (${hash}).`);
     return r;
