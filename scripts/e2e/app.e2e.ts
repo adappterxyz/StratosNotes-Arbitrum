@@ -115,7 +115,9 @@ try {
   const defaultId = await issueOne(page);
   check(true, `note 2 issued from the app, collateral pledged: ${defaultId}`);
   await page.locator('[data-economics]').waitFor();
-  check((await page.locator('[data-ratio]').textContent())?.trim() === '100.0%', 'the note page shows the collateral ratio');
+  // The page polls for updates (the backend indexes on a cron), so give the ratio time to arrive.
+  const ratioShown = await page.waitForFunction(() => document.querySelector('[data-ratio]')?.textContent?.trim() === '100.0%', null, { timeout: 90_000 }).then(() => true).catch(() => false);
+  check(ratioShown, 'the note page shows the collateral ratio');
 
   // Without a verified email (no attestation on-chain), the engine itself refuses a subscription.
   {
@@ -157,11 +159,17 @@ try {
     if (await page.locator('[data-phase="redeemed"]').isVisible().catch(() => false)) break;
     const fund = page.locator('[data-fund]');
     if (await fund.isVisible().catch(() => false)) {
-      const period = await page.locator('[data-payment-due]').getAttribute('data-payment-due');
-      await fund.click();
-      await page.getByText(/moved into escrow/).waitFor({ timeout: 120_000 });
-      funded++;
-      log(`funded payment ${period}`);
+      // The page refreshes by polling, so the card can re-render (or the payment can already be funded) between
+      // seeing the button and clicking it: on a miss, look again rather than fail.
+      try {
+        const period = await page.locator('[data-payment-due]').getAttribute('data-payment-due', { timeout: 5_000 });
+        await fund.click({ timeout: 10_000 });
+        await page.getByText(/moved into escrow/).waitFor({ timeout: 120_000 });
+        funded++;
+        log(`funded payment ${period}`);
+      } catch (e) {
+        log(`fund button moved (${(e instanceof Error ? e.message : String(e)).split('\n')[0]}); looking again`);
+      }
     }
     await page.waitForTimeout(2000);
   }
