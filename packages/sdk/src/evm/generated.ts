@@ -1753,6 +1753,11 @@ export const flowEngineAbi = [
  },
  {
   "type": "error",
+  "name": "InvalidMetadata",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "InvalidSender",
   "inputs": [
    {

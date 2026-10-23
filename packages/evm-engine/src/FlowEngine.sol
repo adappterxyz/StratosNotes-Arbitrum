@@ -149,24 +149,39 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     // Events and errors
     // ---------------------------------------------------------------------------------------------------------
 
+    /// @notice A workflow was registered: `pointer` holds its CORE (SSTORE2), `meta` is its names/term-sheet JSON.
     event DefinitionRegistered(bytes32 indexed id, address indexed creator, address pointer, bytes meta);
+    /// @notice A run started; `roles` are as held (escrow roles = ESCROW, open roles = 0).
     event ProcessStarted(
         uint256 indexed pid, bytes32 indexed definition, address indexed creator, uint64 ref, address[] roles, address[] assetTokens
     );
+    /// @notice A step completed (`actor` 0 for straight-through steps and reports).
     event StepRun(uint256 indexed pid, uint16 indexed step, uint8 kind, address actor);
+    /// @notice A field was captured (tag 1 number, 2 text, 3 party).
     event FieldSet(uint256 indexed pid, uint16 indexed field, uint8 tag, bytes32 value);
+    /// @notice A ledger balance after a change.
     event HoldingChanged(uint256 indexed pid, uint8 indexed asset, address indexed owner, int256 balance);
+    /// @notice The live BPMN tokens after a transaction.
     event TokensUpdated(uint256 indexed pid, uint8 status, uint32 stepsRun, uint16[] tokens);
+    /// @notice ERC-20 pulled into the process vault.
     event Deposited(uint256 indexed pid, uint8 indexed asset, address indexed from, uint256 base);
+    /// @notice ERC-20 paid out of the process vault.
     event Withdrawn(uint256 indexed pid, uint8 indexed asset, address indexed to, uint256 base);
+    /// @notice A holder moved issued units.
     event UnitsTransferred(uint256 indexed pid, uint8 indexed asset, address indexed from, address to, int256 amount);
+    /// @notice A report was applied; `reporter` is the forwarder (CRE) or the fallback reporter.
     event ReportProcessed(uint256 indexed pid, uint16 indexed step, int256[] values, address reporter);
+    /// @notice The owner changed the fallback reporter (0 = off).
     event FallbackReporterUpdated(address indexed previous, address indexed next);
+    /// @notice A business event the workflow marks (see the codes in the contract's @dev).
     event Milestone(uint256 indexed pid, uint8 indexed code, uint16 step, address actor);
+    /// @notice No tokens left: the run is over.
     event ProcessCompleted(uint256 indexed pid);
     /// Emitted by the EmailAttest library (delegatecall, so from this address); declared here for the ABI.
     event EmailAttested(address indexed holder, bytes32 emailHash, uint64 expiry);
+    /// @notice A binding was removed by the verifier or the owner.
     event EmailRevoked(address indexed holder);
+    /// @notice The owner changed the verifier or the requireEmail switch.
     event EmailPolicyUpdated(address verifier, bool requireEmail);
 
     error UnknownDefinition();
@@ -214,6 +229,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         _pause();
     }
 
+    /// @notice Resume new processes, steps, deposits and transfers.
     function unpause() external onlyOwner {
         _unpause();
     }
@@ -223,6 +239,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     ///         submits is recorded with its address in ReportProcessed, so a note shows which agent acted.
     address public fallbackReporter;
 
+    /// @notice Set (or, with zero, turn off) the fallback reporter.
     function setFallbackReporter(address next) external onlyOwner {
         emit FallbackReporterUpdated(fallbackReporter, next);
         fallbackReporter = next;
@@ -235,6 +252,8 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     address public verifier;
     bool public requireEmail;
 
+    /// @notice Set the attestation signer (zero: none accepted) and whether issuing, subscribing and receiving units
+    ///         need a verified email.
     function setEmailPolicy(address verifier_, bool requireEmail_) external onlyOwner {
         verifier = verifier_;
         requireEmail = requireEmail_;
@@ -394,20 +413,28 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     // Ledger
     // ---------------------------------------------------------------------------------------------------------
 
-    /// @notice Put cash into a process on your own account (e.g. an issuer topping up coupons).
+    /// @notice Put cash into a process on your own account (e.g. an issuer topping up coupons). Only for an
+    ///         account the note already holds: a stranger's dust deposit would take one of the MAX_HOLDERS slots.
+    /// @param base the amount in the token's base units, pulled from the caller (approve the engine first).
     function deposit(uint256 pid, uint8 asset, uint256 base) external nonReentrant whenNotPaused {
         bytes memory core = _core(pid);
         if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_CASH) revert NotCash();
+        if (!_isHolder[pid][msg.sender]) revert WrongRole();
         _credit(pid, msg.sender, asset, _fromBase(base, Def.assetDecimals(core, asset)));
         _pull(pid, asset, msg.sender, base);
     }
 
     /// @notice Take your cash (or delivered tokens) out of a process. Works while paused.
+    /// @param base the amount in the token's base units. It must convert exactly to the ledger's 10-decimal fixed
+    ///        point: for a token with more than 10 decimals a smaller amount would otherwise debit nothing (or
+    ///        less than it pays out) and drain other holders' share of the vault.
     function withdraw(uint256 pid, uint8 asset, uint256 base) external nonReentrant {
         bytes memory core = _core(pid);
         if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_CASH) revert NotCash();
-        if (base == 0) revert BadInputs();
-        _debit(pid, msg.sender, asset, _fromBase(base, Def.assetDecimals(core, asset)));
+        uint256 decimals = Def.assetDecimals(core, asset);
+        int256 amt = _fromBase(base, decimals);
+        if (amt <= 0 || _toBase(amt, decimals) != base) revert BadInputs();
+        _debit(pid, msg.sender, asset, amt);
         uint256 held = _vault[pid][asset];
         if (held < base) revert VaultShort();
         _vault[pid][asset] = held - base;
@@ -453,21 +480,25 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     // Views
     // ---------------------------------------------------------------------------------------------------------
 
+    /// @notice Where a definition's CORE lives, its length and who registered it (zero pointer: unknown).
     function definitionOf(bytes32 id) external view returns (address pointer, uint32 coreLen, address creator) {
         Definition storage d = _defs[id];
         return (d.pointer, d.coreLen, d.creator);
     }
 
+    /// @notice A registered definition's CORE bytes.
     function definitionCore(bytes32 id) external view returns (bytes memory) {
         Definition storage d = _defs[id];
         if (d.pointer == address(0)) revert UnknownDefinition();
         return SSTORE2.read(d.pointer, d.coreLen);
     }
 
+    /// @notice A process's header: definition, creator, status, token count, steps run, times, tags.
     function processOf(uint256 pid) external view returns (Proc memory) {
         return _procs[pid];
     }
 
+    /// @notice The live BPMN tokens (step indexes) of a process.
     function tokensOf(uint256 pid) external view returns (uint16[] memory out) {
         uint256 n = _procs[pid].nTokens;
         out = new uint16[](n);
@@ -477,27 +508,33 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         }
     }
 
+    /// @notice Who holds a role (ESCROW for escrow roles, zero for an open role).
     function roleOf(uint256 pid, uint256 role) external view returns (address) {
         return _roles[pid][role];
     }
 
+    /// @notice The ERC-20 behind a cash asset (zero for issued units).
     function assetTokenOf(uint256 pid, uint256 asset) external view returns (address) {
         return _assetTokens[pid][asset];
     }
 
+    /// @notice A captured field's value.
     /// @return tag 0 unset, 1 number, 2 text, 3 party
     function valueOf(uint256 pid, uint256 field) external view returns (uint8 tag, bytes32 data) {
         return (uint8((_procs[pid].tags >> (2 * field)) & 3), _values[pid][field]);
     }
 
+    /// @notice A ledger balance in 10-decimal fixed point.
     function balanceOf(uint256 pid, address owner, uint256 asset) external view returns (int256) {
         return _balances[pid][owner][asset];
     }
 
+    /// @notice Every ledger account a process has had (at most MAX_HOLDERS).
     function holdersOf(uint256 pid) external view returns (address[] memory) {
         return _holders[pid];
     }
 
+    /// @notice ERC-20 base units the engine holds for a process's cash asset.
     function vaultOf(uint256 pid, uint256 asset) external view returns (uint256) {
         return _vault[pid][asset];
     }

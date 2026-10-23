@@ -17,7 +17,7 @@ library SSTORE2 {
         bytes memory creation = abi.encodePacked(
             hex"63", uint32(data.length + 1), hex"80600e6000396000f3", hex"00", data
         );
-        assembly {
+        assembly ("memory-safe") {
             pointer := create(0, add(creation, 32), mload(creation))
         }
         if (pointer == address(0)) revert WriteFailed();
@@ -25,7 +25,7 @@ library SSTORE2 {
 
     function read(address pointer, uint256 length) internal view returns (bytes memory data) {
         data = new bytes(length);
-        assembly {
+        assembly ("memory-safe") {
             extcodecopy(pointer, add(data, 32), 1, length)
         }
     }

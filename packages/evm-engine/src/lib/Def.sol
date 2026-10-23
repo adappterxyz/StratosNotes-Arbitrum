@@ -84,25 +84,25 @@ library Def {
     }
 
     function u8(bytes memory b, uint256 o) internal pure returns (uint256 v) {
-        assembly {
+        assembly ("memory-safe") {
             v := byte(0, mload(add(add(b, 32), o)))
         }
     }
 
     function u16(bytes memory b, uint256 o) internal pure returns (uint256 v) {
-        assembly {
+        assembly ("memory-safe") {
             v := shr(240, mload(add(add(b, 32), o)))
         }
     }
 
     function u32(bytes memory b, uint256 o) internal pure returns (uint256 v) {
-        assembly {
+        assembly ("memory-safe") {
             v := shr(224, mload(add(add(b, 32), o)))
         }
     }
 
     function i64(bytes memory b, uint256 o) internal pure returns (int256 v) {
-        assembly {
+        assembly ("memory-safe") {
             v := signextend(7, shr(192, mload(add(add(b, 32), o))))
         }
     }

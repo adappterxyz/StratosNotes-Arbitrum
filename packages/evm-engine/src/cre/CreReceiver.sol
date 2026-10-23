@@ -27,6 +27,7 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
     error InvalidWorkflowName(bytes10 received, bytes10 expected);
     error InvalidWorkflowId(bytes32 received, bytes32 expected);
     error WorkflowNameRequiresAuthorValidation();
+    error InvalidMetadata();
 
     event ForwarderAddressUpdated(address indexed previousForwarder, address indexed newForwarder);
     event ExpectedAuthorUpdated(address indexed previousAuthor, address indexed newAuthor);
@@ -40,6 +41,7 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
         emit ForwarderAddressUpdated(address(0), forwarder);
     }
 
+    /// @notice The KeystoneForwarder allowed to call onReport (zero would accept anyone: see setForwarderAddress).
     function getForwarderAddress() external view returns (address) {
         return s_forwarderAddress;
     }
@@ -57,11 +59,15 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
     }
 
     /// @inheritdoc IReceiver
+    /// @dev Called by the forwarder with the DON-signed report. When an expected workflow id, author or name is
+    ///      configured, the metadata must carry exactly that identity.
     function onReport(bytes calldata metadata, bytes calldata report) external override {
         if (s_forwarderAddress != address(0) && msg.sender != s_forwarderAddress) {
             revert InvalidSender(msg.sender, s_forwarderAddress);
         }
         if (s_expectedWorkflowId != bytes32(0) || s_expectedAuthor != address(0) || s_expectedWorkflowName != bytes10(0)) {
+            // The identity is 62 bytes; shorter metadata would be read past its end.
+            if (metadata.length < 62) revert InvalidMetadata();
             (bytes32 workflowId, bytes10 workflowName, address workflowOwner) = _decodeMetadata(metadata);
             if (s_expectedWorkflowId != bytes32(0) && workflowId != s_expectedWorkflowId) {
                 revert InvalidWorkflowId(workflowId, s_expectedWorkflowId);
@@ -88,6 +94,7 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
         emit ForwarderAddressUpdated(previous, forwarder);
     }
 
+    /// @notice Only accept reports from workflows owned by `author` (zero: any author).
     function setExpectedAuthor(address author) external onlyOwner {
         address previous = s_expectedAuthor;
         s_expectedAuthor = author;
@@ -113,6 +120,7 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
         emit ExpectedWorkflowNameUpdated(previous, s_expectedWorkflowName);
     }
 
+    /// @notice Only accept reports from the workflow with this id (zero: any).
     function setExpectedWorkflowId(bytes32 id) external onlyOwner {
         bytes32 previous = s_expectedWorkflowId;
         s_expectedWorkflowId = id;
@@ -135,7 +143,7 @@ abstract contract CreReceiver is IReceiver, Ownable2Step {
         pure
         returns (bytes32 workflowId, bytes10 workflowName, address workflowOwner)
     {
-        assembly {
+        assembly ("memory-safe") {
             workflowId := mload(add(metadata, 32))
             workflowName := mload(add(metadata, 64))
             workflowOwner := shr(mul(12, 8), mload(add(metadata, 74)))
