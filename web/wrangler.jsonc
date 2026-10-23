@@ -25,6 +25,38 @@
   "vars": {
     // The API (services/api) behind its own Cloudflare Tunnel (docs/DEPLOY.md).
     "API_ORIGIN": "https://api.notes.markets"
+  },
+  // The whole backend on Cloudflare: API on D1, the indexer and the notifier on a one-minute cron
+  // (services/edge). Deploy with `--env edge` once the D1 database exists (docs/DEPLOY.md, "Cutover to D1");
+  // until then the default environment above keeps proxying /api/* to the server. Bindings are not inherited by
+  // an environment, so the AI, rate limits and vars are repeated here.
+  "env": {
+    "edge": {
+      "name": "stratosnotes-arbitrum",
+      "routes": [
+        { "pattern": "notes.markets", "custom_domain": true },
+        { "pattern": "www.notes.markets", "custom_domain": true },
+        { "pattern": "notes.stratoslab.app", "custom_domain": true }
+      ],
+      "ai": { "binding": "AI" },
+      "ratelimits": [
+        { "name": "AI_LIMIT", "namespace_id": "4601", "simple": { "limit": 20, "period": 60 } },
+        { "name": "READ_LIMIT", "namespace_id": "4602", "simple": { "limit": 300, "period": 60 } }
+      ],
+      "d1_databases": [
+        // database_id: from `wrangler d1 create notes-markets` (docs/DEPLOY.md). Local dev ignores it.
+        { "binding": "DB", "database_name": "notes-markets", "database_id": "REPLACE-WITH-D1-DATABASE-ID", "migrations_dir": "migrations" }
+      ],
+      "triggers": { "crons": ["* * * * *"] },
+      "vars": {
+        "API_ORIGIN": "https://api.notes.markets",
+        // "proxy" keeps /api/* on the server during the cutover; "edge" serves it from D1.
+        "API_MODE": "edge",
+        // Cloudflare Email Service: "on" once notes.markets is onboarded for Email Sending.
+        "EMAIL_SENDING": "off",
+        "EMAIL_FROM": "alerts@notes.markets"
+      }
+    }
   }
   // Secret: SN_PROXY_SECRET (the same value the API has), so the API trusts the client IP this Worker forwards:
   //   npx wrangler secret put SN_PROXY_SECRET
