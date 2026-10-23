@@ -62,7 +62,7 @@ ${k('const')} values = due.feeds.${f('map')}(f => ${f('readFeed')}(runtime, f)) 
 evm.${f('writeReport')}(runtime, {
   receiver: engine,                ${c('// through the KeystoneForwarder')}
   report: runtime.${f('report')}(${f('encodeAbiParameters')}(pid, Task_FixStrike, values)),
-  gasConfig: { gasLimit: ${q('6000000')} },
+  gasConfig: { gasLimit: ${q('8000000')} },
 })
 ${c('// sold = notional - balance(Issuer, note); required = ratio * sold')}
 ${c('// GW_Margin0: coverage >= required, else Margin Call → top up or default')}`,

@@ -28,7 +28,7 @@ const config = {
     return {
       chainSelectorName: ch.chainSelectorName, engine: d.engine, lens: d.lens,
       // A coupon to a full book (62 holders) measured 2.22M gas of execution; the margin covers Arbitrum's L1 data gas.
-      gasLimit: '6000000', fromPid: 1, scan: 200, maxProcesses: 50,
+      gasLimit: '8000000', fromPid: 1, scan: 200, maxProcesses: 50,
     };
   }),
   maxReportsPerRun: 5,
