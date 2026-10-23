@@ -1,5 +1,5 @@
 /**
- * The seed template library: four stock products and two custom workflows
+ * The seed template library: two equity notes, four crypto products and two custom workflows
  * (product workflows edited through the draft format the AI edits, then
  * checked by the validator). scripts/seed-templates.ts publishes them;
  * test/products.e2e.test.ts runs the custom ones on a local validator.
@@ -34,9 +34,27 @@ const worstOfFcn: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, name: '12M Worst-of
 const btcSnowball: ProductParams = { ...EXAMPLE_PRODUCTS.snowball, name: '12M Snowball on BTC', underlyings: [FEEDS.BTC], couponRatePct: 2.5 };
 const solPpn: ProductParams = { ...EXAMPLE_PRODUCTS.ppn, name: '6M 90% Protected Note on SOL', underlyings: [FEEDS.SOL], protectionPct: 90, participationPct: 100 };
 const ethPhoenix: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Step-down Phoenix on ETH' };
+// Equity notes: prices from Chainlink's TSLA, NVDA and AAPL feeds on Arbitrum One (NYSE hours).
+const equityPhoenix: ProductParams = {
+  ...EXAMPLE_WORST_OF, name: '12M Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], couponRatePct: 3,
+};
+const aaplRc: ProductParams = {
+  ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Reverse Convertible on AAPL, physical', underlyings: [FEEDS.AAPL],
+  couponRatePct: 2.5, knockInBarrierPct: 70, settlement: 'physical',
+};
 const btcPhoenix: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix on BTC with servicing fee', underlyings: [FEEDS.BTC], couponRatePct: 2.5 };
 
 export const SEED_TEMPLATES: Array<{ name: string; description: string; source: TemplateSource }> = [
+  {
+    name: '12M Worst-of Phoenix on TSLA, NVDA',
+    description: '3% quarterly coupon while the worst of Tesla and NVIDIA holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in. Prices: Chainlink equity feeds on Arbitrum One.',
+    source: { product: equityPhoenix },
+  },
+  {
+    name: '12M Reverse Convertible on AAPL, physical',
+    description: '2.5% quarterly coupon; if Apple ends below 70% of its strike, holders receive Apple tokens (units ÷ strike) instead of cash. Prices: Chainlink AAPL/USD on Arbitrum One.',
+    source: { product: aaplRc },
+  },
   {
     name: '12M Worst-of Phoenix on ETH, BTC, SOL',
     description: '3% quarterly coupon while the worst of ETH, BTC and SOL holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in on the worst performer.',
