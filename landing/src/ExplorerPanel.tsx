@@ -29,12 +29,12 @@ export default function ExplorerPanel({ start, onClose }: { start: ExplorerStart
       <div className="xp-bar">
         <div>
           <span className="eyebrow">Note explorer</span>
-          <h2 id="xp-title">Choose a side, a goal and a market. See what the note does.</h2>
+          <h2 id="xp-title">Try a note.</h2>
         </div>
         <button ref={closeRef} type="button" className="xp-close" onClick={onClose} aria-label="Close the explorer">Close ✕</button>
       </div>
       <div className="xp-body">
-        <p className="xp-intro">Every number here comes from the same reference payoff the on-chain engine is tested against. Drag the price path to try your own market. Example terms, not live prices.</p>
+        <p className="xp-intro">Drag the price path. Same payoff maths as the on-chain engine; example terms, not live prices.</p>
         <Suspense fallback={<div className="xp-loading">Loading the explorer…</div>}>
           <Explorer start={start} />
         </Suspense>

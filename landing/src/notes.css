@@ -60,16 +60,6 @@
 .muted { color: var(--muted); }
 .grad-text { color: inherit; }
 
-/* A faint drafting grid at the top of the page, fading out: quiet texture, no motion. */
-.bg-grid {
-  position: absolute; inset: 0 0 auto 0; height: 900px; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(111, 163, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(111, 163, 255, 0.06) 1px, transparent 1px);
-  background-size: 48px 48px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
-  mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
-}
 .sn-root main, .sn-root header, .sn-root footer { position: relative; z-index: 1; }
 
 .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding-inline: clamp(16px, 4vw, 32px); }
@@ -125,23 +115,66 @@ header.nav.scrolled, header.nav.open { background: rgba(10, 22, 40, 0.95); borde
 }
 @media (max-width: 560px) { .hide-sm { display: none; } .nav-cta .btn-primary { padding: 0 14px; font-size: 14px; } }
 
-/* ---- Hero ---- */
-.hero { padding-block: clamp(56px, 10vw, 120px) clamp(48px, 7vw, 88px) !important; }
-.hero-inner { display: grid; gap: clamp(20px, 2.6vw, 28px); justify-items: start; }
-.badge { display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-1); color: var(--text-soft); font-size: 14px; }
+/* ============================================================
+   STAGE: the hero over the 3D scene, then the pinned scroll story (Stage.tsx, scene/NoteScene.ts).
+   The stage is several screens tall; its first child sticks to the viewport while scroll drives the scene.
+   ============================================================ */
+.stage { position: relative; height: 620vh; padding: 0 !important; margin-top: calc(-68px - env(safe-area-inset-top, 0px)); }
+.stage-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.stage-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; opacity: 0; transition: opacity .8s ease; background: var(--bg-0); }
+.stage-canvas.ready { opacity: 1; }
+/* Text legibility over the scene: a quiet navy veil at the left and bottom, never a colour gradient. */
+.stage-shade { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(10, 22, 40, .88) 0%, rgba(10, 22, 40, .55) 32%, rgba(10, 22, 40, 0) 62%),
+    linear-gradient(to top, rgba(10, 22, 40, .8) 0%, rgba(10, 22, 40, 0) 34%); }
+.stage-hero { position: absolute; inset: 0; display: flex; align-items: center; padding-top: 68px; will-change: opacity, transform; }
+.hero-inner { display: grid; gap: clamp(18px, 2.4vw, 26px); justify-items: start; }
+.stage-hero h1 { font-size: clamp(44px, 7.6vw, 104px); line-height: .98; letter-spacing: -0.025em; max-width: 11ch; }
+.badge { display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: rgba(15, 31, 56, .8); color: var(--text-soft); font-size: 14px; }
 .badge i { width: 8px; height: 8px; border-radius: 50%; background: var(--up); flex: none; }
-.hero .sub { font-size: clamp(17px, 1.6vw, 21px); color: var(--text-soft); max-width: 60ch; }
+.stage-hero .sub { font-size: clamp(18px, 1.7vw, 22px); color: var(--text-soft); max-width: 34ch; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; }
-.sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; width: 100%; max-width: 900px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-1); margin-top: 8px; }
-.side { padding: 20px 22px; display: grid; gap: 6px; }
-.side + .side { border-left: 1px solid var(--border); }
-.side-k { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--purple); }
-.side p { color: var(--text-soft); font-size: 16px; }
-@media (max-width: 640px) { .sides { grid-template-columns: 1fr; } .side + .side { border-left: 0; border-top: 1px solid var(--border); } }
-.built-on { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 6px; }
+.built-on { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 4px; }
 .built-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
-.built-mark { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-1); font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--text); }
+.built-mark { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15, 31, 56, .8); font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--text); }
 .built-mark img { display: block; width: auto; }
+.scroll-cue { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); padding-bottom: 26px; }
+.scroll-cue::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 1px; height: 18px; background: var(--muted); animation: cue 1.8s ease-in-out infinite; }
+@keyframes cue { 0%, 100% { transform: translateY(-4px); opacity: .3; } 50% { transform: translateY(2px); opacity: 1; } }
+
+/* The beats: one caption at a time, bottom left, over the scene. */
+.beats { position: absolute; left: 0; right: 0; bottom: clamp(36px, 9vh, 96px); pointer-events: none; }
+.beat { position: absolute; left: clamp(16px, 4vw, 32px); bottom: 0; max-width: min(560px, 86vw); opacity: 0; display: grid; gap: 8px; will-change: opacity, transform; }
+.beat-k { font-family: var(--font-mono); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--purple); }
+.beat-k b { color: var(--muted); font-weight: 500; margin-right: 6px; }
+.beat p { font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 46px); line-height: 1.1; font-weight: 600; letter-spacing: -0.015em; color: var(--text); text-wrap: balance; }
+.beat-rail { position: absolute; right: clamp(14px, 3vw, 32px); top: 50%; transform: translateY(-50%); display: grid; gap: 10px; opacity: 0; }
+.beat-rail span { width: 3px; height: 28px; border-radius: 2px; background: var(--border-strong); transition: background .3s; }
+.beat-rail span.on { background: var(--blue); }
+.stage-anchor { position: absolute; left: 0; top: 112vh; height: 1px; width: 1px; scroll-margin-top: 0; }
+
+/* Reduced motion: no pinning. One still render under the hero, then the beats as a list. */
+.stage.still { height: auto; }
+.stage.still .stage-sticky { position: relative; }
+.stage.still .stage-anchor { top: 100%; }
+.beats-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px; padding-block: 40px 8px; }
+.beats-list li { display: grid; gap: 6px; border-top: 2px solid var(--border-strong); padding-top: 12px; }
+.beats-list p { color: var(--text); font-size: 17px; }
+@media (prefers-reduced-motion: reduce) { .scroll-cue::after { animation: none; } }
+@media (max-width: 760px) {
+  .stage { height: 560vh; }
+  .stage-shade { background: linear-gradient(to top, rgba(10, 22, 40, .92) 0%, rgba(10, 22, 40, .35) 45%, rgba(10, 22, 40, .7) 100%); }
+  .stage-hero { align-items: flex-end; padding-bottom: 12vh; }
+  .beat-rail { display: none; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .stage-hero { align-items: center; padding-bottom: 0; }
+  .stage-hero h1 { font-size: clamp(32px, 6vw, 56px); }
+  .built-on { display: none; }
+  .beats { bottom: 20px; }
+  .beat p { font-size: 24px; }
+}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ============================================================
@@ -245,6 +278,31 @@ header.nav.scrolled, header.nav.open { background: rgba(10, 22, 40, 0.95); borde
   .ledger td { padding: 2px 0; border: 0; }
   .ledger td:first-child { white-space: normal; font-weight: 600; }
 }
+
+/* ---- Proof: two compact run cards ---- */
+.runs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+.run-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-1); padding: clamp(18px, 2.4vw, 26px); display: grid; gap: 12px; align-content: start; }
+.run-card h3 { font-size: clamp(17px, 1.4vw, 19px); }
+.run-outcome { color: var(--text-soft); font-size: 15px; }
+.run-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.run-steps li a, .run-steps li > span { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text-soft); font-size: 13.5px; }
+.run-steps li a:hover { border-color: var(--purple); color: var(--text); }
+.run-steps li.cl a { border-color: rgba(76, 141, 255, .45); }
+.run-steps .run-k { font-weight: 600; color: var(--text); }
+.run-steps li.cl .run-k { color: var(--purple); }
+.run-steps .mono { font-size: 12px; color: var(--muted); }
+.run-card .paid { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--text-soft); font-size: 15px; }
+.run-card .paid b.up { color: var(--up); font-family: var(--font-mono); font-weight: 600; }
+.run-contract { font-size: 12.5px; text-decoration: none; justify-self: start; }
+
+/* ---- Origin: three steps in one line each ---- */
+.origin { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.origin li { display: grid; gap: 4px; border-top: 2px solid var(--border-strong); padding-top: 14px; }
+.origin li:last-child { border-top-color: var(--blue); }
+.origin b { font-size: 18px; font-family: var(--font-display); }
+.origin span { color: var(--text-soft); font-size: 15px; }
+.origin a { font-size: 14px; text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+@media (max-width: 760px) { .origin { grid-template-columns: 1fr; } }
 
 /* ---- CTA and footer ---- */
 .cta-final { border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-1); padding: clamp(28px, 5vw, 56px); display: grid; gap: 16px; justify-items: start; }

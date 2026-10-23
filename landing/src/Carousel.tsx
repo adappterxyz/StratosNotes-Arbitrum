@@ -32,7 +32,7 @@ const baseline = <path d="M14 86H190" stroke="var(--c-axis)" {...thin} />;
 const CARDS: Card[] = [
   {
     side: 'Investors', title: 'Earn yield', note: 'Phoenix on ETH',
-    body: 'A coupon each quarter, as long as the price stays inside the range: above the floor, below the early-repayment level.',
+    body: 'A coupon each quarter while the price stays in range.',
     chart: {
       aria: 'A price path that stays between a floor at 70% and an early-repayment level at 100%, with a coupon paid at each of four dates.',
       shapes: <>
@@ -55,7 +55,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Investors', title: 'Protect your capital', note: 'Protected note on BTC',
-    body: 'Your money back at maturity even if the price falls, plus a share of any rise.',
+    body: 'Your money back at maturity, plus a share of any rise.',
     chart: {
       aria: 'Payout at maturity against the final price: flat at 100% below the starting price, rising at half the stock\'s rate above it; the stock alone falls below 100%.',
       shapes: <>
@@ -77,7 +77,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Investors', title: 'Get exposure to stocks', note: 'Worst-of on TSLA and NVDA',
-    body: 'One note on Tesla and NVIDIA together. The weaker of the two sets what you get, and you are paid more coupon for that.',
+    body: 'Tesla and NVIDIA in one note. The weaker sets the payout.',
     chart: {
       aria: 'Two stock prices over four dates: TSLA rises, NVDA lags; the note follows NVDA, the weaker one.',
       shapes: <>
@@ -97,7 +97,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Investors', title: 'Hedge what you hold', note: 'Reverse convertible on AAPL',
-    body: 'Hold shares that drift lower and the coupons make up part of the loss. You take more shares only if the price falls far.',
+    body: 'Coupons offset part of a slow decline in shares you hold.',
     chart: {
       aria: 'Shares you hold fall from 100 to 80; adding the note\'s coupons, the combined value falls only to about 90.',
       shapes: <>
@@ -118,7 +118,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Issuers', title: 'Raise funding', note: 'Fixed coupon note on ETH',
-    body: 'Investors pay in stablecoins today. You keep the money and lock collateral in the note until you have repaid.',
+    body: 'Raise stablecoins today against collateral locked in the note.',
     chart: {
       aria: 'Funding comes in at the start; collateral is locked for the whole term; small payments go out each quarter and the repayment at the end, after which the collateral is released.',
       shapes: <>
@@ -141,7 +141,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Issuers', title: 'Pay as you go', note: 'Phoenix on BTC',
-    body: 'Fund each payment when it falls due, with a grace period of up to 7 days. Miss one and the collateral pays the holders.',
+    body: 'Fund each payment when due. Miss one and collateral pays holders.',
     chart: {
       aria: 'Four payment dates: the issuer funds three on time; the fourth is missed, the grace period runs out, and the collateral pays the holders.',
       shapes: <>
