@@ -1,12 +1,10 @@
-/* The note explorer: a working instrument in the landing's ledger palette. Arbitrum blue only marks stocks. */
-.sn-root { --arb: #28a0f0; --amber: #f5b14c; --down: #f07171; }
+/* The note explorer: a working instrument in the landing's navy palette. Arbitrum blue only marks stocks. */
 
 .xs {
   display: grid; gap: 18px;
   padding: 22px; border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(12, 22, 19, .92), rgba(8, 16, 14, .92));
+  background: var(--bg-1);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 40px 120px -40px rgba(16, 185, 129, .25);
 }
 .xs button { font: inherit; color: inherit; cursor: pointer; }
 .xs .num { font-variant-numeric: tabular-nums; }
@@ -26,13 +24,13 @@
 .xs-goal b { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
 .xs-goal span { font-size: 13px; color: var(--text-soft); line-height: 1.4; }
 .xs-goal:hover { border-color: var(--border-strong); }
-.xs-goal.on { border-color: var(--purple); background: rgba(45, 212, 191, .07); }
+.xs-goal.on { border-color: var(--purple); background: rgba(111, 163, 255, .07); }
 .xs-picks { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
 .xs-picks .xs-kicker { width: 100%; }
 .xs-pick { flex: 1 1 220px; text-align: left; display: grid; gap: 2px; padding: 10px 14px; border-radius: 10px; border: 1px dashed var(--border-strong); background: none; transition: border-color .2s, background .2s; }
 .xs-pick b { font-size: 14px; font-weight: 600; }
 .xs-pick span { font-size: 12.5px; color: var(--text-soft); line-height: 1.4; }
-.xs-pick.on { border-style: solid; border-color: var(--blue); background: rgba(16, 185, 129, .08); }
+.xs-pick.on { border-style: solid; border-color: var(--blue); background: rgba(76, 141, 255, .08); }
 
 /* terms + market */
 .xs-main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
@@ -40,13 +38,13 @@
 .xs-block { display: grid; gap: 10px; padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255, 255, 255, .02); }
 .xs-seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .xs-seg button, .xs-presets button { border: 1px solid var(--border); background: var(--glass); padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); transition: all .2s; }
-.xs-seg button.on, .xs-presets button.on { border-color: var(--purple); color: var(--text); background: rgba(45, 212, 191, .1); }
+.xs-seg button.on, .xs-presets button.on { border-color: var(--purple); color: var(--text); background: rgba(111, 163, 255, .1); }
 .xs-blurb { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; }
 .xs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .xs-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: none; padding: 5px 11px; border-radius: 999px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-soft); }
 .xs-chip i { width: 8px; height: 8px; border-radius: 50%; }
 .xs-chip.stock { border-color: rgba(40, 160, 240, .3); }
-.xs-chip.on { color: var(--text); border-color: var(--purple); background: rgba(45, 212, 191, .1); }
+.xs-chip.on { color: var(--text); border-color: var(--purple); background: rgba(111, 163, 255, .1); }
 .xs-chip.stock.on { border-color: var(--arb); background: rgba(40, 160, 240, .12); }
 .xs-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); cursor: pointer; }
 .xs-check input { accent-color: var(--blue); width: 15px; height: 15px; }
@@ -90,7 +88,7 @@
 .pchart .handle .hit { fill: transparent; }
 .pchart .handle .dot { stroke-width: 2.5; transition: r .15s; }
 .pchart .handle:hover .dot, .pchart .handle:focus-visible .dot { r: 10; }
-.pchart .handle:focus-visible .hit { fill: rgba(45, 212, 191, .14); }
+.pchart .handle:focus-visible .hit { fill: rgba(111, 163, 255, .14); }
 .pchart .handle.after { opacity: .45; }
 .pchart .val { fill: var(--text); font-family: var(--font-mono); font-size: 12px; paint-order: stroke; stroke: var(--bg-1); stroke-width: 4px; pointer-events: none; }
 
@@ -136,7 +134,7 @@
 .xs-pledge div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-soft); }
 .xs-pledge b { color: var(--text); font-family: var(--font-mono); font-weight: 500; }
 .xs-default { display: grid; gap: 10px; padding: 14px; border-radius: 10px; border: 1px dashed var(--border-strong); }
-.xs-default.on { border-style: solid; border-color: rgba(240, 113, 113, .45); background: rgba(240, 113, 113, .05); }
+.xs-default.on { border-style: solid; border-color: rgba(229, 72, 77, .45); background: rgba(229, 72, 77, .05); }
 .xs-default p { font-size: 14.5px; line-height: 1.55; color: var(--text-soft); max-width: 76ch; }
 .xs-default p b { color: var(--text); }
 
@@ -158,7 +156,7 @@
 
 /* lifecycle rail */
 .rail { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; position: relative; }
-.rail::before { content: ""; position: absolute; top: 9px; left: 8%; right: 8%; height: 1px; background: linear-gradient(90deg, var(--blue), var(--purple), var(--cyan)); opacity: .5; }
+.rail::before { content: ""; position: absolute; top: 9px; left: 8%; right: 8%; height: 1px; background: var(--border-strong); }
 .rail li { list-style: none; position: relative; padding: 28px 12px 0; display: grid; gap: 6px; align-content: start; }
 .rail li::before { content: ""; position: absolute; top: 3px; left: 12px; width: 13px; height: 13px; border-radius: 50%; background: var(--bg-0); border: 2px solid var(--purple); }
 .rail li.cl::before { border-color: var(--cyan); }
@@ -168,7 +166,7 @@
 .rail p { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; }
 @media (max-width: 980px) {
   .rail { grid-template-columns: 1fr; }
-  .rail::before { top: 0; bottom: 0; left: 18px; right: auto; width: 1px; height: auto; background: linear-gradient(180deg, var(--blue), var(--purple), var(--cyan)); }
+  .rail::before { top: 0; bottom: 0; left: 18px; right: auto; width: 1px; height: auto; background: var(--border-strong); }
   .rail li { padding: 0 0 22px 44px; }
   .rail li::before { top: 4px; left: 12px; }
 }

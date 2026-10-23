@@ -29,7 +29,7 @@ export default function ExplorerPanel({ start, onClose }: { start: ExplorerStart
       <div className="xp-bar">
         <div>
           <span className="eyebrow">Note explorer</span>
-          <h2 id="xp-title">Choose a side, a goal and a market. <span className="grad-text">See what the note does.</span></h2>
+          <h2 id="xp-title">Choose a side, a goal and a market. See what the note does.</h2>
         </div>
         <button ref={closeRef} type="button" className="xp-close" onClick={onClose} aria-label="Close the explorer">Close ✕</button>
       </div>
