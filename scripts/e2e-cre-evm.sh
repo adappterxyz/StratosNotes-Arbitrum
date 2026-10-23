@@ -64,7 +64,7 @@ if [[ " $PARTS " == *" cre "* ]]; then
   echo "== CRE on an Arbitrum Sepolia fork"
   PORT="$(fork arbitrum https://sepolia-rollup.arbitrum.io/rpc 421614)"
   RPC="http://127.0.0.1:$PORT"
-  FWD=0xB27fA1c28288c50542527F64BCda22C9FbAc24CB
+  FWD=0xD41263567DdfeAd91504199b8c6c87371e83ca5d  # Arbitrum Sepolia MockKeystoneForwarder
   [ "$(cast code "$FWD" --rpc-url "$RPC" | wc -c)" -gt 4 ] || { echo "MockKeystoneForwarder missing on the fork" >&2; exit 1; }
   echo "fork :$PORT, MockKeystoneForwarder $FWD has code"
   USDC="$(deploy arbitrum-fork "$PORT" arbitrum-sepolia)"

@@ -57,7 +57,10 @@ contract Deploy is Script {
         require(forwarder != address(0), "no CRE forwarder on this chain: set FORWARDER");
 
         string memory key = "deployment";
-        vm.startBroadcast();
+        // DEPLOYER_KEY (env) keeps the key off the command line (scripts/deploy-testnets.sh); else --private-key.
+        uint256 pk = vm.envOr("DEPLOYER_KEY", uint256(0));
+        if (pk != 0) vm.startBroadcast(pk);
+        else vm.startBroadcast();
         engine = new FlowEngine(owner, forwarder);
         NotesLens lens = new NotesLens(engine);
         if (testTokens) _testTokens(key, owner);

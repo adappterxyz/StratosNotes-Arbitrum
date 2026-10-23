@@ -19,12 +19,13 @@ export function clients(rpc: string, chainId: number) {
 }
 
 /**
- * The note both runs use: a phoenix on the worst of ETH and BTC, three observations a short time apart
+ * The note both runs use: a phoenix on the worst of ETH and BTC (E2E_NOTE=equity: TSLA and NVDA), three observations a short time apart
  * (coupon barrier 70%, autocall at 100% from the second observation, knock-in 60%).
  */
-export const NOTE: ProductParams = {
-  ...EXAMPLE_PRODUCTS.phoenix, name: 'E2E Worst-of Phoenix on ETH, BTC', underlyings: [FEEDS.ETH, FEEDS.BTC], observations: 3,
-};
+export const NOTE: ProductParams = process.env.E2E_NOTE === 'equity'
+  // Equities: Chainlink TSLA/USD and NVDA/USD on Arbitrum One (NYSE hours; outside them, the last close).
+  ? { ...EXAMPLE_PRODUCTS.phoenix, name: 'E2E Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], observations: 3 }
+  : { ...EXAMPLE_PRODUCTS.phoenix, name: 'E2E Worst-of Phoenix on ETH, BTC', underlyings: [FEEDS.ETH, FEEDS.BTC], observations: 3 };
 
 export function compiled(p: ProductParams = NOTE) {
   const prod = instantiateProduct(p);

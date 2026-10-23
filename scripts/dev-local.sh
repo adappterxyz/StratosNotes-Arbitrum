@@ -119,7 +119,7 @@ EOF
 
 if [ "${E2E:-}" = "1" ]; then
   APP_URL="http://127.0.0.1:$APP_PORT" API_URL="http://127.0.0.1:$API_PORT" RPC="$RPC" ENGINE="$ENGINE" LENS="$LENS" BLOCK="$BLOCK" KEEPER="$KEEPER" \
-    EXPECT_REPORTER="$([ "$KEEPER" = cre ] && echo 0xB27fA1c28288c50542527F64BCda22C9FbAc24CB || echo "$ADDR9")" \
+    EXPECT_REPORTER="$([ "$KEEPER" = cre ] && echo 0xD41263567DdfeAd91504199b8c6c87371e83ca5d || echo "$ADDR9")" \
     npx tsx scripts/e2e/app.e2e.ts 2>&1 | tee "$WORK/e2e.log"
   exit "${PIPESTATUS[0]}"
 fi

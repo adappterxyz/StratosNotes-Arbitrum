@@ -20,6 +20,8 @@ const erc20 = parseAbi(['function mint(address to, uint256 amount)', 'function a
 const NO = 0xffff;
 
 async function send(i: number, req: Parameters<ReturnType<typeof wallet>['writeContract']>[0]) {
+  // Simulate first, so a revert reports its reason instead of a bare status.
+  await client.simulateContract({ ...(req as object), account: acct(i) } as never);
   const hash = await wallet(i).writeContract(req as never);
   const r = await client.waitForTransactionReceipt({ hash });
   if (r.status !== 'success') throw new Error(`reverted: ${req.functionName}`);

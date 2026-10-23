@@ -36,7 +36,7 @@ const USES = [
 const LOCAL = [
   { v: '21 / 21', k: 'Foundry tests: 13 product scenarios pay the reference payoff, plus faucet and access checks' },
   { v: '254k', k: 'gas to subscribe; the largest report in the product runs is 426k' },
-  { v: '630 / 420', k: 'tUSD paid to two investors (600 and 400 units) in a CRE-run phoenix on an Arbitrum Sepolia fork' },
+  { v: '630 / 420', k: 'test USD paid to two investors (600 and 400 units) in a phoenix run by Chainlink\'s CRE simulator on an Arbitrum Sepolia fork' },
   { v: '2.22M', k: 'gas for a coupon to a full book of 62 holders, under the 2.8M report limit' },
 ];
 
