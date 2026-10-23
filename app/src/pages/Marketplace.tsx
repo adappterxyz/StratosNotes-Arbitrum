@@ -32,7 +32,7 @@ export default function Marketplace() {
       <div className="page-head">
         <div>
           <h1>Marketplace</h1>
-          <p>Structured notes on {config.chains.map(c => c.name).join(' and ')}. Subscribe with {config.chains[0]?.stablecoin.symbol ?? 'USDC'} while a book is open; Chainlink CRE fixes the strike and observes every date, and coupons, autocalls and redemptions settle on-chain.</p>
+          <p>Notes on {config.chains.map(c => c.name).join(' and ')}. Buy units with {config.chains[0]?.stablecoin.symbol ?? 'USDC'} while a book is open. Chainlink then records the prices on each date, and every coupon and repayment is paid on-chain. Need test tokens? Connect a wallet and claim them with the faucet button.</p>
         </div>
         <Link to="/issue" className="btn primary lg"><Plus className="i" />Issue a note</Link>
       </div>

@@ -13,7 +13,7 @@ export default function Portfolio() {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string; tx?: string; explorer?: string } | null>(null);
 
-  if (!address) return <main className="page"><div className="empty"><strong>Connect a wallet to see your notes.</strong><span className="small">Positions, coupons received and cash you can withdraw, across every issuance and network.</span></div></main>;
+  if (!address) return <main className="page"><div className="empty"><strong>Connect a wallet to see your notes.</strong><span className="small">Your units, the coupons you have been paid, and cash you can withdraw, on every network.</span></div></main>;
   if (!positions) return <main className="page"><p className="muted">Loading your positions…</p></main>;
 
   const withdraw = async (id: string, chain: string, name: string, cash: number) => {
@@ -32,7 +32,7 @@ export default function Portfolio() {
       <div className="page-head"><div><h1>Portfolio</h1><p>Notes you hold or issued, and the cash each one owes you: coupons and redemptions for holders, the subscriptions raised for issuers.</p></div></div>
       {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text} {msg.tx && msg.explorer && <a href={`${msg.explorer}/tx/${msg.tx}`} target="_blank" rel="noreferrer">View transaction</a>}</div>}
       {positions.length === 0 ? (
-        <div className="empty"><strong>No positions yet.</strong><Link to="/" className="btn">Browse open books</Link></div>
+        <div className="empty"><strong>You don't hold any notes yet.</strong><span className="small">Buy into an open note from the marketplace, or issue your own.</span><Link to="/" className="btn">See open notes</Link></div>
       ) : (
         <div className="card scroll-x" style={{ padding: 0 }}>
           <table className="t">

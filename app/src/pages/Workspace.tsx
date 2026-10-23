@@ -239,12 +239,13 @@ export default function Workspace() {
         <div className="ws-body">
           <div className={`ws-canvas ${doc ? '' : 'empty'}`}>
             <div ref={host} className="bpmn" aria-label="Workflow editor" />
+            {doc && <p className="phone-note">On a phone the workflow is view-only: drag to pan, pinch or scroll to zoom. Edit it on a larger screen.</p>}
             {!doc && (
               <div className="ws-start">
                 <div className="ws-start-inner">
                   <div>
                     <h1>Issue a note</h1>
-                    <p className="small muted" style={{ marginTop: 6, maxWidth: '64ch' }}>Start from a template and issue it as it is, or design one in the studio: change the term sheet, edit the workflow on the canvas or ask the AI, then issue it or save it as a template for others.</p>
+                    <p className="small muted" style={{ marginTop: 6, maxWidth: '64ch' }}>Start from a ready-made product or template, describe the note to the AI, or draw your own workflow. Check the payoff, then issue it, or save it as a template for others.</p>
                   </div>
                   <div className="start-cards">
                     {[

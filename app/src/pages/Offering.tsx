@@ -94,7 +94,7 @@ export default function OfferingPage() {
         </div>
         <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
           <span className="pill plain" title="This page updates when the indexer sees anything happen to the note: a report, a subscription, a transfer.">
-            <Radio className="i" style={{ width: 12, height: 12, color: 'hsl(var(--primary))' }} />Live · updated {secsAgo < 5 ? 'just now' : `${secsAgo}s ago`}
+            <Radio className="i" style={{ width: 12, height: 12, color: 'hsl(var(--success))' }} />Live · updated {secsAgo < 5 ? 'just now' : `${secsAgo}s ago`}
           </span>
           {agent && <span className="pill plain" data-agent={o.reports.last ?? ''} title="Who submitted this note's price reports: Chainlink CRE through its forwarder, or the fallback keeper where CRE cannot write"><ShieldCheck className="i" style={{ width: 12, height: 12 }} />{agent}</span>}
         </div>

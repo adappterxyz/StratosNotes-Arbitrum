@@ -48,7 +48,7 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     // Injected wallets only (MetaMask, Rabby, Coinbase Wallet extension…, each discovered via EIP-6963).
     // WalletConnect needs a project id; add it with VITE_WC_PROJECT_ID when mobile wallets are wanted.
     const connectors = connectorsForWallets([{ groupName: 'Browser wallets', wallets: [injectedWallet] }], {
-      appName: 'StratosNotes', projectId: import.meta.env.VITE_WC_PROJECT_ID ?? 'injected-only',
+      appName: 'notes.markets', projectId: import.meta.env.VITE_WC_PROJECT_ID ?? 'injected-only',
     });
     const wagmi = createConfig({
       chains: chains as [Chain, ...Chain[]],
@@ -64,7 +64,7 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     <Ctx.Provider value={value}>
       <WagmiProvider config={value.wagmi}>
         <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider theme={darkTheme({ accentColor: 'hsl(160 84% 39%)', borderRadius: 'medium' })} modalSize="compact">
+          <RainbowKitProvider theme={darkTheme({ accentColor: '#4C8DFF', accentColorForeground: '#0A1628', borderRadius: 'medium', fontStack: 'system' })} modalSize="compact">
             {children}
           </RainbowKitProvider>
         </QueryClientProvider>

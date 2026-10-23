@@ -100,7 +100,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
           </table>
         </div>
       )}
-      <p className="xs muted">The issuer received the subscriptions and pledged this collateral, locked in the note's escrow: nobody can withdraw it. Prices come with each Chainlink report; on a default the holders take {e.defaultRule === 'cap-at-owed' ? 'what they are owed (the rest goes back to the issuer)' : 'everything in escrow'}; coverage below the requirement opens a margin call with a {Math.round(e.grace / 60) >= 1440 ? `${Math.round(e.grace / 86400)}-day` : `${e.grace}-second`} grace period.</p>
+      <p className="xs muted">The issuer has the subscription money and has pledged this collateral. It is locked in the note: nobody can withdraw it until every payment is made. Chainlink prices it on each report. If coverage falls below the requirement, the issuer has {graceText(e.grace)} to top up. If a payment is missed, holders take {e.defaultRule === 'cap-at-owed' ? 'what they are owed from the collateral, and the rest goes back to the issuer' : 'everything in escrow'}.</p>
 
       <span className="label">Payment schedule</span>
       <div className="scroll-x">
@@ -154,4 +154,13 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
       {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text}</div>}
     </section>
   );
+}
+
+/** A grace period in plain words: "7 days", "8 hours", "45 minutes". */
+function graceText(sec: number): string {
+  const unit = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (sec >= 86400 && sec % 86400 === 0) return unit(sec / 86400, 'day');
+  if (sec >= 3600) return unit(Math.round(sec / 3600), 'hour');
+  if (sec >= 60) return unit(Math.round(sec / 60), 'minute');
+  return unit(sec, 'second');
 }

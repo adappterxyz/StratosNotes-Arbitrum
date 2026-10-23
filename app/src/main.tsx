@@ -14,7 +14,7 @@ async function boot() {
   try {
     config = await api.config();
   } catch (e) {
-    root.render(<main className="page"><div className="empty"><strong>Cannot reach the StratosNotes API.</strong><span className="small">{e instanceof Error ? e.message : String(e)}</span></div></main>);
+    root.render(<main className="page"><div className="empty"><strong>Cannot reach the notes.markets API.</strong><span className="small">{e instanceof Error ? e.message : String(e)}</span></div></main>);
     return;
   }
   // Dev builds only: a test wallet on the first chain (a local anvil fork), signing with anvil's public test keys.
