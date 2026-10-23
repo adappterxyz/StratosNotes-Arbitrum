@@ -131,6 +131,25 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     field('closedAt', 'Date', { formula: 'now' }),
     ...Array.from({ length: n }, (_, i) => field(fundUntil(i + 1), 'Date', { formula: 'now' })),
   ];
+  // DEFAULT RULE 'cap-at-owed': the holders take what they are owed (owed = a missed payment + par on the
+  // units sold) from escrow in order, stablecoin first, each asset valued at its last oracle price (collateral
+  // at market, no haircut; a deliverable at its strike level); the rest goes back to the issuer.
+  const capped = eco.defaultRule === 'cap-at-owed';
+  const takeField = (a: string) => `take_${a}`;
+  const priceOf = (a: string) => {
+    if (a === 'cash' || a === colAsset('USD')) return '1';
+    if (a.startsWith('col_')) return priceField(a.slice(4) as CollateralSymbol);
+    return basket ? `initialLevel_${a.slice(2)}` : 'initialLevel';
+  };
+  const defaultTakes: TemplateField[] = capped ? [
+    field('owed', 'Decimal', { formula: 'owedDue + principal' }),
+    ...escrowAssets.map((a, i) => {
+      const taken = escrowAssets.slice(0, i).map(b => ` - ${takeField(b)} * ${priceOf(b)}`).join('');
+      const rest = `(owed${taken})`;
+      const px = priceOf(a);
+      return field(takeField(a), 'Decimal', { formula: `max(0, min(balance(${ESCROW}, ${a}), ${px === '1' ? rest : `${rest} / ${px}`}))` });
+    }),
+  ] : [];
 
   nodes.push(
     { id: 'Recv_Mandate', type: 'receiveTask', name: 'Mandate Received', col: 3, props: { receiveGuard: 'notional > 0' } },
@@ -144,18 +163,24 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
         field('required', 'Decimal', { formula: 'collateralRatio * sold' }),
         field('coverage', 'Decimal', { formula: coverageExpr }),
         ...(memory ? [field('missed', 'Decimal', { formula: '0' })] : []),
+        // What a default would owe the holders: par on every unit sold, plus a missed payment (none yet).
+        ...(capped ? [field('principal', 'Decimal', { formula: 'sold' }), field('owedDue', 'Decimal', { formula: '0' })] : []),
       ],
       assetOperation: { assetId: 'note', operation: 'burn', params: { from: ISSUER, amountSource: 'expr', amountExpr: `balance(${ISSUER}, note)` } },
     } },
     { id: 'GW_Sold', type: 'exclusiveGateway', name: 'Any units sold?', col: 6 },
     // Shared ends: default (escrow to holders) and release (escrow back to the issuer).
-    { id: 'Task_Default', type: 'serviceTask', name: 'Default: Collateral to Holders', col: 0, row: 3, props: {
+    { id: 'Task_Default', type: 'serviceTask', name: capped ? 'Default: Owed to Holders, Rest to Issuer' : 'Default: Collateral to Holders', col: 0, row: 3, props: {
       milestone: 'defaulted',
-      templateFields: closing,
-      assetOperations: escrowAssets.map((a, i) => ({
-        assetId: a, operation: 'distribute' as const,
-        params: { holdingAssetId: 'note', payer: ESCROW, amountSource: 'expr' as const, amountExpr: `balance(${ESCROW}, ${a}) / sold`, ...(i === escrowAssets.length - 1 ? { retire: true } : {}) },
-      })),
+      templateFields: capped ? [...closing, ...defaultTakes] : closing,
+      assetOperations: [
+        ...escrowAssets.map((a, i) => ({
+          assetId: a, operation: 'distribute' as const,
+          params: { holdingAssetId: 'note', payer: ESCROW, amountSource: 'expr' as const, amountExpr: capped ? `${takeField(a)} / sold` : `balance(${ESCROW}, ${a}) / sold`, ...(i === escrowAssets.length - 1 ? { retire: true } : {}) },
+        })),
+        // Capped: whatever the holders are not owed goes back to the issuer.
+        ...(capped ? escrowAssets.map(a => ({ assetId: a, operation: 'transfer' as const, params: { from: ESCROW, to: ISSUER, amountSource: 'expr' as const, amountExpr: `balance(${ESCROW}, ${a})` } })) : []),
+      ],
     } },
     { id: 'End_Defaulted', type: 'endEvent', name: 'Defaulted', col: 1, row: 3 },
     { id: 'Task_Release', type: 'serviceTask', name: 'Release Collateral', col: 0, row: 2, props: {
@@ -213,10 +238,13 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
         templateFields: [field('due', 'Decimal', { formula: dueExpr }), field('dueTotal', 'Decimal', { formula: 'due * sold' })],
       } },
       { id: gw, type: 'exclusiveGateway', name: 'Funded?', col: c + 1, row },
-      { id: missed, type: 'serviceTask', name: `Payment ${k} Missed`, col: c + 1, row: row + 1, props: { milestone: 'payment-missed' } },
+      { id: missed, type: 'serviceTask', name: `Payment ${k} Missed`, col: c + 1, row: row + 1, props: { milestone: 'payment-missed',
+        // Owed on a default: this payment, plus par unless it pays the redemption in cash (a delivery still owes par).
+        ...(capped ? { templateFields: [field('owedDue', 'Decimal', { formula: 'due * sold' }), ...(opts.final && !opts.deliver ? [field('principal', 'Decimal', { formula: '0' })] : [])] } : {}) } },
       { id: grace, type: 'receiveTask', name: `Grace ${k}`, col: c + 2, row: row + 1, props: { receiveGuard: `${funded} or now >= payDate + grace` } },
       { id: cured, type: 'exclusiveGateway', name: 'Cured in grace?', col: c + 3, row: row + 1 },
-      { id: pay, type: 'serviceTask', name: label, col: c + 2, row, props: { milestone: 'payment-made', assetOperations: pays } },
+      { id: pay, type: 'serviceTask', name: label, col: c + 2, row, props: { milestone: 'payment-made', assetOperations: pays,
+        ...(capped ? { templateFields: [field('owedDue', 'Decimal', { formula: '0' })] } : {}) } },
     );
     flow(due, gw);
     flow(gw, pay, { name: 'Funded', cond: funded });

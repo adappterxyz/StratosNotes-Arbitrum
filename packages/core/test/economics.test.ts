@@ -84,8 +84,13 @@ describe('the payment cycle is drawn in every workflow', () => {
     expect(c.def.steps[c.stepIndex.Task_Fund1].sends).toEqual([]);
     expect(ir.messageFlows.filter(m => m.notice)).toHaveLength(4);
     expect(c.def.steps[c.stepIndex.Task_Default].milestone).toBe(MILESTONES.defaulted);
-    expect(c.def.steps[c.stepIndex.Task_Default].ops.map(o => o.kind)).toEqual([OP.DISTRIBUTE, OP.DISTRIBUTE]); // cash, col_USD
+    // Default rule 'cap-at-owed': distribute what is owed (cash, col_USD), then the rest back to the issuer.
+    expect(c.def.steps[c.stepIndex.Task_Default].ops.map(o => o.kind)).toEqual([OP.DISTRIBUTE, OP.DISTRIBUTE, OP.TRANSFER, OP.TRANSFER]);
     expect(decodeDef(c.bytes)).toEqual(c.def);
+    const all = compiled({ ...EXAMPLE_PRODUCTS.phoenix, defaultRule: 'all-to-holders' });
+    expect(all.c.def.steps[all.c.stepIndex.Task_Default].ops.map(o => o.kind)).toEqual([OP.DISTRIBUTE, OP.DISTRIBUTE]);
+    expect(all.c.def.fields.some(f => f.name === 'owed')).toBe(false);
+    expect(check(all.ir).errors).toEqual([]);
   });
 
   it('the servicing-fee template funds the fee with each coupon and pays it from escrow', () => {
@@ -143,6 +148,22 @@ describe('the reference model with the issuer in the loop', () => {
     const o = simulateNote(p, { ...base, behaviour: { partialPayment: { period: 3, fraction: 0.4 } } });
     expect(o.perUnit.cash).toBeCloseTo(0.03, 12); // 40% of 75, over 1,000 units
     expect(o.perUnit.collateral.USD).toBe(1);
+  });
+  it('the default rule: capped at what the holders are owed (the rest to the issuer), or everything to them', () => {
+    // Over-collateralised: 3,000 USDC + 1 ETH at 1,500 behind 1,000 units; coupon 3 (75) missed.
+    const rich = { ...base, collateral: [{ symbol: 'USD', amount: 3000, haircut: 1, prices: [1, 1, 1, 1, 1] }, { symbol: 'ETH', amount: 1, haircut: 0.7, prices: [2000, 1800, 1600, 1500, 1500] }] };
+    const capped = simulateNote(p, { ...rich, behaviour: { missPayment: 3 } });
+    expect(capped.perUnit.collateral.USD).toBeCloseTo(1.075, 12); // owed: 75 + par 1,000
+    expect(capped.perUnit.collateral.ETH).toBe(0);
+    expect(capped.released).toEqual({ USD: 1925, ETH: 1 });
+    // The stablecoin goes first, then collateral at its price then (1,500 at observation 3; no haircut).
+    const thin = { ...base, collateral: [{ symbol: 'USD', amount: 500, haircut: 1, prices: [1, 1, 1, 1, 1] }, { symbol: 'ETH', amount: 1, haircut: 0.7, prices: [2000, 1800, 1600, 1500, 1500] }] };
+    const t = simulateNote(p, { ...thin, behaviour: { missPayment: 3 } });
+    expect(t.perUnit.collateral.ETH).toBeCloseTo(575 / 1500 / 1000, 12);
+    expect(t.released.ETH).toBeCloseTo(1 - 575 / 1500, 12);
+    const all = simulateNote({ ...p, defaultRule: 'all-to-holders' }, { ...rich, behaviour: { missPayment: 3 } });
+    expect(all.perUnit.collateral).toEqual({ USD: 3, ETH: 0.001 });
+    expect(all.released).toEqual({});
   });
   it('a margin call is cured by a top-up, or defaults', () => {
     const eth = { ...base, ratio: 0.5, collateral: [{ symbol: 'ETH', amount: 0.4, haircut: 0.7, prices: [2000, 1900, 1200, 1200, 1200] }] };

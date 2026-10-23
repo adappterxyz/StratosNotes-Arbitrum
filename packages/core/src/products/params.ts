@@ -79,7 +79,17 @@ export interface ProductParams {
   settlementLagDays?: number;
   /** Days of grace after a missed payment date or margin call, 0–7 (default; set per issuance). */
   gracePeriodDays?: number;
+  /**
+   * DEFAULT RULE: what the holders get from escrow when the note defaults.
+   *  'cap-at-owed' (default): what they are owed (the missed payment plus par, valued at the last oracle
+   *    prices, stablecoin first), and the rest of the escrow back to the issuer.
+   *  'all-to-holders': everything in escrow, whatever it is worth.
+   */
+  defaultRule?: DefaultRule;
 }
+
+export type DefaultRule = 'cap-at-owed' | 'all-to-holders';
+export const DEFAULT_RULES: DefaultRule[] = ['cap-at-owed', 'all-to-holders'];
 
 export const MAX_COLLATERAL = 3;
 export const MAX_GRACE_DAYS = 7;
@@ -94,6 +104,7 @@ export function economicsOf(p: ProductParams) {
     collateralRatioPct: p.collateralRatioPct ?? 100,
     settlementLagDays: p.settlementLagDays ?? 2,
     gracePeriodDays: p.gracePeriodDays ?? 2,
+    defaultRule: p.defaultRule ?? 'cap-at-owed' as DefaultRule,
   };
 }
 
@@ -178,6 +189,7 @@ export function validateProductParams(p: ProductParams): string[] {
   }
   if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
   if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
+  if (!DEFAULT_RULES.includes(eco.defaultRule)) e.push(`The default rule must be one of ${DEFAULT_RULES.join(', ')}.`);
   if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
   // The engine holds 8 assets per note: the note, the stablecoin, deliverable tokens and collateral together.
   const nAssets = 2 + (p.settlement === 'physical' ? unds.length : 0) + eco.collateral.length;

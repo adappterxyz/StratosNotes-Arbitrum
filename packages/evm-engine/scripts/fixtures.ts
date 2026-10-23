@@ -75,8 +75,11 @@ const RUNS: Run[] = [
   { type: 'phoenix', params: ETH_COLLATERAL, label: 'margin call cured', path: [80, 90, 96, 75], investors: [500, 500], colPath: { ETH: [100, 95, 60, 60, 60] }, pledgeCover: 1.2, behaviour: { marginCall: { period: 2, topUp: { ETH: 0.2 } } } },
   // The same, not cured: default at the end of grace; holders receive the ETH collateral in kind.
   { type: 'phoenix', params: ETH_COLLATERAL, label: 'margin call not cured -> default', path: [80, 90, 96, 75], investors: [500, 500], colPath: { ETH: [100, 95, 60, 60, 60] }, pledgeCover: 1.2, behaviour: { marginCall: { period: 2 } } },
-  // Stablecoin + ETH collateral; misses coupon 2: both are distributed in kind, pro rata.
-  { type: 'fcn', params: MIXED_COLLATERAL, label: 'mixed collateral, misses coupon 2 -> default', path: [90, 95, 80, 50], investors: [600, 400], colPath: { ETH: [100, 100, 100, 100, 100] }, pledgeCover: 1.2, behaviour: { missPayment: 2 } },
+  // Stablecoin + ETH collateral worth 1.2x; misses coupon 2. Default rule 'cap-at-owed': holders take the coupon
+  // plus par (the stablecoin first, then ETH at its price), and the rest of the ETH goes back to the issuer.
+  { type: 'fcn', params: MIXED_COLLATERAL, label: 'mixed collateral, misses coupon 2 -> default (capped)', path: [90, 95, 80, 50], investors: [600, 400], colPath: { ETH: [100, 100, 100, 100, 100] }, pledgeCover: 1.2, behaviour: { missPayment: 2 } },
+  // The same under 'all-to-holders': both collateral assets go to the holders in kind, pro rata.
+  { type: 'fcn', params: { ...MIXED_COLLATERAL, defaultRule: 'all-to-holders' }, label: 'mixed collateral, misses coupon 2 -> default (all to holders)', path: [90, 95, 80, 50], investors: [600, 400], colPath: { ETH: [100, 100, 100, 100, 100] }, pledgeCover: 1.2, behaviour: { missPayment: 2 } },
 ];
 
 const paramsOf = (r: Run) => r.params ?? EXAMPLE_PRODUCTS[r.type];

@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   COLLATERAL_SYMBOLS, DEFAULT_HAIRCUT, economicsOf, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses,
-  simulatePerf, totalPerUnit, validateProductParams, type CollateralSymbol, type ProductParams, type ProductType,
+  simulatePerf, totalPerUnit, validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from './PayoffChart';
 
@@ -25,7 +25,7 @@ function NumField({ id, label, value, onChange, hint, step = 'any' }: { id: stri
 
 export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial<ProductParams>) => void }) {
   const use = productUses(p.productType);
-  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays });
+  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule });
   const eco = economicsOf(p);
   const colSyms = eco.collateral.map(c => c.symbol);
   const toggleCol = (c: CollateralSymbol) => {
@@ -99,7 +99,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
             </button>
           ))}
         </div>
-        <span className="hint">Locked in the note's escrow until the final payment; on a default it goes to the holders. Tokens count at {eco.collateral.filter(c => c.symbol !== 'USD').map(c => `${c.haircutPct}% (t${c.symbol})`).join(', ') || 'their Chainlink price after a haircut'} of their Chainlink value.</span>
+        <span className="hint">Locked in the note's escrow until the final payment; on a default the holders are paid from it (see the default rule). Tokens count at {eco.collateral.filter(c => c.symbol !== 'USD').map(c => `${c.haircutPct}% (t${c.symbol})`).join(', ') || 'their Chainlink price after a haircut'} of their Chainlink value.</span>
       </div>
       {eco.collateral.filter(c => c.symbol !== 'USD').map(c => (
         <NumField key={c.symbol} id={`pd-hc-${c.symbol}`} label={`t${c.symbol} counted at %`} value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
@@ -107,6 +107,14 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
       <NumField id="pd-ratio" label="Collateral ratio % of notional" value={eco.collateralRatioPct} onChange={v => set({ collateralRatioPct: v })} hint="Default; set per issuance" />
       <NumField id="pd-lag" label="Payment lag (days)" value={eco.settlementLagDays} onChange={v => set({ settlementLagDays: v })} hint="After each observation" />
       <NumField id="pd-grace" label={`Grace period (days, 0-${MAX_GRACE_DAYS})`} value={eco.gracePeriodDays} onChange={v => set({ gracePeriodDays: v })} hint="Then default" />
+      <div className="field">
+        <label htmlFor="pd-default">On a default, holders get</label>
+        <select id="pd-default" value={eco.defaultRule} onChange={e => set({ defaultRule: e.target.value as DefaultRule })}>
+          <option value="cap-at-owed">What they are owed; the rest back to the issuer</option>
+          <option value="all-to-holders">Everything in escrow</option>
+        </select>
+        <span className="hint">Owed = the missed payment plus par, valued at the last Chainlink prices (stablecoin first).</span>
+      </div>
     </div>
   );
 }

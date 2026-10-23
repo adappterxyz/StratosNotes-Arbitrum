@@ -135,9 +135,9 @@ export interface NoteOutcome {
   defaulted?: { period: number; reason: 'payment' | 'margin' };
   /** What one unit of the note received in the end: cash, delivered tokens, collateral in kind. */
   perUnit: { cash: number; deliver: Record<string, number>; collateral: Record<string, number> };
-  /** What goes back to the issuer at release (none after a default). */
+  /** What goes back to the issuer at release, or after a default under 'cap-at-owed' what the holders were not owed. */
   released: Record<string, number>;
-  /** Stablecoin left in escrow and returned (or, after a default, distributed). */
+  /** Stablecoin left in escrow and returned to the issuer (after a default: what the holders were not owed). */
   leftoverCash: number;
   /** Fees paid to the paying agent. */
   fees: number;
@@ -157,10 +157,30 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
   const out: NoteOutcome = { calls: [], coverage: [], perUnit: { cash: 0, deliver: {}, collateral: {} }, released: {}, leftoverCash: 0, fees: 0 };
   let escrowCash = 0;
   const value = (k: number) => col.reduce((a, c) => a + c.amount * (c.prices[k] ?? 1) * c.haircut, 0);
-  const defaultNow = (period: number, reason: 'payment' | 'margin') => {
+  /**
+   * Default at `period`. 'all-to-holders': the whole escrow, pro rata. 'cap-at-owed' (the default rule): the
+   * holders take what they are owed, `owedPerUnit` (the missed payment, plus par unless that payment was a
+   * redemption), stablecoin first, then each collateral asset at its price then (no haircut); the issuer gets the rest.
+   */
+  const defaultNow = (period: number, reason: 'payment' | 'margin', owedPerUnit: number) => {
     out.defaulted = { period, reason };
-    out.perUnit.cash += escrowCash / s.sold;
-    for (const c of col) out.perUnit.collateral[c.symbol] = c.amount / s.sold;
+    if ((p.defaultRule ?? 'cap-at-owed') === 'all-to-holders') {
+      out.perUnit.cash += escrowCash / s.sold;
+      for (const c of col) out.perUnit.collateral[c.symbol] = c.amount / s.sold;
+      return out;
+    }
+    let rem = owedPerUnit * s.sold;
+    const cash = Math.max(0, Math.min(escrowCash, rem));
+    rem -= cash;
+    out.perUnit.cash += cash / s.sold;
+    out.leftoverCash = escrowCash - cash;
+    for (const c of col) {
+      const px = c.prices[period] ?? 1;
+      const take = Math.max(0, Math.min(c.amount, rem / px));
+      rem -= take * px;
+      out.perUnit.collateral[c.symbol] = take / s.sold;
+      if (c.amount - take > 0) out.released[c.symbol] = c.amount - take;
+    }
     return out;
   };
   const margin = (k: number) => {
@@ -172,10 +192,10 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
     out.coverage.push({ period: k, value: v, required, met: false, cured });
     return cured;
   };
-  if (!margin(0)) return defaultNow(0, 'margin');
+  if (!margin(0)) return defaultNow(0, 'margin', 1);
   const last = ref.calledAt ?? n;
   for (let k = 1; k <= last; k++) {
-    if (!margin(k)) return defaultNow(k, 'margin');
+    if (!margin(k)) return defaultNow(k, 'margin', 1);
     const final = k === last;
     const coupon = ref.coupons[k - 1] ?? 0;
     const knocked = final && !ref.calledAt && p.settlement === 'physical' && s.worstAtMaturity && ref.redemptionCash < 1 && p.productType !== 'ppn';
@@ -192,8 +212,8 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
     const partial = b.partialPayment?.period === k ? b.partialPayment.fraction : undefined;
     const call: FundingCall = { period: k, perUnit, ...(deliver ? { deliver } : {}), fee, total, final, outcome: missed || partial !== undefined ? 'missed' : b.curePayment === k ? 'cured' : 'paid' };
     out.calls.push(call);
-    if (missed) return defaultNow(k, 'payment');
-    if (partial !== undefined) { escrowCash += total * partial; return defaultNow(k, 'payment'); }
+    if (missed) return defaultNow(k, 'payment', perUnit + (final && !deliver ? 0 : 1));
+    if (partial !== undefined) { escrowCash += total * partial; return defaultNow(k, 'payment', perUnit + (final && !deliver ? 0 : 1)); }
     out.perUnit.cash += perUnit;
     out.fees += fee;
     if (deliver) out.perUnit.deliver[deliver.symbol] = (out.perUnit.deliver[deliver.symbol] ?? 0) + deliver.perUnit;
