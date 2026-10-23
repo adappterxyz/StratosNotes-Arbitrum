@@ -21,3 +21,8 @@ deployments/local/
 log/
 # CRE CLI build scratch
 .cre_build_tmp.js
+
+# Site build output (web/build.sh)
+web/dist/
+landing/dist/
+landing/tsconfig.tsbuildinfo

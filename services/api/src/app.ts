@@ -39,6 +39,9 @@ export interface AppDeps {
   faucetKey?: Hex;
   /** Client IP for a request (the Node server passes the socket address). */
   clientIp?: (c: Context) => string;
+  /** When set, X-Forwarded-For is trusted only on requests carrying it in X-SN-Proxy (the site's Worker adds it),
+   * so a caller reaching the API directly cannot spoof its IP past the rate limits. */
+  proxySecret?: string;
   now?: () => number;
 }
 
@@ -80,7 +83,7 @@ export function createApp(deps: AppDeps) {
   const streams = new Map<string, number>();
   const chainKeys = new Set(config.chains.map(c => c.key));
   const ipOf = (c: Context) => {
-    if (config.trustProxy) {
+    if (config.trustProxy && (!deps.proxySecret || c.req.header('x-sn-proxy') === deps.proxySecret)) {
       const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
       if (fwd) return fwd;
     }

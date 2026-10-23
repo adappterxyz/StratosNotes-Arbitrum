@@ -2,7 +2,7 @@
  * Run the API on Node:
  *   API_CONFIG=config.json DATABASE_URL=postgres://… PORT=8787 npx tsx src/main.ts
  * Optional environment: CF_ACCOUNT_ID + CF_AI_TOKEN (Workers AI, when the config enables "ai"), FAUCET_KEY
- * (dev chains with a faucet only).
+ * (dev chains with a faucet only), SN_PROXY_SECRET (trust X-Forwarded-For only from the site's Worker).
  */
 import { readFileSync } from 'node:fs';
 import { serve } from '@hono/node-server';
@@ -21,7 +21,7 @@ const ai = config.ai && process.env.CF_ACCOUNT_ID && process.env.CF_AI_TOKEN ? r
 if (config.ai && !ai) console.warn('AI is enabled in the config but CF_ACCOUNT_ID / CF_AI_TOKEN are not set: /api/ai answers 503');
 const faucetKey = process.env.FAUCET_KEY as Hex | undefined;
 const app = createApp({
-  db, config, ai, faucetKey,
+  db, config, ai, faucetKey, proxySecret: process.env.SN_PROXY_SECRET,
   clientIp: c => (c.env as { incoming?: { socket?: { remoteAddress?: string } } })?.incoming?.socket?.remoteAddress ?? 'unknown',
 });
 const port = Number(process.env.PORT ?? 8787);

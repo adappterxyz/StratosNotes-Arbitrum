@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-10-23T04:07:35.002Z",
+  "deployments": [
+    {
+      "key": "arbitrum-sepolia",
+      "name": "Arbitrum Sepolia",
+      "explorer": "https://sepolia.arbiscan.io",
+      "deployed": false
+    },
+    {
+      "key": "robinhood-testnet",
+      "name": "Robinhood Chain testnet",
+      "explorer": "https://explorer.testnet.chain.robinhood.com",
+      "deployed": false
+    }
+  ],
+  "runs": []
+}
