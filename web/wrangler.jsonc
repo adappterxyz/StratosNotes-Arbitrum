@@ -21,11 +21,17 @@
   "preview_urls": false,
   // The AI assistant runs here (Workers AI); everything else under /api/ goes to the API on the server.
   "ai": { "binding": "AI" },
+  // Cloudflare Email Service (beta, Workers Paid): alert emails from alerts@notes.markets via /internal/email.
+  // Needs notes.markets onboarded under Compute > Email Service > Email Sending (docs/NOTIFICATIONS.md).
+  // Without it the relay answers 503 and the API holds its outbox.
+  "send_email": [{ "name": "EMAIL", "remote": true }],
   "ratelimits": [{ "name": "AI_LIMIT", "namespace_id": "4601", "simple": { "limit": 20, "period": 60 } }],
   "vars": {
     // The API (services/api) behind its own Cloudflare Tunnel (docs/DEPLOY.md).
-    "API_ORIGIN": "https://api.notes.markets"
+    "API_ORIGIN": "https://api.notes.markets",
+    "EMAIL_FROM": "alerts@notes.markets"
   }
+  // Secrets: EMAIL_RELAY_SECRET (the same value the API has), for /internal/email.
   // Secret: SN_PROXY_SECRET (the same value the API has), so the API trusts the client IP this Worker forwards:
   //   npx wrangler secret put SN_PROXY_SECRET
 }

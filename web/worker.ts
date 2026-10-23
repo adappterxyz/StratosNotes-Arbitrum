@@ -5,6 +5,8 @@
  *   /app/*        the app (static; client-side routes fall back to /app/index.html)
  *   /api/ai       the AI assistant, on Workers AI here (term sheet -> note, workflow edits, questions)
  *   /api/*        everything else, proxied to the API (services/api) on the server, through its tunnel
+ *   /internal/email  the API's email relay: Cloudflare Email Service (the EMAIL send_email binding), guarded by
+ *                    EMAIL_RELAY_SECRET. Answers 503 until Email Sending is onboarded for notes.markets.
  *
  * The browser only ever talks to this origin, so the API needs no CORS for the site, and live updates (SSE)
  * stream straight through.
@@ -19,6 +21,43 @@ interface Env {
   AI_LIMIT: { limit(o: { key: string }): Promise<{ success: boolean }> };
   API_ORIGIN: string;
   SN_PROXY_SECRET?: string;
+  /** Cloudflare Email Service (send_email binding); absent until Email Sending is onboarded and bound. */
+  EMAIL?: { send(m: { to: string; from: string | { email: string; name?: string }; subject: string; html: string; text: string; headers?: Record<string, string> }): Promise<{ messageId: string }> };
+  EMAIL_RELAY_SECRET?: string;
+  EMAIL_FROM?: string;
+}
+
+/** Constant-time string comparison (Workers have no timingSafeEqual on strings). */
+function sameSecret(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+/** The API's email relay. Exported for tests. */
+export async function relayEmail(req: Request, env: Pick<Env, 'EMAIL' | 'EMAIL_RELAY_SECRET' | 'EMAIL_FROM'>): Promise<Response> {
+  const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+  const given = req.headers.get('X-Email-Relay-Secret') ?? '';
+  if (!env.EMAIL_RELAY_SECRET || !given || !sameSecret(given, env.EMAIL_RELAY_SECRET)) return json({ error: 'Not allowed.' }, 401);
+  const b = await req.json().catch(() => null) as { to?: unknown; subject?: unknown; html?: unknown; text?: unknown } | null;
+  const ok = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max;
+  if (!b || !ok(b.to, 254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.to)) || !ok(b.subject, 300) || !ok(b.html, 200_000) || !ok(b.text, 100_000)) {
+    return json({ error: 'Send {to, subject, html, text}.' }, 400);
+  }
+  if (!env.EMAIL) return json({ error: 'Email Sending is not configured on this Worker (no EMAIL binding); onboard notes.markets in Email Service.' }, 503);
+  try {
+    const r = await env.EMAIL.send({
+      to: String(b.to), from: { email: env.EMAIL_FROM ?? 'alerts@notes.markets', name: 'notes.markets' },
+      subject: String(b.subject), html: String(b.html), text: String(b.text),
+    });
+    return json({ messageId: r.messageId });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Not onboarded or paused: hold (503), the API retries later. Anything else: a failure for this email.
+    const notReady = /E_SENDER_DOMAIN_NOT_AVAILABLE|E_ACCOUNT_SUSPENDED|not (onboarded|available)|paused/i.test(msg);
+    return json({ error: msg }, notReady ? 503 : 502);
+  }
 }
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -63,6 +102,8 @@ export default {
       return Response.redirect(to.toString(), 301);
     }
     const url = new URL(req.url);
+    if (url.pathname === '/internal/email' && req.method === 'POST') return relayEmail(req, env);
+    if (url.pathname.startsWith('/internal/')) return Response.json({ error: 'Not found' }, { status: 404 });
     if (url.pathname === '/api/ai' && req.method === 'POST') return ai(req, env);
     if (url.pathname.startsWith('/api/')) return proxy(req, env, url);
     if (url.pathname === '/app') return Response.redirect(`${url.origin}/app/`, 301);
