@@ -1,14 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import './notes.css';
-import Explorer from './explorer/Explorer';
-import './explorer/explorer.css';
+import Carousel from './Carousel';
+import ExplorerPanel from './ExplorerPanel';
+import { DEFAULT_START, type ExplorerStart } from './explorer/start';
 import proofJson from './proof.json';
 
 const APP_URL = '/app/';
 const FLOW_URL = 'https://stratoslab.app';
 const SOLANA_BUILD = 'https://sp.stratoslab.app';
 const STRATOS_URL = 'https://stratoslab.xyz';
+const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
 
 // Written by scripts/landing-proof.ts from deployments/*.json and docs/evidence.json: no typed-in numbers.
 type Deployment = { key: string; name: string; explorer: string } & (
@@ -25,6 +27,19 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export default function Landing() {
   const rootRef = useRef<HTMLDivElement>(null);
+  // The full explorer opens on request only (a card, the "Try a note" buttons, or a #explore link).
+  const [explorer, setExplorer] = useState<ExplorerStart | null>(() =>
+    typeof window !== 'undefined' && window.location.hash === '#explore' ? DEFAULT_START : null);
+  const openExplorer = useCallback((s: ExplorerStart = DEFAULT_START) => setExplorer(s), []);
+  const closeExplorer = useCallback(() => {
+    setExplorer(null);
+    if (window.location.hash === '#explore') history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, []);
+  useEffect(() => {
+    const onHash = () => { if (window.location.hash === '#explore') setExplorer(e => e ?? DEFAULT_START); };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   // Terrain, nav state, reveals (shared with the Flow landing).
   useEffect(() => {
     const root = rootRef.current;
@@ -140,14 +155,14 @@ export default function Landing() {
             <span>StratosNotes</span>
           </a>
           <nav className="nav-links">
-            <a href="#explore">Explore notes</a>
+            <a href="#notes">What notes do</a>
             <a href="#how">How a note works</a>
             <a href="#arbitrum">Why Arbitrum</a>
             <a href="#story">Story</a>
             <a href="#proof">Proof</a>
           </nav>
           <div className="nav-cta">
-            <a href="#explore" className="btn btn-primary">Explore notes <span className="arrow">→</span></a>
+            <button type="button" className="btn btn-primary" onClick={() => openExplorer()}>Try a note <span className="arrow">→</span></button>
           </div>
         </div>
       </header>
@@ -157,32 +172,40 @@ export default function Landing() {
           <div className="wrap hero-inner">
             <div className="badge" data-reveal>
               <span className="dot" />
-              <span><b>Launching on Arbitrum Sepolia · Robinhood Chain testnet</b> · priced and enforced by Chainlink CRE</span>
+              <span><b>Launching on testnet</b> · Arbitrum Sepolia and Robinhood Chain</span>
             </div>
             <h1 data-reveal data-reveal-d="1">
               One note, two sides:<br /><span className="grad-text">yield for investors, funding for issuers.</span>
             </h1>
             <p className="sub" data-reveal data-reveal-d="2">
-              A structured note turns a view on stocks or crypto into an outcome agreed upfront. Investors pick it for
-              yield, protection, exposure or a hedge. Issuers use it to raise stablecoins against collateral they pledge
-              and cannot withdraw. Chainlink observes every date and checks that collateral; the issuer funds each
-              payment when it falls due, or the collateral goes to the holders.
+              A note turns a view on stocks or crypto into a result agreed before you buy. Investors get income,
+              protection or exposure. Issuers raise money against collateral they can't touch until they have paid.
             </p>
             <div className="hero-cta" data-reveal data-reveal-d="3">
-              <a href="#explore" className="btn btn-primary">Find the note for you <span className="arrow">→</span></a>
+              <a href="#notes" className="btn btn-primary">See what notes do <span className="arrow">→</span></a>
               <a href="#how" className="btn btn-ghost">How a note works</a>
+            </div>
+            <div className="built-on" data-reveal data-reveal-d="4">
+              <span className="built-label">Building on</span>
+              <span className="built-mark"><img src="/logos/arbitrum.svg" alt="Arbitrum" height={30} />Arbitrum</span>
+              <span className="built-mark"><img src="/logos/robinhood-chain.svg" alt="Robinhood" height={28} />Robinhood Chain</span>
+              <span className="built-mark"><img src="/logos/chainlink.svg" alt="Chainlink" height={22} /></span>
             </div>
           </div>
         </section>
 
-        <section id="explore">
+        <section id="notes">
           <div className="wrap">
-            <div className="section-head" data-reveal>
-              <span className="eyebrow">Note explorer</span>
-              <h2>Choose a side, a goal and a market. <span className="grad-text">See what the note does.</span></h2>
-              <p>Every number below is computed by the same reference payoff the on-chain engine is tested against. Drag the price path to try your own market.</p>
+            <div className="section-head">
+              <span className="eyebrow">What a note can do</span>
+              <h2>Six things a note does, <span className="grad-text">for each side.</span></h2>
+              <p>Turn the ring, or let it turn. Each card opens the full explorer on that note.</p>
             </div>
-            <Explorer />
+            <Carousel onOpen={openExplorer} />
+            <div className="try-row">
+              <button type="button" className="btn btn-ghost" onClick={() => openExplorer()}>Try a note yourself <span className="arrow">→</span></button>
+              <span>Pick a side and a goal, shape the market, and see every payment.</span>
+            </div>
           </div>
         </section>
 
@@ -213,19 +236,19 @@ export default function Landing() {
             </div>
             <div className="chain-cards">
               <div className="chain-card" data-reveal>
-                <div className="logo">Robinhood Chain</div>
+                <div className="logo"><img src="/logos/robinhood-chain.svg" alt="" height={26} />Robinhood Chain</div>
                 <span className="status-pill"><i />Testnet 46630</span>
                 <p>Robinhood's chain on the Arbitrum stack, built for tokenized stocks. Chainlink CRE writes to its testnet; until CRE reaches its mainnet, a fallback keeper covers it.</p>
                 <ul><li>Tokenized stocks</li><li>CRE on testnet today</li><li>The same engine as Arbitrum Sepolia</li></ul>
               </div>
               <div className="chain-card" data-reveal data-reveal-d="1">
-                <div className="logo">Arbitrum Sepolia</div>
+                <div className="logo"><img src="/logos/arbitrum.svg" alt="" height={28} />Arbitrum Sepolia</div>
                 <span className="status-pill"><i />Testnet 421614</span>
                 <p>The crypto notes, and a path to Arbitrum One: the engine is plain EVM, so the contracts tested here are the ones that would run there.</p>
                 <ul><li>CRE reads and writes Arbitrum</li><li>Test tokens from an on-chain faucet</li><li>Collateral in stablecoin or tokens</li></ul>
               </div>
               <div className="chain-card" data-reveal data-reveal-d="2">
-                <div className="logo"><img src="/logos/chainlink.svg" alt="" /> Chainlink prices</div>
+                <div className="logo"><img src="/logos/chainlink.svg" alt="Chainlink" height={20} /><span className="sr-only">Chainlink</span> prices</div>
                 <span className="status-pill"><i />Read by CRE</span>
                 <p>Crypto from Chainlink's Ethereum feeds; TSLA, NVDA, AAPL and SPY from its Arbitrum One feeds, which follow NYSE hours. Every price is read at a finalized block and checked for staleness and bounds.</p>
                 <ul><li>ETH · BTC · SOL</li><li>TSLA · NVDA · AAPL · SPY</li><li>Underlyings and collateral</li></ul>
@@ -238,13 +261,13 @@ export default function Landing() {
           <div className="wrap">
             <div className="section-head" data-reveal>
               <span className="eyebrow">Where it comes from</span>
-              <h2>From a workflow tool on Canton <span className="grad-text">to one product.</span></h2>
+              <h2>From a workflow builder <span className="grad-text">to one product.</span></h2>
             </div>
             <div className="chain-cards">
               <div className="chain-card" data-reveal>
                 <div className="logo">StratosFlow</div>
-                <span className="status-pill"><i />Before · Canton</span>
-                <p>A visual BPMN workflow builder that compiles any business process to Daml on the Canton Network, built through a Canton accelerator.</p>
+                <span className="status-pill"><i />Before · workflow builder</span>
+                <p>Our visual workflow builder: draw any business process as a BPMN diagram and it compiles to smart-contract code.</p>
                 <span className="foot-note"><a href={FLOW_URL} target="_blank" rel="noopener">stratoslab.app</a></span>
               </div>
               <div className="chain-card" data-reveal data-reveal-d="1">
@@ -314,7 +337,7 @@ export default function Landing() {
               <p>Claim test tokens, pledge collateral, issue a note with observations minutes apart, and watch Chainlink CRE run it on Arbitrum Sepolia or Robinhood Chain testnet.</p>
               <div className="hero-cta">
                 <a href={APP_URL} className="btn btn-primary">App launching soon <span className="arrow">→</span></a>
-                <a href="#explore" className="btn btn-ghost">Back to the explorer</a>
+                <button type="button" className="btn btn-ghost" onClick={() => openExplorer()}>Try a note yourself</button>
               </div>
             </div>
           </div>
@@ -328,11 +351,12 @@ export default function Landing() {
             <a href={STRATOS_URL} target="_blank" rel="noopener">stratoslab.xyz</a>
             <a href={FLOW_URL} target="_blank" rel="noopener">stratoslab.app</a>
             <a href={SOLANA_BUILD} target="_blank" rel="noopener">sp.stratoslab.app</a>
-            <span style={{ color: 'var(--muted)', fontSize: 14 }}>Code: coming soon</span>
+            <a href={REPO_URL} target="_blank" rel="noopener">Code on GitHub</a>
           </div>
           <small>© {new Date().getFullYear()} StratosNotes · by Stratos Lab · Chain and partner names are trademarks of their owners; no endorsement implied.</small>
         </div>
       </footer>
+      {explorer && <ExplorerPanel start={explorer} onClose={closeExplorer} />}
     </div>
   );
 }

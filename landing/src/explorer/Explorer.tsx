@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import PathChart, { LINE_COLORS } from './PathChart';
+import './explorer.css';
+import { DEFAULT_START, type ExplorerStart } from './start';
 import {
   BLURB, calls, COLLATERAL, CRYPTO, defaultTerms, explain, GOALS, MONTHS, N, outcome, PRESETS, presetPaths, PRODUCT_LABELS,
   PRODUCTS, productUses, SHORT, STOCKS, DELIVERABLE,
@@ -22,12 +24,12 @@ function Slider({ id, label, value, min, max, step = 1, unit = '%', onChange, hi
   );
 }
 
-export default function Explorer() {
-  const [role, setRole] = useState<Role>('investor');
-  const [goalId, setGoalId] = useState('yield');
-  const [terms, setTerms] = useState<Terms>(() => defaultTerms('phoenix', ['ETH']));
-  const [preset, setPreset] = useState<Preset | null>('Dip & recover');
-  const [paths, setPaths] = useState<number[][]>(() => presetPaths('Dip & recover', 1));
+export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerStart }) {
+  const [role, setRole] = useState<Role>(start.role);
+  const [goalId, setGoalId] = useState(start.goal);
+  const [terms, setTerms] = useState<Terms>(() => ({ ...defaultTerms(start.type, start.syms), ...(start.physical ? { physical: true } : {}) }));
+  const [preset, setPreset] = useState<Preset | null>(start.preset);
+  const [paths, setPaths] = useState<number[][]>(() => presetPaths(start.preset, start.syms.length));
   const [invest, setInvest] = useState(10_000);
   const [notional, setNotional] = useState(1_000_000);
   const [collId, setCollId] = useState('ETH');
