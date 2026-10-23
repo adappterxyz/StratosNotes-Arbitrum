@@ -26,7 +26,7 @@ export const STEPS: LifecycleStep[] = [
   {
     id: 'terms', type: 'event', x: 8, y: 50, label: 'Term sheet',
     tag: 'Pre-trade · Issuer', title: 'Approve Terms', actor: 'Issuer',
-    desc: 'Size, strike date and observation dates are set per issuance, not when the product is designed. The coupon reserve is deposited in the same step.',
+    desc: 'Size, dates, settlement lag and grace period are set per issuance. The issuer pledges collateral at a ratio they choose: stablecoin, or tokens valued by Chainlink with a haircut. It stays locked in the note.',
     code: {
       evm: `${c('// The Issuer runs its user task on FlowEngine (Arbitrum Sepolia or Robinhood testnet)')}
 engine.${f('executeStep')}(pid, Task_ApproveTerms, ${q('0')}, [
@@ -41,7 +41,7 @@ ${c('// tUSD from the issuer (approved for exactly that amount)')}`,
   {
     id: 'book', type: 'box', x: 25, y: 26, label: 'Subscribe',
     tag: 'Open book · Investors', title: 'Subscribe (DvP)', actor: 'Any investor',
-    desc: 'Anyone subscribes until the strike date. Each subscription swaps stablecoins for note units atomically; units can later be transferred in whole or in part.',
+    desc: 'Anyone subscribes until the strike date. Each subscription swaps stablecoins for note units atomically, and the proceeds go to the issuer as funding. Units can later be transferred in whole or in part.',
     code: {
       evm: `${c('// An OPEN role: anyone may run it, again and again,')}
 ${c('// until the strike date (a repeatable window)')}
@@ -73,7 +73,7 @@ ${c('// every value bounds-checked, then straight-through')}`,
   {
     id: 'observe', type: 'box', x: 60, y: 26, label: 'Observe k',
     tag: 'Oracle step · Chainlink CRE', title: 'Observe on each date', actor: 'Chainlink CRE',
-    desc: 'Each observation waits for its own date, set at pre-trade. One report runs the observation and everything after it that needs nobody: coupon, memory, autocall check.',
+    desc: 'Each observation waits for its own date. One report fixes what the issuer owes this period and checks the collateral still covers the note; if not, the issuer gets a margin call.',
     code: {
       evm: `${c('// The same workflow, every date. The engine runs the step,')}
 ${c('// then everything after it in the same transaction:')}
@@ -99,8 +99,8 @@ ${c('// nobody can override a conditioned gateway')}`,
   },
   {
     id: 'redeem', type: 'end', x: 93, y: 50, label: 'Redeem',
-    tag: 'Settlement · every holder', title: 'Redeem and withdraw', actor: 'Holders',
-    desc: 'Every holder of the note is paid units × per-unit amount, complete by construction, and the units are retired. Holders withdraw tUSD when they like.',
+    tag: 'Settlement · every holder', title: 'Fund, pay or default', actor: 'Holders',
+    desc: 'The issuer funds each coupon and the redemption by the payment date plus a grace period of up to 7 days. Funded: every holder is paid and, at the end, the collateral is released. Not funded: the note defaults and the collateral goes to holders pro rata.',
     code: {
       evm: `${c('// distribute + retire: every holder in the ledger')}
 Task_Autocall2   ${f('distribute')}(tUSD per unit ${q('1')}, retire)
