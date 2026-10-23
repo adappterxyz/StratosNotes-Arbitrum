@@ -18,7 +18,8 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 /// calls (or not); a keeper advances due timers. Each holder's cash, delivered tokens and collateral received,
 /// the issuer's released collateral and the paying agent's fees must equal the REFERENCE model
 /// (fixtures: scripts/fixtures.ts, from packages/core payoff.ts).
-contract ProductsTest is Test {
+/// The fixtures and the issue/subscribe/replay helpers, shared by the product tests and the invariant suite.
+abstract contract ProductsBase is Test {
     struct Pledge {
         uint8 token;
         uint256 base;
@@ -77,7 +78,7 @@ contract ProductsTest is Test {
     uint256 maxFundGas;
     uint256[] reportGas; // every report and advance in the last replay, in order
 
-    function setUp() public {
+    function setUp() public virtual {
         engine = new FlowEngine(admin, forwarder);
         tokens[1] = new MockERC20("tUSD", 6);
         tokens[2] = new MockERC20("tETH", 9);
@@ -219,22 +220,26 @@ contract ProductsTest is Test {
         assertEq(engine.processOf(pid).status, engine.COMPLETED(), string.concat(f.name, ": completed"));
         assertEq(defaulted, f.defaulted, string.concat(f.name, ": default milestone"));
         assertApproxEqAbs(engine.balanceOf(pid, pa, CASH), f.paFee, uint256(TOLERANCE), string.concat(f.name, ": paying agent fees"));
-        for (uint256 k = 0; k < holders.length; k++) {
-            for (uint8 a = CASH; a < f.tokenOf.length; a++) {
-                int256 got = engine.balanceOf(pid, holders[k], a);
-                assertApproxEqAbs(got, f.expected[k][a], uint256(TOLERANCE), string.concat(f.name, ": holder ", vm.toString(k), " asset ", vm.toString(a)));
-                // Withdrawn as the ERC-20 (cash, delivered tokens, collateral received on a default).
-                uint256 d = decimals[f.tokenOf[a]];
-                uint256 base = uint256(got * int256(10 ** d) / SCALE);
-                if (base > 0) {
-                    uint256 before = tokens[f.tokenOf[a]].balanceOf(holders[k]);
-                    vm.prank(holders[k]);
-                    engine.withdraw(pid, a, base);
-                    assertEq(tokens[f.tokenOf[a]].balanceOf(holders[k]) - before, base, string.concat(f.name, ": withdrawn"));
-                }
-            }
+        for (uint256 k = 0; k < holders.length; k++) _checkHolder(f, pid, holders[k], k);
+        _checkEscrow(f, pid, issuer, escrow);
+    }
+
+    /// A holder's balances equal the reference, and each is withdrawn as the ERC-20.
+    function _checkHolder(Fixture memory f, uint256 pid, address holder, uint256 k) internal {
+        for (uint8 a = CASH; a < f.tokenOf.length; a++) {
+            int256 got = engine.balanceOf(pid, holder, a);
+            assertApproxEqAbs(got, f.expected[k][a], uint256(TOLERANCE), string.concat(f.name, ": holder ", vm.toString(k), " asset ", vm.toString(a)));
+            uint256 base = uint256(got * int256(10 ** decimals[f.tokenOf[a]]) / SCALE);
+            if (base == 0) continue;
+            uint256 before = tokens[f.tokenOf[a]].balanceOf(holder);
+            vm.prank(holder);
+            engine.withdraw(pid, a, base);
+            assertEq(tokens[f.tokenOf[a]].balanceOf(holder) - before, base, string.concat(f.name, ": withdrawn"));
         }
-        // Escrow is empty at the end: released to the issuer, or distributed on a default.
+    }
+
+    /// Escrow is empty at the end: released to the issuer, or distributed on a default.
+    function _checkEscrow(Fixture memory f, uint256 pid, address issuer, address escrow) internal view {
         for (uint8 a = CASH; a < f.tokenOf.length; a++) {
             assertLt(engine.balanceOf(pid, escrow, a), 1e5, string.concat(f.name, ": escrow emptied")); // dust < 0.00001
             if (f.issuerCollateral[a] != 0 || f.defaulted) {
@@ -242,9 +247,9 @@ contract ProductsTest is Test {
             }
         }
     }
+}
 
-    // ---------------------------------------------------------------------------------------------------------
-
+contract ProductsTest is ProductsBase {
     function test_everyProductPaysItsReferencePayoff() public {
         assertGt(fixtures.length, 18);
         for (uint256 i = 0; i < fixtures.length; i++) {
@@ -516,6 +521,64 @@ contract ProductsTest is Test {
         vm.prank(forwarder);
         vm.expectRevert(FlowEngine.PayoutsNotSupported.selector);
         engine.onReport("", abi.encode(uint256(1), uint16(0xFFFE), new int256[](0)));
+    }
+
+    /// The production identity checks (Chainlink's ReceiverTemplate): workflow id, author and name, with metadata
+    /// as the KeystoneForwarder sends it (id ‖ name ‖ owner ‖ reportId).
+    function test_workflowIdentityChecks() public {
+        Fixture memory f = _fixture(0);
+        uint256 pid = _issue(f, makeAddr("wi"), makeAddr("wp"));
+        vm.warp(f.strikeAt);
+        bytes memory report = abi.encode(pid, uint16(0xFFFF), new int256[](0));
+        bytes32 wid = keccak256("workflow");
+        address author = makeAddr("author");
+        vm.startPrank(admin);
+        engine.setExpectedWorkflowId(wid);
+        engine.setExpectedAuthor(author);
+        vm.stopPrank();
+        bytes10 name = engine.getExpectedWorkflowName();
+        assertEq(name, bytes10(0));
+
+        vm.startPrank(forwarder);
+        vm.expectRevert(CreReceiver.InvalidMetadata.selector);
+        engine.onReport("", report);
+        vm.expectRevert(abi.encodeWithSelector(CreReceiver.InvalidWorkflowId.selector, keccak256("other"), wid));
+        engine.onReport(abi.encodePacked(keccak256("other"), bytes10(0), author, bytes2(0)), report);
+        vm.expectRevert(abi.encodeWithSelector(CreReceiver.InvalidAuthor.selector, makeAddr("x"), author));
+        engine.onReport(abi.encodePacked(wid, bytes10(0), makeAddr("x"), bytes2(0)), report);
+        engine.onReport(abi.encodePacked(wid, bytes10(0), author, bytes2(0)), report);
+        vm.stopPrank();
+
+        // A name check needs the author check (names are unique per owner only).
+        vm.prank(admin);
+        engine.setExpectedWorkflowName("notes-keeper-evm");
+        bytes10 expected = engine.getExpectedWorkflowName();
+        vm.startPrank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(CreReceiver.InvalidWorkflowName.selector, bytes10("wrongname!"), expected));
+        engine.onReport(abi.encodePacked(wid, bytes10("wrongname!"), author, bytes2(0)), report);
+        engine.onReport(abi.encodePacked(wid, expected, author, bytes2(0)), report);
+        vm.stopPrank();
+        vm.prank(admin);
+        engine.setExpectedAuthor(address(0));
+        vm.prank(forwarder);
+        vm.expectRevert(CreReceiver.WorkflowNameRequiresAuthorValidation.selector);
+        engine.onReport(abi.encodePacked(wid, expected, author, bytes2(0)), report);
+
+        // Clearing the name; moving the forwarder (the old one is refused afterwards).
+        vm.startPrank(admin);
+        engine.setExpectedWorkflowName("");
+        engine.setExpectedWorkflowId(bytes32(0));
+        address next = makeAddr("forwarder2");
+        engine.setForwarderAddress(next);
+        vm.stopPrank();
+        assertEq(engine.getExpectedAuthor(), address(0));
+        assertEq(engine.getExpectedWorkflowId(), bytes32(0));
+        assertEq(engine.getForwarderAddress(), next);
+        vm.prank(forwarder);
+        vm.expectRevert(abi.encodeWithSelector(CreReceiver.InvalidSender.selector, forwarder, next));
+        engine.onReport("", report);
+        vm.prank(next);
+        engine.onReport("", report);
     }
 
     function test_supportsTheReceiverInterface() public view {
