@@ -46,11 +46,14 @@ async function issueOne(page: Page): Promise<string> {
   await page.getByRole('button', { name: /12M Phoenix \(memory\) on ETH/ }).click();
   await page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /^Issue$/ }).click();
   await page.locator('#is-size').fill('1000');
-  await page.locator('#is-strike').fill('3');
-  await page.locator('#is-every').fill('1');
-  // The form proposes a pledge that exactly covers 100% of the notional, and lag/grace that fit a minute.
+  await page.locator('#is-strike').fill('4');
+  await page.locator('#is-every').fill('2');
+  // The form proposes a pledge that exactly covers 100% of the notional.
   await page.locator('[data-collateral]').waitFor();
   check((await page.locator('#is-pledge-USD').inputValue()) === '1000', 'the issue form proposes 1,000 USDC of collateral for 100%');
+  // Payment 40 s after each observation, 60 s of grace: room for the keeper's report and the issuer's click.
+  await page.locator('#is-lag').fill('40');
+  await page.locator('#is-grace').fill('60');
   await page.getByRole('button', { name: 'Publish and open the book' }).click();
   await page.waitForURL(/\/note\//, { timeout: 180_000 });
   const id = decodeURIComponent(page.url().split('/note/')[1]);
@@ -210,6 +213,19 @@ try {
 } catch (e) {
   ok = false;
   console.log(`FAIL ${e instanceof Error ? e.message : String(e)}`);
+  // What the page said: the issue progress and any error shown.
+  for (const sel of ['[data-progress]', '[role=alert]']) {
+    const t = await page.locator(sel).allInnerTexts().catch(() => []);
+    if (t.length) console.log(`  page ${sel}: ${t.join(' | ').replace(/\s+/g, ' ')}`);
+    // A reverted transaction: its gas against the limit, and the revert replayed on the block before.
+    const hash = t.join(' ').match(/0x[0-9a-f]{64}/)?.[0] as `0x${string}` | undefined;
+    if (hash) {
+      const [tx, rc] = await Promise.all([client.getTransaction({ hash }), client.getTransactionReceipt({ hash })]);
+      console.log(`  tx ${hash}: gas used ${rc.gasUsed} of limit ${tx.gas}`);
+      try { await client.call({ account: tx.from, to: tx.to!, data: tx.input, blockNumber: rc.blockNumber - 1n }); console.log('  replay: succeeds'); }
+      catch (err) { console.log(`  replay: ${(err instanceof Error ? err.message : String(err)).split('\n').slice(0, 3).join(' ')}`); }
+    }
+  }
   await page.screenshot({ path: 'deployments/local/dev/e2e-failure.png', fullPage: true }).catch(() => {});
 } finally {
   await browser.close();

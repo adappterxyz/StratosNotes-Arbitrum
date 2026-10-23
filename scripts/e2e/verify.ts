@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
-import { simulateNote, simulateWorstOf, totalPerUnit } from '@sn/core';
+import { MILESTONE_NAMES, simulateNote, simulateWorstOf, totalPerUnit } from '@sn/core';
 import { engineAbi } from '@sn/sdk';
 import { clients, compiled, NOTE } from './lib';
 
@@ -38,6 +38,9 @@ for (const l of logs) {
   if (reporter.toLowerCase() !== expectReporter) { ok = false; lines.push(`  ! expected reporter ${expectReporter}`); }
   byStep.set(step, [...values]);
 }
+// The note's economic milestones in order (collateral pledged, funding deposited, payment made, missed, ...).
+const ms = await client.getContractEvents({ address: note.engine, abi: engineAbi, eventName: 'Milestone', args: { pid }, fromBlock: BigInt(note.fromBlock) });
+lines.push(`milestones: ${ms.map(m => `${MILESTONE_NAMES[(m.args as { code: number }).code] ?? (m.args as { code: number }).code}@${c.def.steps[(m.args as { step: number }).step]?.id}`).join(', ') || 'none'}`);
 const strikes = byStep.get(c.stepIndex.Task_FixStrike)!.map(v => Number(v) / 1e10);
 const rows: number[][] = [];
 for (let k = 1; k <= NOTE.observations; k++) {

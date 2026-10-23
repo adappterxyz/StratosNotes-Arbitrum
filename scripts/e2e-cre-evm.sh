@@ -22,22 +22,27 @@ cd "$ROOT"
 export PATH="$HOME/.cre/bin:$HOME/.bun/bin:$HOME/.foundry/bin:$PATH"
 PARTS="${PARTS:-cre fallback}"
 STRIKE_IN="${STRIKE_IN:-150}"
-OBS_EVERY="${OBS_EVERY:-90}"
+OBS_EVERY="${OBS_EVERY:-150}"
+# Payment date 70 s after each observation, then 70 s of grace: CRE writes an observation up to a minute late.
+export LAG="${LAG:-$((OBS_EVERY * 7 / 15))}" GRACE="${GRACE:-$((OBS_EVERY * 7 / 15))}"
 WORK="$ROOT/deployments/local"
 mkdir -p "$WORK"
 # fork() runs in a command substitution (a subshell), so it records anvil's pid in a file for cleanup.
-cleanup() { for f in "$WORK"/anvil-*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; done; rm -f "$ROOT/cre/local-fork.env" "$WORK/fallback.key"; }
+cleanup() { issuer_bot_stop; for f in "$WORK"/anvil-*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; done; rm -f "$ROOT/cre/local-fork.env" "$WORK/fallback.key"; }
 trap cleanup EXIT
 
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
 # Anvil's public test accounts, resolved once (0 deployer/owner, 8 CRE broadcaster, 9 fallback reporter).
 read -r KEY0 KEY1 KEY8 KEY9 ADDR0 ADDR9 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(1), keyOf(8), keyOf(9), acct(0).address, acct(9).address)")
-# The issuer's side: fund each payment as it falls due (MISS=pid:period leaves one unfunded).
-issuer_bot() { # <rpc> <chain id> <deployment json>
+# The issuer's side, running beside the keeper: fund each payment as soon as an observation fixes it, checking
+# every 4 s (MISS=pid:period leaves one unfunded). Stopped by issuer_bot_stop or cleanup.
+issuer_bot_start() { # <rpc> <chain id> <deployment json>
   RPC="$1" CHAIN_ID="$2" ENGINE="$(python3 -c "import json;print(json.load(open('$3'))['engine'])")" LENS="$(python3 -c "import json;print(json.load(open('$3'))['lens'])")" \
     FROM_BLOCK="$(python3 -c "import json;print(json.load(open('$3'))['block'])")" \
-    ISSUER_KEY="$KEY1" MINT=1 MISS="${MISS:-}" npx tsx scripts/issuer-bot.ts --once 2>&1 | tee -a "$WORK/issuer-bot.log" || true
+    ISSUER_KEY="$KEY1" MINT=1 MISS="${MISS:-}" INTERVAL=4 npx tsx scripts/issuer-bot.ts >> "$WORK/issuer-bot.log" 2>&1 &
+  echo $! > "$WORK/issuer-bot.pid"
 }
+issuer_bot_stop() { pkill -f 'scripts/[i]ssuer-bot.ts' 2>/dev/null || true; rm -f "$WORK/issuer-bot.pid"; }
 
 # fork <name> <rpc> <chain id>: starts anvil, prints the port. Blocks every 2 s (so "finalized", two blocks
 # behind, keeps moving) and a 30M gas limit for the deploy.
@@ -87,13 +92,14 @@ if [[ " $PARTS " == *" cre "* ]]; then
   # The simulator's broadcaster pays gas on the fork: anvil account 8 (a public test key), in a throwaway env file.
   printf 'CRE_ETH_PRIVATE_KEY=%s\n' "${KEY8#0x}" > cre/local-fork.env
   export SN_FORK_PORT="$PORT"
+  issuer_bot_start "$RPC" 421614 "$WORK/arbitrum-fork.json"
   simulate() {
-    issuer_bot "$RPC" 421614 "$WORK/arbitrum-fork.json"
     (cd cre && cre workflow simulate notes-keeper-evm --target local-fork --non-interactive --trigger-index 0 \
       --broadcast -e local-fork.env 2>&1 | grep -E 'USER LOG|Workflow Simulation Result|^"\{|✗|rror' || true) | tee -a "$WORK/cre.log"
   }
   wait_for_completion "$RPC" 421614 "$WORK/note-cre.json" simulate
   RPC="$RPC" CHAIN_ID=421614 NOTE_JSON="$WORK/note-cre.json" EXPECT_REPORTER="$FWD" MISS="${MISS:-}" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-cre.txt"
+  issuer_bot_stop
   rm -f cre/local-fork.env
 fi
 
@@ -111,14 +117,15 @@ if [[ " $PARTS " == *" fallback "* ]]; then
   cat > "$WORK/keeper-fallback.json" <<JSON
 { "chain": { "name": "robinhood-fork", "chainId": 46630, "rpc": "$RPC", "engine": "$ENGINE", "lens": "$LENS" },
   "feedRpcs": { "ethereum-mainnet": "https://ethereum-rpc.publicnode.com" },
-  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "6000000" }
+  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "8000000" }
 JSON
   echo "$KEY9" > "$WORK/fallback.key"
+  issuer_bot_start "$RPC" 46630 "$WORK/robinhood-fork.json"
   fallback() {
-    issuer_bot "$RPC" 46630 "$WORK/robinhood-fork.json"
     KEEPER_CONFIG="$WORK/keeper-fallback.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts --once 2>&1 | tee -a "$WORK/fallback.log"
   }
   wait_for_completion "$RPC" 46630 "$WORK/note-fallback.json" fallback
   RPC="$RPC" CHAIN_ID=46630 NOTE_JSON="$WORK/note-fallback.json" EXPECT_REPORTER="$ADDR9" MISS="${MISS:-}" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-fallback.txt"
+  issuer_bot_stop
   rm -f "$WORK/fallback.key"
 fi

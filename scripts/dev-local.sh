@@ -105,7 +105,7 @@ else
   cat > "$WORK/keeper.json" <<JSON
 { "chain": { "name": "local", "chainId": 421614, "rpc": "$RPC", "engine": "$ENGINE", "lens": "$LENS" },
   "feedRpcs": { "ethereum-mainnet": "$FEED_RPC" },
-  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "6000000", "intervalSec": 10 }
+  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "8000000", "intervalSec": 10 }
 JSON
   KEEPER_CONFIG="$WORK/keeper.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts > "$WORK/keeper.log" 2>&1 & PIDS+=($!)
 fi
