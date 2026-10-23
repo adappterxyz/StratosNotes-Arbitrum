@@ -1753,6 +1753,11 @@ export const flowEngineAbi = [
  },
  {
   "type": "error",
+  "name": "WindowClosed",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "WorkflowNameRequiresAuthorValidation",
   "inputs": []
  },

@@ -33,7 +33,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const isIssuer = !!me && me.toLowerCase() === issuer.toLowerCase();
-  const actions = issuerActions(def, state);
+  const actions = issuerActions(def, state, now);
   const running = state.status === 0;
 
   const run = async (key: string, step: number, field: string, label: string) => {
@@ -66,7 +66,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
       </div>
 
       {e.state === 'defaulted' && (
-        <div className="notice err row" role="status"><ShieldAlert className="i" />The issuer did not {e.milestones.some(m => m.name === 'margin-call') && !e.milestones.some(m => m.name === 'payment-missed') ? 'top up its collateral' : 'fund a payment'} in time. Everything in escrow (the collateral and any partial funding) went to the holders, pro rata to their units: withdraw it under Your position.</div>
+        <div className="notice err row" role="status"><ShieldAlert className="i" />The issuer did not {e.milestones.some(m => m.name === 'margin-call') && !e.milestones.some(m => m.name === 'payment-missed') ? 'top up its collateral' : 'fund a payment'} in time. {e.defaultRule === 'cap-at-owed' ? 'The holders received what they were owed (the missed payment and par) from escrow, stablecoin first, then collateral at its last Chainlink price, pro rata to their units; the rest went back to the issuer.' : 'Everything in escrow (the collateral and any partial funding) went to the holders, pro rata to their units.'} Withdraw it under Your position.</div>
       )}
       {e.marginCall && (
         <div className="notice warn row" role="status"><AlertTriangle className="i" />Coverage is below the requirement{e.marginCall.period ? ` at observation ${e.marginCall.period}` : ' at the strike'}. The issuer must top up collateral by {fmtDate(e.marginCall.deadline)} ({countdown(e.marginCall.deadline, now)}) or the note defaults.</div>
@@ -99,7 +99,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
           </table>
         </div>
       )}
-      <p className="xs muted">The issuer received the subscriptions and pledged this collateral, locked in the note's escrow: nobody can withdraw it. Prices come with each Chainlink report; coverage below the requirement opens a margin call with a {Math.round(e.grace / 60) >= 1440 ? `${Math.round(e.grace / 86400)}-day` : `${e.grace}-second`} grace period.</p>
+      <p className="xs muted">The issuer received the subscriptions and pledged this collateral, locked in the note's escrow: nobody can withdraw it. Prices come with each Chainlink report; on a default the holders take {e.defaultRule === 'cap-at-owed' ? 'what they are owed (the rest goes back to the issuer)' : 'everything in escrow'}; coverage below the requirement opens a margin call with a {Math.round(e.grace / 60) >= 1440 ? `${Math.round(e.grace / 86400)}-day` : `${e.grace}-second`} grace period.</p>
 
       <span className="label">Payment schedule</span>
       <div className="scroll-x">

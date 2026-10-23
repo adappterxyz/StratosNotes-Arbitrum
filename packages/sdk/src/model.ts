@@ -200,6 +200,8 @@ export interface NoteEconomics {
   /** The next funding call: what the issuer must put in escrow, and by when. */
   nextCall: { period: number; total: number; payDate: number; graceEnd: number; funded: boolean } | null;
   milestones: Array<{ name: Milestone; stepId: string; at: number }>;
+  /** What a default pays the holders: what they are owed (the rest back to the issuer), or the whole escrow. */
+  defaultRule: 'cap-at-owed' | 'all-to-holders';
 }
 
 const fixed = (s: string | undefined) => (s === undefined ? NaN : Number(BigInt(s)) / Number(SCALE));
@@ -365,12 +367,22 @@ export function economicsView(def: WorkflowDef, s: NoteState, params: ProductPar
     periods,
     nextCall: next && next.total !== null ? { period: next.k, total: next.total, payDate: next.payDate, graceEnd: next.graceEnd, funded: escrowCash + 1e-9 >= next.total } : null,
     milestones,
+    defaultRule: def.fields.some(f => f.name === 'owed') ? 'cap-at-owed' : 'all-to-holders',
   };
 }
 
 /** Steps an issuer acts on during the note's life, by kind (from the workflow's own step ids). */
-export function issuerActions(def: WorkflowDef, s: Pick<NoteState, 'tokens'>) {
-  const open = (prefix: string) => def.steps.map((st, i) => ({ st, i })).filter(({ st, i }) => st.id.startsWith(prefix) && s.tokens.includes(i));
+export function issuerActions(def: WorkflowDef, s: Pick<NoteState, 'tokens'> & Partial<Pick<NoteState, 'values'>>, nowSec?: number) {
+  // A window whose closing date has passed takes nothing more (the engine refuses it): not an action.
+  const closes = (i: number) => {
+    const u = def.steps[i].until;
+    if (!u) return Infinity;
+    if (u.kind === 0) return Number(u.at);
+    const v = s.values?.[u.field];
+    return v && v.tag === TAG.NUMBER ? Number(BigInt(v.value)) : Infinity;
+  };
+  const open = (prefix: string) => def.steps.map((st, i) => ({ st, i }))
+    .filter(({ st, i }) => st.id.startsWith(prefix) && s.tokens.includes(i) && (nowSec === undefined || nowSec < closes(i)));
   return {
     fund: open('Task_Fund').filter(({ st }) => /^Task_Fund\d+$/.test(st.id)).map(({ st, i }) => ({ step: i, period: Number(st.id.slice(9)) })),
     topUp: open('Task_TopUp_').map(({ st, i }) => ({ step: i, symbol: st.id.slice(11) })),

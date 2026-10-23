@@ -62,10 +62,11 @@ async function tick() {
     if (!def) continue;
     const issuerRole = def.roles.indexOf('Issuer');
     if (issuerRole < 0 || s.roles[issuerRole] !== account.address.toLowerCase()) continue;
-    const v = noteView(def, s, Number((await client.getBlock()).timestamp));
+    const now = Number((await client.getBlock()).timestamp);
+    const v = noteView(def, s, now);
     const e = v.economics;
     if (!e) continue;
-    const actions = issuerActions(def, s);
+    const actions = issuerActions(def, s, now); // windows still open: the engine refuses a late one
     const field = (name: string) => def.fields.findIndex(f => f.name === name);
     const run = async (step: number, fieldName: string, amount: number, assetName: string, label: string) => {
       const asset = def.assets.findIndex(a => a.name === assetName);
@@ -78,6 +79,7 @@ async function tick() {
     if (call && !call.funded && !miss.has(`${pid}:${call.period}`)) {
       const step = actions.fund.find(f => f.period === call.period);
       if (step) await run(step.step, 'fundAmount', ceil6(call.total - e.escrowCash), 'USDC', `funded payment ${call.period}:`);
+      else log(`${id}: payment ${call.period}'s funding window has closed`);
     } else if (call && miss.has(`${pid}:${call.period}`)) {
       log(`${id}: leaving payment ${call.period} unfunded (MISS)`);
     }

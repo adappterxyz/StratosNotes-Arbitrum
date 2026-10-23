@@ -169,6 +169,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     error WrongStepKind();
     error WrongRole();
     error StepNotActive();
+    error WindowClosed();
     error JoinNotReady();
     error NotDue();
     error GuardNotMet();
@@ -894,7 +895,9 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
                 _milestone(r, i, s);
                 return;
             }
-            // The window has closed: pass the token on, nothing else.
+            // The window has closed: pass the token on, nothing else. A person acting in it is too late (a
+            // funding call after its deadline must not look done), so only the engine itself closes it.
+            if (r.signer != address(0)) revert WindowClosed();
             _takeTokens(r, i, 1);
             _passOn(r, i, s);
             return;

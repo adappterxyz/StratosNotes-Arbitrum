@@ -271,6 +271,27 @@ contract ProductsTest is Test {
         vm.stopPrank();
     }
 
+    /// A person acting in a window after it closed is refused (a late funding call must not look done); only
+    /// the engine itself (poke, a report) passes the token on.
+    function test_closedWindowRefusesPeopleButClosesByItself() public {
+        Fixture memory f = _fixture(0);
+        uint256 pid = _issue(f, makeAddr("i"), makeAddr("p"));
+        _subscribe(f, pid, makeAddr("early"), 100e10, 100e6);
+        vm.warp(f.strikeAt); // the book's window closes at the strike, before any report
+        address late = makeAddr("late");
+        tokens[1].mint(late, 100e6);
+        vm.startPrank(late);
+        tokens[1].approve(address(engine), 100e6);
+        vm.expectRevert(FlowEngine.WindowClosed.selector);
+        engine.executeStep(pid, f.subscribeStep, NO, _num(100e10));
+        vm.stopPrank();
+        assertEq(tokens[1].balanceOf(late), 100e6, "nothing taken");
+        engine.poke(pid);
+        vm.expectRevert(FlowEngine.StepNotActive.selector);
+        vm.prank(late);
+        engine.executeStep(pid, f.subscribeStep, NO, _num(100e10));
+    }
+
     /// Escrow: nobody may claim it at the start, nobody signs for it, its balances never leave but by the workflow.
     function test_escrowIsHeldByTheEngine() public {
         Fixture memory f = _fixture(1);
@@ -535,15 +556,17 @@ contract ProductsTest is Test {
 
     /// Gas with a full book: 30 investors, then the cap of 64 ledger accounts (62 investors + issuer + escrow).
     function test_gasWithManyHolders() public {
-        _manyHolders(30, "30");
-        _manyHolders(62, "62");
+        _manyHolders(30, "30", 18);
+        _manyHolders(62, "62", 18);
+        _manyHolders(30, "30 all-to-holders", 19);
+        _manyHolders(62, "62 all-to-holders", 19);
     }
 
-    function _manyHolders(uint256 n, string memory label) internal {
-        // FCN with USDC + ETH collateral; the issuer funds coupon 1, misses coupon 2 (fixture 18): the issuer's
-        // funding, a coupon paid to every holder, margin checks on the ETH collateral, and the heaviest default
-        // (cash, USDC and ETH collateral distributed to every holder).
-        Fixture memory f = _fixture(18);
+    function _manyHolders(uint256 n, string memory label, uint256 fixtureIdx) internal {
+        // FCN with USDC + ETH collateral; the issuer funds coupon 1, misses coupon 2 (fixture 18, default rule
+        // cap-at-owed; 19, all-to-holders): the issuer's funding, a coupon paid to every holder, margin checks on
+        // the ETH collateral, and the heaviest default (cash, USDC and ETH collateral distributed to every holder).
+        Fixture memory f = _fixture(fixtureIdx);
         address issuer = makeAddr(string.concat("I", label));
         uint256 pid = _issue(f, issuer, makeAddr(string.concat("P", label)));
         int256 units = int256(1000 / n) * SCALE;
