@@ -145,6 +145,16 @@ every holder: with the 8-asset cap, at most 8 x 64 credits.
 The engine's runtime is 22,992 bytes (the EIP-170 limit is 24,576); `DefCheck` (3,563 bytes) is a separate linked
 library. Phase 5's CCIP sender and receiver must go in a separate contract.
 
+## Security
+
+Threat model, findings, static-analysis triage, invariants and coverage: [docs/SECURITY.md](../../docs/SECURITY.md).
+
+```bash
+forge test                                   # unit, fuzz (256 runs) and invariant suites (64 runs x 64 calls)
+forge test --match-path test/Invariants.t.sol
+forge coverage --ir-minimum --no-match-contract Invariants --report summary
+```
+
 ## Deploying
 
 ```bash
