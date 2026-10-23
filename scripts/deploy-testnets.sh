@@ -45,10 +45,12 @@ for c in $CHAINS; do
   python3 -c "import sys; sys.exit(0 if float('$bal') >= 0.002 else 1)" || { echo "$c: fund the deployer first (docs/DEPLOY.md)"; exit 1; }
   # The key reaches the script through DEPLOYER_KEY in this one command's environment: never on a command line,
   # never echoed.
+  head="$(cast block-number --rpc-url "$rpc")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
   (cd packages/evm-engine && export DEPLOYER_KEY="$(python3 -c "import json;k=json.load(open('$ROOT/.keys/deployer.json'))[0]['private_key'];print(k if k.startswith('0x') else '0x'+k)")" && \
     CHAIN="$c" FORWARDER_MODE=mock OWNER="$DEPLOYER" TEST_TOKENS=1 OUT="$ROOT/$OUTDIR/$c.json" \
     forge script script/Deploy.s.sol --rpc-url "$rpc" --broadcast --slow > "$ROOT/$OUTDIR/deploy-$c.log" 2>&1) \
     || { echo "$c: deploy failed (see $OUTDIR/deploy-$c.log)"; exit 1; }
+  python3 scripts/set-deploy-block.py "$OUTDIR/$c.json" "$head"
   echo "   $(python3 -c "import json;d=json.load(open('$OUTDIR/$c.json'));print('engine',d['engine'],'lens',d['lens'],'faucet',d['faucet'])")"
 done
 

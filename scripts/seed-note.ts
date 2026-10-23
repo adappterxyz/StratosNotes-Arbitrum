@@ -8,15 +8,18 @@
  * NOTE=crypto: a worst-of phoenix on ETH and BTC; NOTE=equity: on TSLA and NVDA (Chainlink feeds on Arbitrum One,
  * NYSE hours: outside them the observations see the last close).
  * The deployer key (.keys/deployer.json) is issuer and paying agent and mints the test tUSD (it owns the test
- * tokens). Two demo investors (.keys/investor1.json, investor2.json, created if missing) get a little ETH for gas
- * from the deployer, claim tUSD from the faucet and subscribe 600 and 400 units; UNSOLD units stay open for
- * visitors. Keys are read from files and never printed. Writes deployments/notes/<chain>-<pid>.json.
+ * tokens): it pledges tUSD collateral covering 100% of the notional into the note's escrow at Approve Terms.
+ * Two demo investors (.keys/investor1.json, investor2.json, created if missing) get a little ETH for gas from
+ * the deployer, claim tUSD from the faucet and subscribe 600 and 400 units; UNSOLD units stay open for visitors.
+ * The issuer funds each payment as it falls due with scripts/issuer-bot.ts (run it alongside the keeper; with
+ * MISS=pid:period a demo note shows a default). LAG and GRACE: seconds (default OBS_EVERY / 4 and / 3).
+ * Keys are read from files and never printed. Writes deployments/notes/<chain>-<pid>.json.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, http, parseAbi, parseEther, toHex, zeroAddress, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { compile, dec, EXAMPLE_PRODUCTS, evmInput, FEEDS, instantiateProduct, parseBpmn, reservePerUnit, type ProductParams } from '@sn/core';
+import { compile, dec, EXAMPLE_PRODUCTS, evmInput, FEEDS, instantiateProduct, parseBpmn, SRC, type EvmInput, type ProductParams } from '@sn/core';
 import { engineAbi, lensAbi } from '@sn/sdk';
 
 const RPCS: Record<string, { rpc: string; id: number }> = {
@@ -64,9 +67,9 @@ const roleIdx = (name: string) => c.def.roles.indexOf(name);
 const subs = [600, 400];
 const unsold = Number(process.env.UNSOLD ?? 1000);
 const notional = subs.reduce((a, b) => a + b, 0) + unsold;
-const reserve = Math.ceil(notional * reservePerUnit(product)!);
+const pledge = notional; // 100% USDC collateral (the default ratio): covers whatever sells
 
-console.log(`${product.name} on ${chainKey}: ${notional} units (${unsold} left for visitors), reserve ${reserve} tUSD`);
+console.log(`${product.name} on ${chainKey}: ${notional} units (${unsold} left for visitors), ${pledge} tUSD collateral pledged`);
 // Both are content-addressed and idempotent: re-running for the same design is a cheap no-op.
 await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'registerDefinition', args: [def] });
 await send(deployer, { address: dep.lens, abi: lensAbi, functionName: 'publish', args: [def] });
@@ -74,7 +77,7 @@ await send(deployer, { address: dep.lens, abi: lensAbi, functionName: 'publish',
 const roles: Address[] = c.def.roles.map(() => zeroAddress);
 roles[roleIdx('Issuer')] = deployer.address;
 roles[roleIdx('Paying Agent')] = deployer.address; // the Investor role stays open
-const assetTokens: Address[] = c.def.assets.map(a => (a.kind === 1 ? tusd : zeroAddress));
+const assetTokens: Address[] = c.def.assets.map(a => (a.kind === 1 ? tusd : zeroAddress)); // cash and tUSD collateral
 const start = await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'startProcess', args: [definition, BigInt(Date.now()), roles, assetTokens, c.stepIndex.Start_Issuer, []] });
 const pid = await client.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' });
 
@@ -82,15 +85,17 @@ const now = Number((await client.getBlock()).timestamp);
 const strikeAt = now + Number(process.env.STRIKE_IN ?? 900);
 const every = Number(process.env.OBS_EVERY ?? 300);
 const obsAt = Array.from({ length: product.observations }, (_, k) => strikeAt + every * (k + 1));
-await send(deployer, { address: tusd, abi: erc20, functionName: 'mint', args: [deployer.address, BigInt(reserve) * 10n ** 6n] });
-await send(deployer, { address: tusd, abi: erc20, functionName: 'approve', args: [dep.engine, BigInt(reserve) * 10n ** 6n] });
-await send(deployer, {
-  address: dep.engine, abi: engineAbi, functionName: 'executeStep',
-  args: [pid, c.stepIndex.Task_ApproveTerms, NO, [
-    evmInput.text(`XSDEMO${String(now).slice(-6)}`), evmInput.number(dec(notional)), evmInput.number(BigInt(strikeAt)),
-    ...obsAt.map(t => evmInput.number(BigInt(t))), evmInput.number(dec(reserve)),
-  ]],
-});
+const lag = Number(process.env.LAG ?? Math.floor(every / 4)), grace = Number(process.env.GRACE ?? Math.floor(every / 3));
+await send(deployer, { address: tusd, abi: erc20, functionName: 'mint', args: [deployer.address, BigInt(pledge) * 10n ** 6n] });
+await send(deployer, { address: tusd, abi: erc20, functionName: 'approve', args: [dep.engine, BigInt(pledge) * 10n ** 6n] });
+const byName: Record<string, EvmInput> = {
+  isin: evmInput.text(`XSDEMO${String(now).slice(-6)}`), notional: evmInput.number(dec(notional)), strikeDate: evmInput.number(BigInt(strikeAt)),
+  ...Object.fromEntries(obsAt.map((t, k) => [`obsDate${k + 1}`, evmInput.number(BigInt(t))])),
+  lag: evmInput.number(BigInt(lag)), grace: evmInput.number(BigInt(grace)), collateralRatio: evmInput.number(dec(1)),
+  haircut_USD: evmInput.number(dec(1)), pledge_USD: evmInput.number(dec(pledge)),
+};
+const approve = c.def.steps[c.stepIndex.Task_ApproveTerms].captures.filter(x => x.source === SRC.INPUT).map(x => byName[c.def.fields[x.field].name]);
+await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'executeStep', args: [pid, c.stepIndex.Task_ApproveTerms, NO, approve] });
 await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'executeStep', args: [pid, c.stepIndex.Task_Mandate, NO, []] });
 
 for (const [i, inv] of investors.entries()) {
@@ -110,7 +115,7 @@ for (const [i, inv] of investors.entries()) {
 
 const out = {
   chain: chainKey, pid: pid.toString(), name: product.name, definition, engine: dep.engine, fromBlock: start.blockNumber.toString(),
-  strikeAt, obsAt, investors: investors.map((a, i) => ({ address: a.address, units: subs[i] })), unsold,
+  strikeAt, obsAt, lag, grace, pledge, investors: investors.map((a, i) => ({ address: a.address, units: subs[i] })), unsold,
 };
 mkdirSync(`${DIR}/notes`, { recursive: true });
 writeFileSync(`${DIR}/notes/${chainKey}-${pid}.json`, JSON.stringify(out, null, 2) + '\n');

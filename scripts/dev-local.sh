@@ -51,10 +51,12 @@ RPC="http://127.0.0.1:$ANVIL_PORT"
 for _ in $(seq 1 60); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 1; done
 
 echo "== deploy: engine, lens, mock USDC"
+HEAD="$(cast block-number --rpc-url "$RPC")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
 (cd packages/evm-engine && CHAIN=arbitrum-sepolia FORWARDER_MODE=mock OWNER="$ADDR0" OUT="$WORK/deployment.json" \
   forge script script/Deploy.s.sol --rpc-url "$RPC" --private-key "$KEY0" --broadcast --slow > "$WORK/deploy.log" 2>&1)
 USDC="$(cd packages/evm-engine && forge create test/mocks/MockERC20.sol:MockERC20 --rpc-url "$RPC" --private-key "$KEY0" \
   --broadcast --constructor-args USDC 6 2>/dev/null | awk '/Deployed to:/ {print $3}')"
+python3 scripts/set-deploy-block.py "$WORK/deployment.json" "$HEAD"
 read -r ENGINE LENS BLOCK < <(python3 -c "import json;d=json.load(open('$WORK/deployment.json'));print(d['engine'],d['lens'],d['block'])")
 echo "engine $ENGINE lens $LENS from block $BLOCK, USDC $USDC"
 
@@ -103,7 +105,7 @@ else
   cat > "$WORK/keeper.json" <<JSON
 { "chain": { "name": "local", "chainId": 421614, "rpc": "$RPC", "engine": "$ENGINE", "lens": "$LENS" },
   "feedRpcs": { "ethereum-mainnet": "$FEED_RPC" },
-  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "2800000", "intervalSec": 10 }
+  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "6000000", "intervalSec": 10 }
 JSON
   KEEPER_CONFIG="$WORK/keeper.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts > "$WORK/keeper.log" 2>&1 & PIDS+=($!)
 fi

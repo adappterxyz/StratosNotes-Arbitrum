@@ -4,7 +4,7 @@
  */
 import { createPublicClient, createWalletClient, defineChain, http, type Hex, type PublicClient } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
-import { compile, EXAMPLE_PRODUCTS, FEEDS, instantiateProduct, parseBpmn, type ProductParams } from '@sn/core';
+import { compile, EXAMPLE_PRODUCTS, FEEDS, instantiateProduct, parseBpmn, SRC, type EvmInput, type ProductParams } from '@sn/core';
 
 export const ANVIL_MNEMONIC = 'test test test test test test test test test test test junk';
 /** 0 deployer/owner, 1 issuer, 2 paying agent, 3-4 investors, 8 CRE simulator broadcaster, 9 fallback reporter. */
@@ -30,4 +30,14 @@ export const NOTE: ProductParams = process.env.E2E_NOTE === 'equity'
 export function compiled(p: ProductParams = NOTE) {
   const prod = instantiateProduct(p);
   return { c: compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params }), prod };
+}
+
+/** Pre-trade inputs in the order Approve Terms captures them, by field name (throws if one is missing). */
+export function approveInputs(c: ReturnType<typeof compiled>['c'], byName: Record<string, EvmInput>): EvmInput[] {
+  const step = c.def.steps[c.stepIndex.Task_ApproveTerms];
+  return step.captures.filter(x => x.source === SRC.INPUT).map(x => {
+    const name = c.def.fields[x.field].name;
+    if (!byName[name]) throw new Error(`no pre-trade input for ${name}`);
+    return byName[name];
+  });
 }

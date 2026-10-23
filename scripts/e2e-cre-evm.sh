@@ -11,8 +11,11 @@
 #
 # Accounts are anvil's public test accounts (scripts/e2e/lib.ts). No real key is read or used.
 # Needs: anvil/forge/cast (Foundry), bun + the CRE CLI logged in (`cre whoami`), Node 20+, network access.
+# The issuer (anvil account 1) is driven by scripts/issuer-bot.ts: it funds each payment as it falls due. With
+# MISS=1:<period> it leaves that payment unfunded and the note must default (collateral to the holders).
 #   bash scripts/e2e-cre-evm.sh            # both parts
 #   PARTS=cre bash scripts/e2e-cre-evm.sh  # only the CRE part (PARTS=fallback for the other)
+#   MISS=1:1 PARTS=fallback bash scripts/e2e-cre-evm.sh   # the issuer misses payment 1: default
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -28,7 +31,13 @@ trap cleanup EXIT
 
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
 # Anvil's public test accounts, resolved once (0 deployer/owner, 8 CRE broadcaster, 9 fallback reporter).
-read -r KEY0 KEY8 KEY9 ADDR0 ADDR9 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(8), keyOf(9), acct(0).address, acct(9).address)")
+read -r KEY0 KEY1 KEY8 KEY9 ADDR0 ADDR9 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(1), keyOf(8), keyOf(9), acct(0).address, acct(9).address)")
+# The issuer's side: fund each payment as it falls due (MISS=pid:period leaves one unfunded).
+issuer_bot() { # <rpc> <chain id> <deployment json>
+  RPC="$1" CHAIN_ID="$2" ENGINE="$(python3 -c "import json;print(json.load(open('$3'))['engine'])")" LENS="$(python3 -c "import json;print(json.load(open('$3'))['lens'])")" \
+    FROM_BLOCK="$(python3 -c "import json;print(json.load(open('$3'))['block'])")" \
+    ISSUER_KEY="$KEY1" MINT=1 MISS="${MISS:-}" npx tsx scripts/issuer-bot.ts --once 2>&1 | tee -a "$WORK/issuer-bot.log" || true
+}
 
 # fork <name> <rpc> <chain id>: starts anvil, prints the port. Blocks every 2 s (so "finalized", two blocks
 # behind, keeps moving) and a 30M gas limit for the deploy.
@@ -43,9 +52,11 @@ fork() {
 
 # deploy <name> <port> <CHAIN for Deploy.s.sol>: engine + lens (mock forwarder) and a mock USDC.
 deploy() {
-  local rpc="http://127.0.0.1:$2"
+  local rpc="http://127.0.0.1:$2" head
+  head="$(cast block-number --rpc-url "$rpc")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
   (cd packages/evm-engine && CHAIN="$3" FORWARDER_MODE=mock OWNER="$ADDR0" OUT="$WORK/$1.json" \
     forge script script/Deploy.s.sol --rpc-url "$rpc" --private-key "$KEY0" --broadcast --slow > "$WORK/deploy-$1.log" 2>&1)
+  python3 scripts/set-deploy-block.py "$WORK/$1.json" "$head"
   (cd packages/evm-engine && forge create test/mocks/MockERC20.sol:MockERC20 --rpc-url "$rpc" --private-key "$KEY0" \
     --broadcast --constructor-args USDC 6 2>/dev/null | awk '/Deployed to:/ {print $3}')
 }
@@ -77,11 +88,12 @@ if [[ " $PARTS " == *" cre "* ]]; then
   printf 'CRE_ETH_PRIVATE_KEY=%s\n' "${KEY8#0x}" > cre/local-fork.env
   export SN_FORK_PORT="$PORT"
   simulate() {
+    issuer_bot "$RPC" 421614 "$WORK/arbitrum-fork.json"
     (cd cre && cre workflow simulate notes-keeper-evm --target local-fork --non-interactive --trigger-index 0 \
       --broadcast -e local-fork.env 2>&1 | grep -E 'USER LOG|Workflow Simulation Result|^"\{|✗|rror' || true) | tee -a "$WORK/cre.log"
   }
   wait_for_completion "$RPC" 421614 "$WORK/note-cre.json" simulate
-  RPC="$RPC" CHAIN_ID=421614 NOTE_JSON="$WORK/note-cre.json" EXPECT_REPORTER="$FWD" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-cre.txt"
+  RPC="$RPC" CHAIN_ID=421614 NOTE_JSON="$WORK/note-cre.json" EXPECT_REPORTER="$FWD" MISS="${MISS:-}" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-cre.txt"
   rm -f cre/local-fork.env
 fi
 
@@ -99,11 +111,14 @@ if [[ " $PARTS " == *" fallback "* ]]; then
   cat > "$WORK/keeper-fallback.json" <<JSON
 { "chain": { "name": "robinhood-fork", "chainId": 46630, "rpc": "$RPC", "engine": "$ENGINE", "lens": "$LENS" },
   "feedRpcs": { "ethereum-mainnet": "https://ethereum-rpc.publicnode.com" },
-  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "2800000" }
+  "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "6000000" }
 JSON
   echo "$KEY9" > "$WORK/fallback.key"
-  fallback() { KEEPER_CONFIG="$WORK/keeper-fallback.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts --once 2>&1 | tee -a "$WORK/fallback.log"; }
+  fallback() {
+    issuer_bot "$RPC" 46630 "$WORK/robinhood-fork.json"
+    KEEPER_CONFIG="$WORK/keeper-fallback.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts --once 2>&1 | tee -a "$WORK/fallback.log"
+  }
   wait_for_completion "$RPC" 46630 "$WORK/note-fallback.json" fallback
-  RPC="$RPC" CHAIN_ID=46630 NOTE_JSON="$WORK/note-fallback.json" EXPECT_REPORTER="$ADDR9" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-fallback.txt"
+  RPC="$RPC" CHAIN_ID=46630 NOTE_JSON="$WORK/note-fallback.json" EXPECT_REPORTER="$ADDR9" MISS="${MISS:-}" npx tsx scripts/e2e/verify.ts | tee "$WORK/verify-fallback.txt"
   rm -f "$WORK/fallback.key"
 fi

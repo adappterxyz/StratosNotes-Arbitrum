@@ -1,20 +1,23 @@
 /**
- * Check a finished e2e note against the reference payoff: the strikes and observations are the values the
- * reports actually carried (ReportProcessed), each holder's cash must equal units x the reference payoff per
- * unit, and every report must come from the expected reporter (the forwarder for CRE, or the fallback).
+ * Check a finished e2e note against the reference: the strikes and observations are the values the reports
+ * actually carried (ReportProcessed); with the issuer funding every payment, each holder's cash must equal
+ * units x the reference payoff per unit and the pledged collateral must be back with the issuer; with a payment
+ * left unfunded (MISS=pid:period), the note must have defaulted and each holder must hold the coupons paid
+ * before it plus its pro-rata share of the collateral (simulateNote). Every report must come from the expected
+ * reporter (the forwarder for CRE, or the fallback).
  *
- *   RPC=... CHAIN_ID=421614 NOTE_JSON=/tmp/note.json EXPECT_REPORTER=0x... npx tsx scripts/e2e/verify.ts
+ *   RPC=... CHAIN_ID=421614 NOTE_JSON=/tmp/note.json EXPECT_REPORTER=0x... [MISS=1:1] npx tsx scripts/e2e/verify.ts
  *   STATUS_ONLY=1 ... prints the process status (0 running, 1 completed) and exits.
  */
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
-import { simulateWorstOf, totalPerUnit } from '@sn/core';
+import { simulateNote, simulateWorstOf, totalPerUnit } from '@sn/core';
 import { engineAbi } from '@sn/sdk';
 import { clients, compiled, NOTE } from './lib';
 
 const env = (k: string) => { const v = process.env[k]; if (!v) throw new Error(`set ${k}`); return v; };
 const note = JSON.parse(readFileSync(env('NOTE_JSON'), 'utf8')) as {
-  pid: string; engine: Address; fromBlock: string; investors: Array<{ address: Address; units: number }>; pa: Address;
+  pid: string; engine: Address; fromBlock: string; investors: Array<{ address: Address; units: number }>; pa: Address; issuer: Address; pledge: number;
 };
 const { client } = clients(env('RPC'), Number(env('CHAIN_ID')));
 const pid = BigInt(note.pid);
@@ -42,17 +45,32 @@ for (let k = 1; k <= NOTE.observations; k++) {
   rows.push(v ? v.map(x => Number(x) / 1e10) : strikes.map(() => 0)); // not observed: autocalled before
 }
 const ref = simulateWorstOf(NOTE, strikes, rows);
-const perUnit = totalPerUnit(ref);
-lines.push(`reference: coupons [${ref.coupons.join(', ')}], ${ref.calledAt ? `called at ${ref.calledAt}` : 'to maturity'}, redemption ${ref.redemptionCash} -> ${perUnit} per unit`);
+const sold = note.investors.reduce((a, v) => a + v.units, 0);
+const missed = (process.env.MISS ?? '').split(',').map(x => x.split(':')).find(([p]) => p === note.pid)?.[1];
+const out = simulateNote(NOTE, {
+  perfs: rows.map(r => Math.min(...r.map((o, i) => o / strikes[i]))), sold, ratio: 0,
+  collateral: [{ symbol: 'USD', amount: note.pledge, haircut: 1, prices: rows.map(() => 1).concat([1]) }],
+  ...(missed ? { behaviour: { missPayment: Number(missed) } } : {}),
+});
+const perUnit = out.perUnit.cash;
+lines.push(`reference: coupons [${ref.coupons.join(', ')}], ${ref.calledAt ? `called at ${ref.calledAt}` : 'to maturity'}, redemption ${ref.redemptionCash} -> ${totalPerUnit(ref)} per unit if funded`);
+lines.push(missed ? `issuer leaves payment ${missed} unfunded -> ${out.defaulted ? `default at ${out.defaulted.period}` : 'no default (nothing was due then)'}: ${perUnit} cash and ${out.perUnit.collateral.USD ?? 0} USDC collateral per unit` : 'issuer funds every payment');
 if (proc.status !== 1) { ok = false; lines.push(`! process status ${proc.status}, expected completed (1)`); }
+const colAsset = BigInt(c.assetIndex.col_USD);
 for (const inv of note.investors) {
   const cash = await client.readContract({ address: note.engine, abi: engineAbi, functionName: 'balanceOf', args: [pid, inv.address, 1n] });
-  const want = inv.units * perUnit;
-  const got = Number(cash) / 1e10;
-  const good = Math.abs(got - want) <= inv.units * 5e-7;
+  const col = await client.readContract({ address: note.engine, abi: engineAbi, functionName: 'balanceOf', args: [pid, inv.address, colAsset] });
+  const want = inv.units * perUnit, wantCol = inv.units * (out.perUnit.collateral.USD ?? 0);
+  const got = Number(cash) / 1e10, gotCol = Number(col) / 1e10;
+  const good = Math.abs(got - want) <= inv.units * 5e-7 && Math.abs(gotCol - wantCol) <= inv.units * 5e-7;
   if (!good) ok = false;
-  lines.push(`${inv.address} ${inv.units} units: paid ${got} USDC, reference ${want} -> ${good ? 'match' : 'MISMATCH'}`);
+  lines.push(`${inv.address} ${inv.units} units: paid ${got} USDC + ${gotCol} USDC collateral, reference ${want} + ${wantCol} -> ${good ? 'match' : 'MISMATCH'}`);
 }
+const issuerCol = Number(await client.readContract({ address: note.engine, abi: engineAbi, functionName: 'balanceOf', args: [pid, note.issuer, colAsset] })) / 1e10;
+const wantIssuerCol = out.defaulted ? 0 : note.pledge;
+const goodIssuer = Math.abs(issuerCol - wantIssuerCol) < 1e-6;
+if (!goodIssuer) ok = false;
+lines.push(`issuer collateral ${out.defaulted ? 'after the default' : 'released'}: ${issuerCol} USDC (want ${wantIssuerCol}) -> ${goodIssuer ? 'match' : 'MISMATCH'}`);
 console.log(lines.join('\n'));
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

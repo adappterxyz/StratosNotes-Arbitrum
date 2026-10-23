@@ -5,7 +5,7 @@
       "chainSelectorName": "ethereum-testnet-sepolia-arbitrum-1",
       "engine": "0x0000000000000000000000000000000000000000",
       "lens": "0x0000000000000000000000000000000000000000",
-      "gasLimit": "2800000",
+      "gasLimit": "6000000",
       "fromPid": 1,
       "scan": 200,
       "maxProcesses": 50
@@ -14,7 +14,7 @@
       "chainSelectorName": "robinhood-testnet",
       "engine": "0x0000000000000000000000000000000000000000",
       "lens": "0x0000000000000000000000000000000000000000",
-      "gasLimit": "2800000",
+      "gasLimit": "6000000",
       "fromPid": 1,
       "scan": 200,
       "maxProcesses": 50
