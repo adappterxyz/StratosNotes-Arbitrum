@@ -17,7 +17,7 @@ canvas, the AI and the engine see it.
 | Each observation k | CRE observes; the workflow fixes what period k owes per unit: the coupon (or nothing), plus the redemption on an autocall or at maturity, or the underlying's token for physical settlement. | Chainlink CRE | `Task_Observe*`, coupon and autocall gateways |
 | Payment date k = observation k + lag | The issuer must have funded period k into escrow through **Fund Payment k** (any time before; in several deposits if it likes). The payment date checks the escrow: **funded** -> holders are paid from escrow. | Issuer, then the engine | `Task_Fund*` (milestone *funding deposited*), `S_Due*`, `GW_Funded*`, `Task_Pay*` (*payment made*) |
 | Grace | **Not funded** -> *payment missed*, and the grace period runs. Funded within it -> paid at once (cured). | Issuer | `Task_Missed*`, `Recv_Grace*`, `GW_Cured*` |
-| Default | Still unfunded when grace ends (or a margin call not cured): **everything in escrow** (each collateral token in kind, plus any partial funding) is distributed to the holders pro rata to their units, and the note ends **Defaulted**. | The engine | `Task_Default` (*defaulted*), `End_Defaulted` |
+| Default | Still unfunded when grace ends (or a margin call not cured): the holders are paid from escrow pro rata to their units, under the note's **default rule** (below): by default **what they are owed** (stablecoin first, then collateral in kind at its last Chainlink price), with the rest back to the issuer. The note ends **Defaulted**. | The engine | `Task_Default` (*defaulted*), `End_Defaulted` |
 | After the final payment | **Release Collateral**: escrow goes back to the issuer. | The engine | `Task_Release` (*collateral released*), `End_Closed` |
 
 The escrow is a pool in the workflow marked `escrow`. The engine holds its account at an address no key controls
@@ -25,6 +25,24 @@ The escrow is a pool in the workflow marked `escrow`. The engine holds its accou
 workflow's own operations move its balances. Every payment to holders is paid **from escrow**, and the validator
 refuses any payment that is not: it must be reached, on every path, through a deadline and a "Funded?" gateway that
 tests `balance(Escrow, <asset>)`, with a default branch. That holds for canvas edits and AI drafts as well.
+
+**The default rule** is one switch per product, `defaultRule` in the term sheet (the product form asks "On a
+default, holders get"):
+
+- `cap-at-owed` (**the default**): the holders take what they are owed, and no more. Owed = the missed payment
+  (what period k owes per unit x units sold) plus par on every unit sold; when the missed payment is a cash
+  redemption it already includes par, so par is not added twice (a physical delivery still owes par). The engine
+  takes it from escrow in order: the stablecoin (partial funding included), then each collateral asset valued at its
+  last Chainlink price, at market (no haircut). Whatever is left, cash and collateral, is transferred back to the
+  issuer in the same transaction.
+- `all-to-holders`: everything in escrow goes to the holders, whatever it is worth.
+
+The two only differ when the escrow is worth more than what is owed, i.e. when the issuer pledged well above a
+100% ratio, or collateral rose in value. A margin default owes par (no payment was due yet).
+
+**A late funding call is refused.** Each Fund Payment window closes at its deadline (payment date + grace). After
+that the engine reverts the issuer's call (`WindowClosed`) instead of taking nothing silently; only the engine
+itself (a report or `poke`) moves the note on.
 
 **Partial funding is not paid as a partial coupon.** When grace ends with less than the amount due in escrow, the
 note defaults and the partial funding is distributed together with the collateral, pro rata. A partial coupon would
@@ -51,8 +69,13 @@ USDC counted at 100%), settlement lag 2 days, grace 2 days. ETH strikes at 2,000
 The issuer received 1,000 USDC at the strike and paid out 1,100: its funding cost was the 100 USDC of coupons.
 
 **If the issuer misses the coupon at observation 3:** the payment date passes with 0 in escrow, grace runs for 2
-days, and the note defaults. The holders share the escrow: 1,000 USDC of collateral, so a holder of 250 units gets
-250 USDC. Nothing is released to the issuer.
+days, and the note defaults. The holders are owed 75 + 1,000 (par) = 1,075 USDC, more than the 1,000 USDC of
+collateral, so under either rule they share all of it: a holder of 250 units gets 250 USDC. Nothing is released.
+
+**If the issuer had pledged 3,000 USDC and 1 ETH** (ETH at 1,500 at observation 3) and missed the same coupon:
+under `cap-at-owed` the holders take 1,075 USDC (the stablecoin comes first) and the issuer gets 1,925 USDC and the
+1 ETH back; under `all-to-holders` the holders share 3,000 USDC and 1 ETH. With only 500 USDC and 1 ETH pledged,
+capped: the holders take the 500 USDC and 575 / 1,500 = 0.3833 ETH; the issuer gets 0.6167 ETH back.
 
 **With ETH as collateral instead:** ratio 50% (requirement 500 USDC), ETH counted at 70%. The issuer pledges 0.4286
 ETH (600 USDC at the strike after the haircut, 1.2x the requirement). By observation 2 ETH has fallen to 1,200:
@@ -64,20 +87,21 @@ These three outcomes are among the timelines the engine is tested against (`pack
 fixtures from `scripts/fixtures.ts`): every holder's cash and tokens must equal `simulateNote` in
 `packages/core/src/products/payoff.ts`, the reference written independently of the workflow.
 
-## Costs (gas, `forge test --isolate`, 2026-10-24)
+## Costs (gas, `forge test --isolate`, 2026-10-23)
 
-FCN with USDC and ETH collateral; the issuer funds coupon 1 and misses coupon 2:
+FCN with USDC and ETH collateral worth 1.2x the requirement; the issuer funds coupon 1 and misses coupon 2:
 
 | | 30 holders | 62 holders |
 |---|---|---|
-| Strike report (with the margin check) | 484k | 484k |
-| Observation report (with the margin check) | 344k | 344k |
-| Payment date: coupon paid to every holder from escrow | 1.29M | 2.33M |
-| Default: cash, USDC and ETH collateral to every holder | 2.57M | 4.79M |
+| Strike report (with the margin check) | 520k | 520k |
+| Observation report (with the margin check) | 345k | 345k |
+| Payment date: coupon paid to every holder from escrow | 1.30M | 2.34M |
+| Default, `cap-at-owed`: what is owed to every holder (cash, USDC, ETH), the rest to the issuer | 2.79M | 5.01M |
+| Default, `all-to-holders`: cash, USDC and ETH collateral to every holder | 2.57M | 4.79M |
 | Issuer funding a payment (deposit + move into escrow) | 218k | 218k |
 
 Both chains run Arbitrum Nitro, which caps a single transaction at 32M gas. The CRE workflow writes reports with
-a 6M limit, under CRE's 10M per write. Anyone can also move a note past a deadline with `poke(pid)`.
+an 8M limit, under CRE's 10M per write. Anyone can also move a note past a deadline with `poke(pid)`.
 
 ## In the BPMN
 

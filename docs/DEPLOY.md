@@ -23,7 +23,7 @@ Sepolia 0.020 gwei, Robinhood Chain testnet 0.010 gwei.
 | Address | Arbitrum Sepolia | Robinhood Chain testnet | What it covers |
 |---|---|---|---|
 | Deployer `0x298a…de0a` | **0.02 ETH** | **0.02 ETH** | Deployment (~0.0003 ETH at today's price), two seeded notes, 0.002 ETH passed to the demo investors, and room for gas-price spikes |
-| Keeper `0xcA06…118f` | **0.03 ETH** | **0.03 ETH** | Reports: 0.2–0.5M gas each for a small book; a coupon to a full book of 62 holders 2.3M, a default distributing three assets to 62 holders 4.8M (6M limit); several hundred reports at today's prices |
+| Keeper `0xcA06…118f` | **0.03 ETH** | **0.03 ETH** | Reports: 0.2–0.5M gas each for a small book; a coupon to a full book of 62 holders 2.3M, a default paying three assets to 62 holders 5.0M (6M limit); several hundred reports at today's prices |
 
 Faucets: Arbitrum Sepolia, https://faucets.chain.link/arbitrum-sepolia (or bridge Sepolia ETH); Robinhood Chain
 testnet, https://faucet.testnet.chain.robinhood.com.

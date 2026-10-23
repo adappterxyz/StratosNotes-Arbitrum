@@ -40,7 +40,7 @@ A chain that isn't deployed gets the zero address, and the workflow refuses to s
 
 | Field | Meaning |
 |---|---|
-| `chains[].gasLimit` | Gas for one report (6M). A coupon to a full book of 62 holders measured 2.33M of execution and a default distributing three escrow assets to 62 holders 4.79M; the rest covers Arbitrum's L1 data gas. CRE allows 10M per write. |
+| `chains[].gasLimit` | Gas for one report (8M). A coupon to a full book of 62 holders measured 2.34M of execution and a default paying three escrow assets to 62 holders 5.01M (capped at what is owed, the rest to the issuer); the rest covers Arbitrum's L1 data gas. CRE allows 10M per write. |
 | `chains[].fromPid` | First process id to scan, to skip finished history. |
 | `chains[].scan` | How many process ids one lens call reads. |
 | `chains[].maxProcesses` | How many running processes one lens call returns. Up to 4 pages per run. |

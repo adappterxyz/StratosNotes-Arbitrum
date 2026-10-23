@@ -2,7 +2,7 @@
 
 Structured notes on stocks and crypto that anyone can issue and sell, on **Arbitrum Sepolia** and **Robinhood Chain
 testnet**, with **Chainlink CRE** as the calculation agent. A note raises funds for the issuer against collateral
-locked in the note; the issuer funds each payment before it falls due, or the collateral goes to the holders
+locked in the note; the issuer funds each payment before it falls due, or the holders are paid what they are owed from the collateral
 ([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Built for the Arbitrum Hackerhouse.
 
 - Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app

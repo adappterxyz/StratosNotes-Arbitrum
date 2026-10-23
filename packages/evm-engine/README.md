@@ -126,17 +126,18 @@ Measured with `forge test --isolate` (each call priced as its own transaction, c
 
 | | Gas |
 |---|---|
-| Subscribe | 342k (max over the 19 timelines) |
+| Subscribe | 342k (max over the 20 timelines) |
 | Issuer funds a payment (deposit + move into escrow) | 218k |
-| Largest report in the 19 timelines | 742k |
+| Largest report in the 20 timelines | 742k |
 | Strike report with the margin check, 30 or 62 holders | 484k |
 | Observation with the margin check, 30 or 62 holders | 344k |
 | Payment date, coupon paid from escrow to 30 holders | 1.29M |
 | Payment date, coupon paid from escrow to 62 holders | 2.33M |
-| Default, cash + USDC + ETH collateral to 30 holders | 2.57M |
-| Default, cash + USDC + ETH collateral to 62 holders | 4.79M |
+| Default (cap-at-owed), owed to 30 holders, rest to the issuer | 2.79M |
+| Default (cap-at-owed), owed to 62 holders, rest to the issuer | 5.01M |
+| Default (all-to-holders), cash + USDC + ETH collateral to 62 holders | 4.79M |
 
-Both target chains run Arbitrum Nitro (32M gas per transaction). The CRE workflow's write gas limit is 6M (CRE
+Both target chains run Arbitrum Nitro (32M gas per transaction). The CRE workflow's write gas limit is 8M (CRE
 allows 10M per write); the forwarder adds signature checks on top, and Arbitrum adds L1 data gas. A first payment
 costs most, because each holder's balance goes from zero to non-zero (20k gas). A default pays every escrow asset to
 every holder: with the 8-asset cap, at most 8 x 64 credits.

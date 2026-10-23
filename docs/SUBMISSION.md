@@ -38,7 +38,8 @@ products are mostly vaults with rolling strategies, with no fixed term sheet or 
 4. **Observe, fund and pay**: CRE fixes the strike and observes every date, pricing the collateral too (margin call
    below the requirement). Each observation fixes what is owed; the issuer funds it into escrow before the payment
    date (it sees "Payment due" with a Fund button on the note page); funded, holders are paid from escrow; not
-   funded through grace, the collateral goes to the holders pro rata. After the final payment the collateral is
+   funded through grace, the note defaults and the holders are paid from escrow pro rata: what they are owed (the
+   missed payment plus par), the rest back to the issuer (or everything, under the `all-to-holders` default rule). After the final payment the collateral is
    released to the issuer. Below a knock-in, a physical note delivers units ÷ strike of the (worst) underlying's
    token, funded the same way.
 
@@ -92,15 +93,16 @@ tokens and collateral checked against the reference `simulateNote`):
 | Scenario | Outcome |
 |---|---|
 | Funds every payment (13 product timelines; one funds in two deposits, all fund early) | the reference payoff; collateral released |
-| Misses coupon 3 (phoenix) | default at the end of grace; 1,000 USDC collateral to the holders pro rata |
+| Misses coupon 3 (phoenix) | default at the end of grace; owed 1,075 > 1,000 USDC collateral: all of it to the holders pro rata |
 | Funds coupon 3 late, inside grace | cured: paid, runs to maturity |
 | Half-funds the redemption (FCN, knocked in) | default; holders share the half and the collateral |
 | ETH collateral falls 40%, margin call topped up | cured; continues; collateral released |
 | ETH collateral falls 40%, not topped up | default; holders receive the ETH in kind |
-| USDC + ETH collateral, misses coupon 2 | default; both distributed in kind, pro rata |
+| USDC + ETH collateral (1.2x), misses coupon 2, `cap-at-owed` | default; holders take the coupon + par (USDC first, then ETH at its price), the rest of the ETH back to the issuer |
+| The same, `all-to-holders` | default; both distributed in kind, pro rata |
 
-**Tests:** Foundry 23 (19 timelines against the reference; escrow can't be claimed or withdrawn; out-of-range terms
-refused on-chain; access control; gas with 30/62 holders; faucet). Unit tests: core 61 (including the funding rule
+**Tests:** Foundry 24 (20 timelines against the reference, both default rules; a late funding call refused; escrow can't be claimed or withdrawn; out-of-range terms
+refused on-chain; access control; gas with 30/62 holders; faucet). Unit tests: core 62 (including the funding rule
 on every product and template, and the AI keeping funding steps), SDK 5, indexer 8 (reorgs, replay), API 9.
 
 ## Honest limits
