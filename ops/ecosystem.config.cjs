@@ -51,6 +51,10 @@ module.exports = {
       env: {
         API_CONFIG: 'deployments/server/api.json', DATABASE_URL: secrets.DATABASE_URL,
         SN_PROXY_SECRET: secrets.SN_PROXY_SECRET, PORT: '8787', HOST: '127.0.0.1',
+        // Email (docs/NOTIFICATIONS.md): alerts go out through the site Worker's /internal/email (Cloudflare Email
+        // Service); the verifier key signs on-chain email attestations. The notifier runs inside this process.
+        EMAIL_RELAY_URL: 'https://notes.markets/internal/email', EMAIL_RELAY_SECRET: secrets.EMAIL_RELAY_SECRET,
+        VERIFIER_KEY_FILE: '.keys/verifier.json', SITE_URL: 'https://notes.markets',
       },
       restart_delay: 5000,
     },

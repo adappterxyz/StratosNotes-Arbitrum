@@ -56,9 +56,17 @@ umask 077
 printf 'DATABASE_URL=postgres://sn:%s@127.0.0.1:55432/stratosnotes\nSN_PROXY_SECRET=%s\n' "$PGPASS" "$(openssl rand -hex 32)" > .env.server
 unset PGPASS
 
+# Email (docs/NOTIFICATIONS.md): the relay secret the API and the Worker share, and the verifier key that signs
+# on-chain email attestations (its address is the engine's verifier: scripts/deploy-testnets.sh reads it)
+printf 'EMAIL_RELAY_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env.server
+[ -f .keys/verifier.json ] || (cast wallet new --json > .keys/verifier.json && chmod 600 .keys/verifier.json)
+
 pm2 start ops/ecosystem.config.cjs --only sn-arb-indexer,sn-arb-api
 curl -s http://127.0.0.1:8787/api/health      # the indexer's cursor per chain
 ```
+
+The API also runs the email notifier (no separate process). Alerts go out once Email Sending is onboarded for
+notes.markets (docs/NOTIFICATIONS.md, "Turning on Email Sending"); until then the outbox holds them.
 
 ## 4. Public API hostname: a separate Cloudflare Tunnel
 
@@ -90,6 +98,8 @@ curl -s https://api.notes.markets/api/health
 (cd web && npm install)
 # the same SN_PROXY_SECRET as .env.server, so the API trusts the client IP the Worker forwards
 grep '^SN_PROXY_SECRET=' .env.server | cut -d= -f2 | (cd web && CLOUDFLARE_ACCOUNT_ID=325f8b322c30ee0f5460cfdaef82ecf5 npx wrangler secret put SN_PROXY_SECRET)
+# the same EMAIL_RELAY_SECRET as .env.server, for /internal/email (the API's email relay)
+grep '^EMAIL_RELAY_SECRET=' .env.server | cut -d= -f2 | (cd web && CLOUDFLARE_ACCOUNT_ID=325f8b322c30ee0f5460cfdaef82ecf5 npx wrangler secret put EMAIL_RELAY_SECRET)
 npm run deploy        # landing-proof from deployments/*.json, build landing + app, wrangler deploy (custom domain)
 ```
 

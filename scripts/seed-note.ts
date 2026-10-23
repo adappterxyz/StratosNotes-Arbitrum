@@ -14,13 +14,17 @@
  * The issuer funds each payment as it falls due with scripts/issuer-bot.ts (run it alongside the keeper; with
  * MISS=pid:period a demo note shows a default). LAG and GRACE: seconds (default OBS_EVERY / 4 and / 3).
  * Keys are read from files and never printed. Writes deployments/notes/<chain>-<pid>.json.
+ *
+ * Verified emails: when the engine has requireEmail on, the issuer and the demo investors need an email
+ * attestation. These are operator-run demo accounts, so the operator's verifier key (.keys/verifier.json) attests
+ * them directly to demo identities (demo-<role>@notes.markets, salted); real people verify in the app.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createPublicClient, createWalletClient, defineChain, http, parseAbi, parseEther, toHex, zeroAddress, type Address, type Hex } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, encodeAbiParameters, http, keccak256, parseAbi, parseEther, toHex, zeroAddress, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { compile, dec, EXAMPLE_PRODUCTS, evmInput, FEEDS, instantiateProduct, parseBpmn, SRC, type EvmInput, type ProductParams } from '@sn/core';
-import { engineAbi, lensAbi } from '@sn/sdk';
+import { engineAbi, flowEngineAbi, lensAbi } from '@sn/sdk';
 
 const RPCS: Record<string, { rpc: string; id: number }> = {
   'arbitrum-sepolia': { rpc: process.env.RPC ?? 'https://sepolia-rollup.arbitrum.io/rpc', id: 421614 },
@@ -74,6 +78,26 @@ console.log(`${product.name} on ${chainKey}: ${notional} units (${unsold} left f
 await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'registerDefinition', args: [def] });
 await send(deployer, { address: dep.lens, abi: lensAbi, functionName: 'publish', args: [def] });
 
+/** Attest a demo account's email on-chain (submitted by the deployer) when the engine requires one. */
+const verifier = existsSync('.keys/verifier.json') ? privateKeyToAccount(keyFrom('.keys/verifier.json')) : null;
+async function attestDemo(holder: Address, label: string) {
+  const required = await client.readContract({ address: dep.engine, abi: flowEngineAbi, functionName: 'requireEmail' }).catch(() => false);
+  if (!required) return;
+  const [, until, nonce] = await client.readContract({ address: dep.engine, abi: flowEngineAbi, functionName: 'emailOf', args: [holder] }) as readonly [Hex, bigint, bigint];
+  if (Number(until) > Date.now() / 1000 + 30 * 86_400) return;
+  if (!verifier) throw new Error('the engine requires verified emails: .keys/verifier.json is missing');
+  const salt = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  const emailHash = keccak256(encodeAbiParameters([{ type: 'bytes32' }, { type: 'string' }], [salt, `demo-${label}@notes.markets`]));
+  const expiry = BigInt(Math.floor(Date.now() / 1000) + 365 * 86_400);
+  const signature = await verifier.signTypedData({
+    domain: { name: 'notes.markets', version: '1', chainId: net.id, verifyingContract: dep.engine },
+    types: { EmailAttestation: [{ name: 'holder', type: 'address' }, { name: 'emailHash', type: 'bytes32' }, { name: 'expiry', type: 'uint64' }, { name: 'nonce', type: 'uint256' }] },
+    primaryType: 'EmailAttestation', message: { holder, emailHash, expiry, nonce },
+  });
+  await send(deployer, { address: dep.engine, abi: flowEngineAbi, functionName: 'attestEmail', args: [holder, emailHash, expiry, signature] });
+}
+await attestDemo(deployer.address, 'issuer');
+
 const roles: Address[] = c.def.roles.map(() => zeroAddress);
 roles[roleIdx('Issuer')] = deployer.address;
 roles[roleIdx('Paying Agent')] = deployer.address; // the Investor role stays open
@@ -99,6 +123,7 @@ await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'execu
 await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'executeStep', args: [pid, c.stepIndex.Task_Mandate, NO, []] });
 
 for (const [i, inv] of investors.entries()) {
+  await attestDemo(inv.address, `investor${i + 1}`);
   const units = subs[i];
   const cash = BigInt(units) * 10n ** 6n; // issue price 100%
   if ((await client.getBalance({ address: inv.address })) < parseEther('0.0005')) {

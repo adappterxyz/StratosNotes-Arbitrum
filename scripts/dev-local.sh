@@ -34,14 +34,14 @@ cleanup() {
   sleep 1
   for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -KILL -- "-$p" 2>/dev/null || true; done
   docker rm -f "$PG" >/dev/null 2>&1 || true
-  rm -f "$WORK/fallback.key" "$ROOT/cre/local-fork.env"
+  rm -f "$WORK/fallback.key" "$WORK/verifier.json" "$ROOT/cre/local-fork.env"
 }
 trap cleanup EXIT INT TERM
 
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
 wait_http() { for _ in $(seq 1 120); do curl -sf "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "timed out waiting for $1" >&2; return 1; }
 APP_PORT="${APP_PORT:-$(free_port)}"
-read -r KEY0 KEY8 KEY9 ADDR0 ADDR9 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(8), keyOf(9), acct(0).address, acct(9).address)")
+read -r KEY0 KEY8 KEY9 ADDR0 ADDR9 KEY7 ADDR7 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(8), keyOf(9), acct(0).address, acct(9).address, keyOf(7), acct(7).address)")
 
 echo "== anvil: fork of Arbitrum Sepolia"
 ANVIL_PORT="$(free_port)"
@@ -52,7 +52,9 @@ for _ in $(seq 1 60); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break
 
 echo "== deploy: engine, lens, mock USDC"
 HEAD="$(cast block-number --rpc-url "$RPC")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
-(cd packages/evm-engine && CHAIN=arbitrum-sepolia FORWARDER_MODE=mock OWNER="$ADDR0" OUT="$WORK/deployment.json" \
+# Verified emails: anvil account 7 is the local verifier (its public test key signs attestations); requireEmail on.
+printf '[{"address":"%s","private_key":"%s"}]\n' "$ADDR7" "$KEY7" > "$WORK/verifier.json"
+(cd packages/evm-engine && CHAIN=arbitrum-sepolia FORWARDER_MODE=mock OWNER="$ADDR0" OUT="$WORK/deployment.json" VERIFIER="$ADDR7" REQUIRE_EMAIL=1 \
   forge script script/Deploy.s.sol --rpc-url "$RPC" --private-key "$KEY0" --broadcast --slow > "$WORK/deploy.log" 2>&1)
 USDC="$(cd packages/evm-engine && forge create test/mocks/MockERC20.sol:MockERC20 --rpc-url "$RPC" --private-key "$KEY0" \
   --broadcast --constructor-args USDC 6 2>/dev/null | awk '/Deployed to:/ {print $3}')"
@@ -84,7 +86,8 @@ JSON
 
 echo "== indexer, api, app"
 INDEXER_CONFIG="$WORK/indexer.json" npx tsx services/indexer/src/main.ts > "$WORK/indexer.log" 2>&1 & PIDS+=($!)
-API_CONFIG="$WORK/api.json" PORT="$API_PORT" FAUCET_KEY="$KEY0" npx tsx services/api/src/main.ts > "$WORK/api.log" 2>&1 & PIDS+=($!)
+# Email: an in-memory mailbox (GET /api/dev/emails), the local verifier key, a fast notifier tick.
+API_CONFIG="$WORK/api.json" PORT="$API_PORT" FAUCET_KEY="$KEY0" EMAIL_SENDER=mock VERIFIER_KEY_FILE="$WORK/verifier.json" NOTIFIER_INTERVAL=5000 SITE_URL="http://127.0.0.1:$APP_PORT" npx tsx services/api/src/main.ts > "$WORK/api.log" 2>&1 & PIDS+=($!)
 wait_http "http://127.0.0.1:$API_PORT/api/health"
 (cd app && VITE_TEST_WALLET=1 VITE_API_PROXY="http://127.0.0.1:$API_PORT" npx vite --port "$APP_PORT" --strictPort --host 127.0.0.1 > "$WORK/app.log" 2>&1) & PIDS+=($!)
 wait_http "http://127.0.0.1:$APP_PORT/"

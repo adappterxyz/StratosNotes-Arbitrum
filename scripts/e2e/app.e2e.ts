@@ -13,8 +13,8 @@
  */
 import { chromium, type Page } from 'playwright';
 import { createPublicClient, erc20Abi, http, type Address } from 'viem';
-import { SCALE, simulateNote, simulateWorstOf, totalPerUnit, type ProductParams } from '@sn/core';
-import { CHAINS, EvmAdapter, type NoteState } from '@sn/sdk';
+import { decodeEvmDef, dec, SCALE, simulateNote, simulateWorstOf, totalPerUnit, type ProductParams } from '@sn/core';
+import { CHAINS, EvmAdapter, flowEngineAbi, hexToBytes, parseNoteId, type NoteState } from '@sn/sdk';
 import { acct } from './lib';
 
 const env = (k: string) => { const v = process.env[k]; if (!v) throw new Error(`set ${k}`); return v; };
@@ -41,6 +41,30 @@ async function faucet(page: Page) {
   await page.getByText(/USDC sent\./).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(3000); // the mint is mined in the next block
 }
+/** Verified emails: the dev API keeps sent emails in memory; read the code from there. */
+async function mailbox(to: string): Promise<Array<{ subject: string; text: string }>> {
+  const r = await fetch(`${API}/api/dev/emails?to=${encodeURIComponent(to)}`);
+  return ((await r.json()) as { emails: Array<{ subject: string; text: string }> }).emails;
+}
+/** If the app asks for a verified email (first issue or subscription per wallet), verify it inline with the code. */
+async function verifyIfAsked(page: Page, email: string) {
+  const asked = await page.locator('[data-verify-email]').waitFor({ timeout: 8_000 }).then(() => true).catch(() => false);
+  if (!asked) return false;
+  await page.locator('#ve-email').fill(email);
+  await page.locator('[data-send-code]').click();
+  await page.locator('#ve-code').waitFor({ timeout: 30_000 });
+  let code = '';
+  for (let i = 0; i < 30 && !code; i++) {
+    code = /code is (\d{6})/.exec((await mailbox(email)).at(-1)?.text ?? '')?.[1] ?? '';
+    if (!code) await page.waitForTimeout(500);
+  }
+  await page.locator('#ve-code').fill(code);
+  await page.locator('[data-verify-code]').click();
+  // Verified, then the attestation is submitted on-chain and the original action continues.
+  await page.locator('[data-verify-email]').waitFor({ state: 'detached', timeout: 120_000 });
+  check(!!code, `${email} verified with the emailed code and attested on-chain`);
+  return true;
+}
 async function issueOne(page: Page): Promise<string> {
   await page.goto(`${APP}/issue`);
   await page.getByRole('button', { name: /12M Phoenix \(memory\) on ETH/ }).click();
@@ -55,16 +79,18 @@ async function issueOne(page: Page): Promise<string> {
   await page.locator('#is-lag').fill('40');
   await page.locator('#is-grace').fill('60');
   await page.getByRole('button', { name: 'Publish and open the book' }).click();
+  await verifyIfAsked(page, 'issuer@e2e.test');
   await page.waitForURL(/\/note\//, { timeout: 180_000 });
   const id = decodeURIComponent(page.url().split('/note/')[1]);
   await page.locator('h1').first().waitFor();
   return id;
 }
-async function subscribe(page: Page, id: string, units: number) {
+async function subscribe(page: Page, id: string, units: number, email: string) {
   await page.goto(`${APP}/note/${encodeURIComponent(id)}`);
   await page.locator('[data-subscribe]').waitFor({ timeout: 60_000 });
   await page.locator('#units').fill(String(units));
   await page.getByRole('button', { name: 'Subscribe', exact: true }).click();
+  await verifyIfAsked(page, email);
   await page.getByText(`Subscribed ${units} units`).waitFor({ timeout: 120_000 });
 }
 
@@ -91,12 +117,26 @@ try {
   await page.locator('[data-economics]').waitFor();
   check((await page.locator('[data-ratio]').textContent())?.trim() === '100.0%', 'the note page shows the collateral ratio');
 
+  // Without a verified email (no attestation on-chain), the engine itself refuses a subscription.
+  {
+    const p = parseNoteId(paidId)!;
+    const n = await (await fetch(`${API}/api/notes/${encodeURIComponent(paidId)}`)).json() as { state: NoteState };
+    const d = await (await fetch(`${API}/api/definitions/${p.chain}/${n.state.definition}`)).json() as { bytes: `0x${string}` };
+    const step = decodeEvmDef(hexToBytes(d.bytes)).steps.findIndex(x => x.id === 'Task_Subscribe');
+    const err = await client.simulateContract({
+      account: acct(5).address, address: ENGINE, abi: flowEngineAbi, functionName: 'executeStep',
+      args: [BigInt(p.pid), step, 0xffff, [{ tag: 1, data: `0x${dec(10).toString(16).padStart(64, '0')}` }]],
+    }).then(() => 'no revert', (e: Error) => e.message);
+    check(/SubscriberEmailNotVerified/.test(err), 'an unverified wallet subscribing directly on-chain is refused (SubscriberEmailNotVerified)');
+  }
+
   // 2. Investors subscribe to both.
   for (const [k, inv] of PAID.entries()) {
     await role(page, inv.role);
     await faucet(page);
-    await subscribe(page, paidId, inv.units);
-    await subscribe(page, defaultId, DEFAULTS[k].units);
+    const email = `${inv.role.toLowerCase().replace(/\s+/g, '-')}@e2e.test`;
+    await subscribe(page, paidId, inv.units, email);
+    await subscribe(page, defaultId, DEFAULTS[k].units, email);
     log(`${inv.role} subscribed ${inv.units} and ${DEFAULTS[k].units}`);
   }
   await page.goto(`${APP}/note/${encodeURIComponent(paidId)}`);
