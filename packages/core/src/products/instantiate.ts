@@ -32,7 +32,7 @@
  * on-chain in 10-decimal fixed point. Worst-of baskets observe one feed per underlying in the same CRE report
  * and compare the worst performance perfK = min(obsK_i / initialLevel_i) with each level.
  */
-import { buildWorkflow, chain, field, type BuiltWorkflow, type SpecFlow, type SpecMessage, type SpecNode } from '../bpmn';
+import { buildWorkflow, chain, field, type BuildSpec, type BuiltWorkflow, type SpecFlow, type SpecMessage, type SpecNode } from '../bpmn';
 import type { AssetDefinition, AssetOperation, NodeProps, TemplateField } from '../types';
 import {
   CASH_TOKEN, collateralToken, DELIVERABLE, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
@@ -49,6 +49,8 @@ export interface InstantiatedProduct extends BuiltWorkflow {
   name: string;
   description: string;
   params: ProductParams;
+  /** Where each step sits on the canvas grid, so an edited copy can keep this layout (draft.ts irToBpmn). */
+  layout: Record<string, { col: number; row: number }>;
 }
 
 const num = (n: number) => {
@@ -365,13 +367,13 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
       },
     })),
     ...col.map((c, i): SpecNode => ({
-      id: `Task_TopUp_${c.symbol}`, type: 'userTask', name: `Top Up Collateral ${collateralToken(c.symbol).token}`, col: 6, row: i, props: {
+      id: `Task_TopUp_${c.symbol}`, type: 'userTask', name: `Top Up Collateral ${collateralToken(c.symbol).token}`, col: 5, row: n + i, props: {
         until: { dateField: 'closedAt' }, milestone: 'collateral-pledged',
         templateFields: [field(topUpField(c.symbol), 'Decimal')], assetOperations: intoEscrow(colAsset(c.symbol), topUpField(c.symbol)),
       },
     })),
     ...(physical ? unds.map((u, i): SpecNode => ({
-      id: `Task_FundDelivery_${u.symbol}`, type: 'userTask', name: `Fund Delivery ${DELIVERABLE[u.symbol].token}`, col: 6, row: col.length + i, props: {
+      id: `Task_FundDelivery_${u.symbol}`, type: 'userTask', name: `Fund Delivery ${DELIVERABLE[u.symbol].token}`, col: 5, row: n + col.length + i, props: {
         until: { dateField: fundUntil(n) }, milestone: 'funding-deposited',
         templateFields: [field(`fundDelivery_${u.symbol}`, 'Decimal')], assetOperations: intoEscrow(deliverAsset(u.symbol), `fundDelivery_${u.symbol}`),
       },
@@ -384,7 +386,7 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     { id: 'I_End', src: 'GW_WindowsClosed', tgt: 'End_Issuer' },
   ];
 
-  const built = buildWorkflow({
+  const spec: BuildSpec = {
     key: 'SP',
     name: p.name,
     pools: [
@@ -399,8 +401,8 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
         { id: 'Task_Mandate', type: 'userTask', name: 'Mandate Paying Agent', col: 3 },
         { id: 'GW_Windows', type: 'parallelGateway', name: 'Open funding windows', col: 4 },
         ...windows,
-        { id: 'GW_WindowsClosed', type: 'parallelGateway', name: 'All windows closed', col: 7 },
-        { id: 'End_Issuer', type: 'endEvent', name: 'Funding Closed', col: 8 },
+        { id: 'GW_WindowsClosed', type: 'parallelGateway', name: 'All windows closed', col: 6 },
+        { id: 'End_Issuer', type: 'endEvent', name: 'Funding Closed', col: 7 },
       ], flows: issuerFlows },
       { id: 'Part_PayingAgent', name: PA, proc: 'Proc_PayingAgent', nodes, flows },
       { id: 'Part_Investor', name: INVESTOR, proc: 'Proc_Investor', open: true, nodes: [
@@ -425,9 +427,12 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
       ...messages,
     ],
     assets,
-  });
+  };
+  const built = buildWorkflow(spec);
+  const layout = Object.fromEntries(spec.pools.flatMap(pl => pl.nodes.map(nd => [nd.id, { col: nd.col, row: nd.row ?? 0 }])));
   return {
     ...built,
+    layout,
     id: `product-${p.productType}`,
     name: p.name,
     params: p,

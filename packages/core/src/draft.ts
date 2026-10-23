@@ -153,7 +153,7 @@ export function applyPatch(base: WorkflowDraft, patch: DraftPatch): WorkflowDraf
  * Lay the IR out on a grid and build BPMN: columns by longest path (a message
  * target sits right of its sender), branches drop to new rows.
  */
-export function irToBpmn(ir: WorkflowIR, key = 'WF'): { bpmnXml: string } {
+export function irToBpmn(ir: WorkflowIR, key = 'WF', layout?: Record<string, { col: number; row: number }>): { bpmnXml: string } {
   const pos = new Map<string, { col: number; row: number }>();
   const flowById = new Map(ir.flows.map(f => [f.id, f]));
   const preds = new Map<string, string[]>();
@@ -187,6 +187,8 @@ export function irToBpmn(ir: WorkflowIR, key = 'WF'): { bpmnXml: string } {
       });
     }
   }
+  // A known layout (an edited product keeps its own); the rest is laid out above, then nudged off taken cells.
+  if (layout) for (const n of ir.nodes) if (layout[n.id]) { col.set(n.id, layout[n.id].col); rowOf.set(n.id, layout[n.id].row); }
   // Two steps on one cell: push the later one down.
   const taken = new Set<string>();
   for (const n of ir.nodes) {

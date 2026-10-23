@@ -74,6 +74,7 @@ contract ProductsTest is Test {
     uint256 maxReportGas;
     uint256 maxSubscribeGas;
     uint256 maxFundGas;
+    uint256[] reportGas; // every report and advance in the last replay, in order
 
     function setUp() public {
         engine = new FlowEngine(admin, forwarder);
@@ -153,9 +154,9 @@ contract ProductsTest is Test {
             Action memory a = f.actions[i];
             if (a.at > block.timestamp) vm.warp(a.at);
             if (a.kind == 1) {
-                _report(pid, a.step, a.values);
+                reportGas.push(_report(pid, a.step, a.values));
             } else if (a.kind == 2) {
-                _report(pid, NO, new int256[](0));
+                reportGas.push(_report(pid, NO, new int256[](0)));
             } else if (a.kind == 3) {
                 tokens[a.token].mint(issuer, a.base);
                 vm.prank(issuer);
@@ -539,9 +540,10 @@ contract ProductsTest is Test {
     }
 
     function _manyHolders(uint256 n, string memory label) internal {
-        // Phoenix (memory), issuer misses coupon 3 (fixture 13): funding, a margin check on every observation,
-        // payments to every holder, and the default distribution of the collateral.
-        Fixture memory f = _fixture(13);
+        // FCN with USDC + ETH collateral; the issuer funds coupon 1, misses coupon 2 (fixture 18): the issuer's
+        // funding, a coupon paid to every holder, margin checks on the ETH collateral, and the heaviest default
+        // (cash, USDC and ETH collateral distributed to every holder).
+        Fixture memory f = _fixture(18);
         address issuer = makeAddr(string.concat("I", label));
         uint256 pid = _issue(f, issuer, makeAddr(string.concat("P", label)));
         int256 units = int256(1000 / n) * SCALE;
@@ -553,11 +555,16 @@ contract ProductsTest is Test {
         uint256 reportBefore = maxReportGas;
         maxReportGas = 0;
         maxFundGas = 0;
-        vm.recordLogs();
+        delete reportGas;
         _play(f, pid, issuer, holders, 0, type(uint256).max);
         assertEq(engine.processOf(pid).status, engine.COMPLETED());
-        console2.log(string.concat("holders ", label, ": max report (observation + margin check, payment, default) gas"), maxReportGas);
-        console2.log(string.concat("holders ", label, ": max issuer funding gas"), maxFundGas);
+        // Reports in order: strike, observation 1, payment date 1 (pays every holder), observation 2,
+        // payment date 2 (missed), grace end (default).
+        console2.log(string.concat("holders ", label, ": strike (with margin check) gas"), reportGas[0]);
+        console2.log(string.concat("holders ", label, ": observation (with margin check) gas"), reportGas[1]);
+        console2.log(string.concat("holders ", label, ": coupon paid to every holder gas"), reportGas[2]);
+        console2.log(string.concat("holders ", label, ": default, escrow to every holder gas"), reportGas[reportGas.length - 1]);
+        console2.log(string.concat("holders ", label, ": issuer funding a payment gas"), maxFundGas);
         assertLt(maxReportGas, 10_000_000, "stays under CRE's 10M write gas");
         maxReportGas = reportBefore > maxReportGas ? reportBefore : maxReportGas;
     }

@@ -18,7 +18,7 @@ function custom(basis: ProductParams, name: string, edit: (d: WorkflowDraft) => 
   d.name = name;
   edit(d);
   const ir = draftToIR(d);
-  const { bpmnXml } = irToBpmn(ir);
+  const { bpmnXml } = irToBpmn(ir, 'WF', prod.layout); // keep the product's own layout
   const issues = check(parseBpmn(bpmnXml, prod.assets));
   if (issues.errors.length) throw new Error(`${name}: ${issues.errors.map(e => e.message).join('; ')}`);
   return { bpmnXml, assets: prod.assets, basis };
