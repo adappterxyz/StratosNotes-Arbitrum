@@ -10,7 +10,7 @@ import { decodeEvmDef, evmInput, toBase, type EvmInput, type WorkflowDef } from 
 import type { ChainAdapter, IssueRequest, Progress, Submitted } from '../adapter';
 import { applyEvent, hasPid, type EngineEvent } from '../events';
 import { depositAmounts, type InputValue, type PlanStep } from '../issue';
-import { noteId, parseNoteId, type ChainInfo, type FieldValue, type NoteId, type NoteState } from '../model';
+import { isBookStep, noteId, parseNoteId, type ChainInfo, type FieldValue, type NoteId, type NoteState } from '../model';
 import { decodeEngineLog, fieldValue } from './decode';
 import { flowEngineAbi, notesLensAbi } from './generated';
 import { bytesToHex, hexToBytes, tagOf } from './state';
@@ -224,8 +224,8 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
   }
 
   /** The open subscription step holding a token now (a user task with a repeatable window and a deposit). */
-  static subscribeStep(def: WorkflowDef, s: Pick<NoteState, 'tokens'>): number {
-    const i = def.steps.findIndex((st, k) => st.kind === KIND_USER && st.until && s.tokens.includes(k) && st.ops.some(o => o.kind === 5));
+  static subscribeStep(def: WorkflowDef, s: Pick<NoteState, 'tokens' | 'roles'>): number {
+    const i = def.steps.findIndex((st, k) => st.kind === KIND_USER && isBookStep(def, s, k) && st.ops.some(o => o.kind === 5));
     if (i < 0) throw new Error('This note is not taking subscriptions now.');
     return i;
   }

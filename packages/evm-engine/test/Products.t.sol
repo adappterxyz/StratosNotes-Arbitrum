@@ -304,9 +304,18 @@ contract ProductsTest is Test {
         vm.expectRevert(FlowEngine.BadInputs.selector);
         engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none());
 
+        vm.recordLogs();
         uint256 pid = _issue(f, issuer, makeAddr("p"));
         address escrow = engine.ESCROW();
         assertEq(engine.roleOf(pid, 3), escrow);
+        // ProcessStarted reports the roles as held (indexers read it): the escrow role is ESCROW.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != FlowEngine.ProcessStarted.selector) continue;
+            (, address[] memory held,) = abi.decode(logs[i].data, (uint64, address[], address[]));
+            assertEq(held[3], escrow, "event: escrow role held by ESCROW");
+            assertEq(held[2], address(0), "event: the open role stays open");
+        }
         assertGt(engine.balanceOf(pid, escrow, 2), 0, "the pledge sits in escrow"); // col_USD
         vm.prank(issuer);
         vm.expectRevert(FlowEngine.InsufficientBalance.selector);

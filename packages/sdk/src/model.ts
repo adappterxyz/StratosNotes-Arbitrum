@@ -225,8 +225,16 @@ export function termsOf(def: WorkflowDef): { params: ProductParams; hasTerms: bo
   return { params, hasTerms, custom: !!meta.custom || !hasTerms };
 }
 
-/** Is a subscription window (a step with `until`) holding a token? */
-export const windowOpen = (def: WorkflowDef, s: Pick<NoteState, 'tokens'>) => def.steps.some((st, i) => st.until && s.tokens.includes(i));
+/**
+ * The book: a window (a step with `until`) of an open role (anyone may act: its holder is the zero address),
+ * holding a token. The issuer's funding and top-up windows are windows too, but of a held role.
+ */
+export const isBookStep = (def: WorkflowDef, s: Pick<NoteState, 'tokens' | 'roles'>, i: number) => {
+  const st = def.steps[i];
+  return !!st?.until && s.tokens.includes(i) && /^0x0{40}$/i.test(s.roles[st.role] ?? '');
+};
+/** Is the book (subscription window) open? */
+export const windowOpen = (def: WorkflowDef, s: Pick<NoteState, 'tokens' | 'roles'>) => def.steps.some((_, i) => isBookStep(def, s, i));
 
 export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000): NoteView {
   const { params, hasTerms, custom } = termsOf(def);

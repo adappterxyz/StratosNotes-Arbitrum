@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compile, dec, EXAMPLE_PRODUCTS, instantiateProduct, MILESTONES, parseBpmn } from '@sn/core';
-import { applyEvent, depositAmounts, issuerActions, noteId, noteView, parseNoteId, planIssuance, type NoteEvent, type NoteState } from '../src';
+import { applyEvent, depositAmounts, EvmAdapter, issuerActions, noteId, noteView, parseNoteId, planIssuance, windowOpen, type NoteEvent, type NoteState } from '../src';
 
 const p = EXAMPLE_PRODUCTS.phoenix;
 const prod = instantiateProduct(p);
@@ -86,6 +86,10 @@ describe('events -> note state', () => {
     expect(issuerActions(c.def, { tokens: [c.stepIndex.Task_Fund1, c.stepIndex.Task_TopUp_USD] })).toEqual({
       fund: [{ step: c.stepIndex.Task_Fund1, period: 1 }], topUp: [{ step: c.stepIndex.Task_TopUp_USD, symbol: 'USD' }], delivery: [],
     });
+    // A funding window closed by its date is no longer an action.
+    const until = { [field('fundUntil1')]: { tag: 1, value: '230' } } as NoteState['values'];
+    expect(issuerActions(c.def, { tokens: [c.stepIndex.Task_Fund1], values: until }, 229).fund).toHaveLength(1);
+    expect(issuerActions(c.def, { tokens: [c.stepIndex.Task_Fund1], values: until }, 230).fund).toEqual([]);
     // Missed, grace runs out: the default distributes the escrow.
     for (const e of [
       { name: 'Milestone' as const, pid: '1', code: MILESTONES['payment-missed'], step: c.stepIndex.Task_Missed1, actor: '0x0' },
@@ -97,5 +101,16 @@ describe('events -> note state', () => {
     expect(v.economics!.state).toBe('defaulted');
     expect(v.economics!.periods.map(p => p.status)).toEqual(['missed', 'cancelled', 'cancelled', 'cancelled']);
     expect(v.economics!.milestones.map(m => m.name)).toEqual(['payment-missed', 'defaulted']);
+  });
+});
+
+describe('the book is the open role\'s window, not the issuer\'s funding windows', () => {
+  it('subscribe finds Task_Subscribe while Fund Payment windows also hold tokens', () => {
+    const zero = '0x0000000000000000000000000000000000000000';
+    const roles = c.def.roles.map(r => (r === 'Investor' ? zero : r === 'Escrow' ? '0x80f1000000000000000000000000000000000000' : '0x7099000000000000000000000000000000000000'));
+    const book = { tokens: [c.stepIndex.Task_Fund1, c.stepIndex.Task_TopUp_USD, c.stepIndex.Task_Subscribe], roles };
+    expect(EvmAdapter.subscribeStep(c.def, book)).toBe(c.stepIndex.Task_Subscribe);
+    expect(windowOpen(c.def, book)).toBe(true);
+    expect(windowOpen(c.def, { tokens: [c.stepIndex.Task_Fund1, c.stepIndex.Task_TopUp_USD], roles })).toBe(false);
   });
 });

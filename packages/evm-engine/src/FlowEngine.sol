@@ -274,10 +274,13 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             if (cash ? assetTokens[a].code.length == 0 : assetTokens[a] != address(0)) revert BadToken();
             if (cash) _assetTokens[pid][a] = assetTokens[a];
         }
+        // The roles as held: escrow roles are the engine's ESCROW (the event reports these, not the inputs).
+        address[] memory held = roles;
         for (uint256 k = 0; k < roles.length; k++) {
             if (Def.roleFlags(core, k) & Def.R_ESCROW != 0) {
                 if (roles[k] != address(0)) revert BadInputs(); // the engine holds escrow: nobody may claim it
                 _roles[pid][k] = ESCROW;
+                held[k] = ESCROW;
             } else if (roles[k] != address(0)) {
                 _roles[pid][k] = roles[k];
             }
@@ -293,7 +296,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             updatedAt: uint40(block.timestamp),
             tags: 0
         });
-        emit ProcessStarted(pid, definition, msg.sender, ref, roles, assetTokens);
+        emit ProcessStarted(pid, definition, msg.sender, ref, held, assetTokens);
 
         Run memory r = _newRun(pid, core, msg.sender, inputs, new int256[](0), NO_CHOICE);
         r.tokens[0] = startStep;
