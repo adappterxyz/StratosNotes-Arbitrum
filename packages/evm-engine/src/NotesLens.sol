@@ -124,4 +124,12 @@ contract NotesLens {
         for (uint256 i = 0; i < n; i++) out[i] = buf[i];
         next = pid > count ? 0 : pid;
     }
+
+    /// @notice Verified-email bindings for many addresses at once: the salted hash and until when it counts
+    ///         (zero: none). The email and its salt are never on-chain.
+    function emails(address[] calldata holders) external view returns (bytes32[] memory hashes, uint64[] memory verifiedUntil) {
+        hashes = new bytes32[](holders.length);
+        verifiedUntil = new uint64[](holders.length);
+        for (uint256 i = 0; i < holders.length; i++) (hashes[i], verifiedUntil[i],) = engine.emailOf(holders[i]);
+    }
 }

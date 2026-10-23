@@ -7,6 +7,7 @@ import {NotesLens} from "../src/NotesLens.sol";
 import {CreReceiver} from "../src/cre/CreReceiver.sol";
 import {IReceiver} from "../src/cre/IReceiver.sol";
 import {Def} from "../src/lib/Def.sol";
+import {EmailAttest} from "../src/lib/EmailAttest.sol";
 import {MockERC20, FeeOnTransferERC20} from "./mocks/MockERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
@@ -610,5 +611,123 @@ contract ProductsTest is Test {
     function _slice(bytes memory b, uint256 from, uint256 to) internal pure returns (bytes memory out) {
         out = new bytes(to - from);
         for (uint256 i = from; i < to; i++) out[i - from] = b[i];
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Verified emails (EmailAttest): a salted hash attested by the verifier, required for issuing, subscribing
+    // and receiving units when requireEmail is on; reports, CRE and withdrawals are never gated.
+    // ---------------------------------------------------------------------------------------------------------
+
+    uint256 constant VERIFIER_PK = 0xA11CE;
+    bytes32 constant ATTEST_TYPEHASH = keccak256("EmailAttestation(address holder,bytes32 emailHash,uint64 expiry,uint256 nonce)");
+
+    function _emailHash(string memory email) internal pure returns (bytes32) {
+        return keccak256(abi.encode(keccak256("salt"), email));
+    }
+
+    function _attestSig(uint256 pk, address holder, bytes32 h, uint64 expiry, uint256 nonce) internal view returns (bytes memory) {
+        bytes32 domain = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256("notes.markets"), keccak256("1"), block.chainid, address(engine)
+        ));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domain, keccak256(abi.encode(ATTEST_TYPEHASH, holder, h, expiry, nonce))));
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, digest);
+        return abi.encodePacked(r, s_, v);
+    }
+
+    function _attest(address holder) internal {
+        (,, uint64 nonce) = engine.emailOf(holder);
+        uint64 expiry = uint64(block.timestamp + 365 days);
+        engine.attestEmail(holder, _emailHash("a@b.co"), expiry, _attestSig(VERIFIER_PK, holder, _emailHash("a@b.co"), expiry, nonce));
+    }
+
+    function _requireEmails() internal {
+        vm.prank(admin);
+        engine.setEmailPolicy(vm.addr(VERIFIER_PK), true);
+    }
+
+    function test_emailAttestationBindsASaltedHash() public {
+        vm.prank(admin);
+        engine.setEmailPolicy(vm.addr(VERIFIER_PK), false);
+        address who = makeAddr("who");
+        bytes32 h = _emailHash("a@b.co");
+        uint64 expiry = uint64(block.timestamp + 30 days);
+        bytes memory sig = _attestSig(VERIFIER_PK, who, h, expiry, 0);
+        vm.expectEmit(true, false, false, true, address(engine));
+        emit FlowEngine.EmailAttested(who, h, expiry);
+        vm.prank(makeAddr("anyone")); // anyone may submit it
+        engine.attestEmail(who, h, expiry, sig);
+        (bytes32 got, uint64 until, uint64 nonce) = engine.emailOf(who);
+        assertEq(got, h);
+        assertEq(until, expiry);
+        assertEq(nonce, 1);
+
+        // Replaying the same attestation fails: the nonce moved on.
+        vm.expectRevert(EmailAttest.AttestationInvalid.selector);
+        engine.attestEmail(who, h, expiry, sig);
+        // A different signer is refused.
+        vm.expectRevert(EmailAttest.AttestationInvalid.selector);
+        engine.attestEmail(who, h, expiry, _attestSig(0xB0B, who, h, expiry, 1));
+        // An expired attestation is refused.
+        vm.expectRevert(EmailAttest.AttestationExpired.selector);
+        engine.attestEmail(who, h, uint64(block.timestamp), _attestSig(VERIFIER_PK, who, h, uint64(block.timestamp), 1));
+        // Signed for another holder: refused.
+        vm.expectRevert(EmailAttest.AttestationInvalid.selector);
+        engine.attestEmail(makeAddr("other"), h, expiry, _attestSig(VERIFIER_PK, who, h, expiry, 1));
+
+        // Revoked: only the verifier or the owner; an attestation signed before the revocation no longer works.
+        bytes memory pending = _attestSig(VERIFIER_PK, who, h, expiry, 1);
+        vm.expectRevert(EmailAttest.NotVerifier.selector);
+        engine.revokeEmail(who);
+        vm.prank(vm.addr(VERIFIER_PK));
+        engine.revokeEmail(who);
+        (got, until,) = engine.emailOf(who);
+        assertEq(got, bytes32(0));
+        assertEq(until, 0);
+        vm.expectRevert(EmailAttest.AttestationInvalid.selector);
+        engine.attestEmail(who, h, expiry, pending);
+    }
+
+    function test_requireEmailGatesIssuingSubscribingAndReceivingUnits() public {
+        Fixture memory f = _fixture(0);
+        address issuer = makeAddr("i");
+        // Off: nobody needs an attestation (every product test above runs this way).
+        uint256 pid0 = _issue(f, issuer, makeAddr("p"));
+        _subscribe(f, pid0, makeAddr("free"), 10e10, 10e6);
+
+        _requireEmails();
+        bytes32 id = sha256(f.def);
+        vm.prank(issuer);
+        vm.expectRevert(abi.encodeWithSelector(FlowEngine.IssuerEmailNotVerified.selector, issuer));
+        engine.startProcess(id, 2, _roles(issuer, makeAddr("p")), _assetTokens(f), f.startStep, _none());
+
+        _attest(issuer);
+        uint256 pid = _issue(f, issuer, makeAddr("p"));
+
+        address inv = makeAddr("inv");
+        tokens[1].mint(inv, 100e6);
+        vm.startPrank(inv);
+        tokens[1].approve(address(engine), 100e6);
+        vm.expectRevert(abi.encodeWithSelector(FlowEngine.SubscriberEmailNotVerified.selector, inv));
+        engine.executeStep(pid, f.subscribeStep, NO, _num(100e10));
+        vm.stopPrank();
+        _attest(inv);
+        _subscribe(f, pid, inv, 100e10, 100e6);
+
+        // Units can't move to an unverified address; to a verified one they can.
+        address buyer = makeAddr("buyer");
+        vm.prank(inv);
+        vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, buyer));
+        engine.transferUnits(pid, NOTE, buyer, 10e10);
+        _attest(buyer);
+        vm.prank(inv);
+        engine.transferUnits(pid, NOTE, buyer, 10e10);
+
+        // An expired attestation stops counting; reports keep running regardless.
+        vm.warp(block.timestamp + 366 days);
+        address inv2 = makeAddr("inv2");
+        vm.prank(inv);
+        vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, inv2));
+        engine.transferUnits(pid, NOTE, inv2, 1e10);
     }
 }

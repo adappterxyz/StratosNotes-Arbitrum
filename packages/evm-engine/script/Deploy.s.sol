@@ -62,6 +62,11 @@ contract Deploy is Script {
         if (pk != 0) vm.startBroadcast(pk);
         else vm.startBroadcast();
         engine = new FlowEngine(owner, forwarder);
+        // Verified emails (EmailAttest): VERIFIER signs attestations; REQUIRE_EMAIL gates issuing, subscribing and
+        // receiving units on them. Set here only when the broadcaster is the owner (testnets).
+        address emailVerifier = vm.envOr("VERIFIER", address(0));
+        bool requireEmail = vm.envOr("REQUIRE_EMAIL", false);
+        if (emailVerifier != address(0)) engine.setEmailPolicy(emailVerifier, requireEmail);
         NotesLens lens = new NotesLens(engine);
         if (testTokens) _testTokens(key, owner);
         vm.stopBroadcast();
@@ -73,6 +78,8 @@ contract Deploy is Script {
         vm.serializeAddress(key, "forwarder", forwarder);
         vm.serializeString(key, "forwarderMode", mode);
         vm.serializeAddress(key, "owner", owner);
+        vm.serializeAddress(key, "verifier", engine.verifier());
+        vm.serializeBool(key, "requireEmail", engine.requireEmail());
         vm.serializeUint(key, "block", block.number);
         string memory json = vm.serializeUint(key, "deployedAt", block.timestamp);
         string memory path = vm.envOr("OUT", string.concat(vm.projectRoot(), "/../../deployments/", name, ".json"));

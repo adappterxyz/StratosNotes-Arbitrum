@@ -231,6 +231,34 @@ export const flowEngineAbi = [
  },
  {
   "type": "function",
+  "name": "attestEmail",
+  "inputs": [
+   {
+    "name": "holder",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "emailHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expiry",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "sig",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "balanceOf",
   "inputs": [
    {
@@ -328,6 +356,35 @@ export const flowEngineAbi = [
   ],
   "outputs": [],
   "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "emailOf",
+  "inputs": [
+   {
+    "name": "holder",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "emailHash",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "verifiedUntil",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "nonce",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
  },
  {
   "type": "function",
@@ -650,6 +707,32 @@ export const flowEngineAbi = [
  },
  {
   "type": "function",
+  "name": "requireEmail",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "revokeEmail",
+  "inputs": [
+   {
+    "name": "holder",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "roleOf",
   "inputs": [
    {
@@ -671,6 +754,24 @@ export const flowEngineAbi = [
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "setEmailPolicy",
+  "inputs": [
+   {
+    "name": "verifier_",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "requireEmail_",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -934,6 +1035,19 @@ export const flowEngineAbi = [
  },
  {
   "type": "function",
+  "name": "verifier",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "withdraw",
   "inputs": [
    {
@@ -1013,6 +1127,63 @@ export const flowEngineAbi = [
     "type": "uint256",
     "indexed": false,
     "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "EmailAttested",
+  "inputs": [
+   {
+    "name": "holder",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "emailHash",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expiry",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "EmailPolicyUpdated",
+  "inputs": [
+   {
+    "name": "verifier",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "requireEmail",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "EmailRevoked",
+  "inputs": [
+   {
+    "name": "holder",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
    }
   ],
   "anonymous": false
@@ -1630,6 +1801,17 @@ export const flowEngineAbi = [
  },
  {
   "type": "error",
+  "name": "IssuerEmailNotVerified",
+  "inputs": [
+   {
+    "name": "issuer",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
   "name": "JoinNotReady",
   "inputs": []
  },
@@ -1697,6 +1879,17 @@ export const flowEngineAbi = [
  },
  {
   "type": "error",
+  "name": "RecipientEmailNotVerified",
+  "inputs": [
+   {
+    "name": "recipient",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
   "name": "ReentrancyGuardReentrantCall",
   "inputs": []
  },
@@ -1715,6 +1908,17 @@ export const flowEngineAbi = [
   "type": "error",
   "name": "StepNotActive",
   "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "SubscriberEmailNotVerified",
+  "inputs": [
+   {
+    "name": "subscriber",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
  },
  {
   "type": "error",
@@ -1805,6 +2009,30 @@ export const notesLensAbi = [
     "name": "data",
     "type": "bytes",
     "internalType": "bytes"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "emails",
+  "inputs": [
+   {
+    "name": "holders",
+    "type": "address[]",
+    "internalType": "address[]"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "hashes",
+    "type": "bytes32[]",
+    "internalType": "bytes32[]"
+   },
+   {
+    "name": "verifiedUntil",
+    "type": "uint64[]",
+    "internalType": "uint64[]"
    }
   ],
   "stateMutability": "view"

@@ -25,7 +25,11 @@ export type EngineEvent =
   | { name: 'ProcessCompleted'; pid: string }
   /** A business event the workflow marks on a step (core MILESTONES): collateral, funding, payments, default. */
   | { name: 'Milestone'; pid: string; code: number; step: number; actor: string }
-  | { name: 'FallbackReporterUpdated'; previous: string; next: string };
+  | { name: 'FallbackReporterUpdated'; previous: string; next: string }
+  /** A verified email bound to an address as a salted hash (the email and salt stay off-chain), or removed. */
+  | { name: 'EmailAttested'; holder: string; emailHash: string; expiry: number }
+  | { name: 'EmailRevoked'; holder: string }
+  | { name: 'EmailPolicyUpdated'; verifier: string; requireEmail: boolean };
 
 export type NoteEvent = Extract<EngineEvent, { pid: string }>;
 

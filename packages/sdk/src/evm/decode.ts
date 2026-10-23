@@ -54,6 +54,9 @@ export function decodeEngineLog(log: { data: Hex; topics: readonly Hex[] }, isFa
     case 'ProcessCompleted': return { name: 'ProcessCompleted', pid: s('pid') };
     case 'Milestone': return { name: 'Milestone', pid: s('pid'), code: Number(a.code), step: Number(a.step), actor: lc(s('actor')) };
     case 'FallbackReporterUpdated': return { name: 'FallbackReporterUpdated', previous: lc(s('previous')), next: lc(s('next')) };
+    case 'EmailAttested': return { name: 'EmailAttested', holder: lc(s('holder')), emailHash: lc(s('emailHash')), expiry: Number(a.expiry) };
+    case 'EmailRevoked': return { name: 'EmailRevoked', holder: lc(s('holder')) };
+    case 'EmailPolicyUpdated': return { name: 'EmailPolicyUpdated', verifier: lc(s('verifier')), requireEmail: Boolean(a.requireEmail) };
     default: return null;
   }
 }

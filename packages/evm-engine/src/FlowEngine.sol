@@ -8,6 +8,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {CreReceiver} from "./cre/CreReceiver.sol";
 import {Def} from "./lib/Def.sol";
 import {DefCheck} from "./lib/DefCheck.sol";
+import {EmailAttest} from "./lib/EmailAttest.sol";
 import {SSTORE2} from "./lib/SSTORE2.sol";
 
 /// @title FlowEngine - runs compiled BPMN workflows (structured notes) on an EVM chain
@@ -141,6 +142,8 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     mapping(uint256 => mapping(address => bool)) internal _isHolder;
     mapping(uint256 => mapping(address => mapping(uint256 => int256))) internal _balances;
     mapping(uint256 => mapping(uint256 => uint256)) internal _vault; // ERC-20 base units held per process asset
+    /// Verified emails, bound as a salted hash (EmailAttest): attested by `verifier`, required when `requireEmail`.
+    mapping(address => EmailAttest.Email) internal _emails;
 
     // ---------------------------------------------------------------------------------------------------------
     // Events and errors
@@ -161,6 +164,10 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     event FallbackReporterUpdated(address indexed previous, address indexed next);
     event Milestone(uint256 indexed pid, uint8 indexed code, uint16 step, address actor);
     event ProcessCompleted(uint256 indexed pid);
+    /// Emitted by the EmailAttest library (delegatecall, so from this address); declared here for the ABI.
+    event EmailAttested(address indexed holder, bytes32 emailHash, uint64 expiry);
+    event EmailRevoked(address indexed holder);
+    event EmailPolicyUpdated(address verifier, bool requireEmail);
 
     error UnknownDefinition();
     error UnknownProcess();
@@ -190,6 +197,10 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     error VaultShort();
     error TransferMismatch();
     error PayoutsNotSupported();
+    /// requireEmail is on and the address has no current verified-email attestation.
+    error IssuerEmailNotVerified(address issuer);
+    error SubscriberEmailNotVerified(address subscriber);
+    error RecipientEmailNotVerified(address recipient);
 
     constructor(address initialOwner, address forwarder) CreReceiver(initialOwner, forwarder) {}
 
@@ -215,6 +226,43 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     function setFallbackReporter(address next) external onlyOwner {
         emit FallbackReporterUpdated(fallbackReporter, next);
         fallbackReporter = next;
+    }
+
+    /// @notice Verified emails (EmailAttest): `verifier` signs attestations (zero: none accepted); with
+    ///         `requireEmail` on, issuing (startProcess), acting in an OPEN role (subscribing) and receiving units
+    ///         (transferUnits) need a current attestation. Reports, CRE and withdrawals never do: holders can
+    ///         always exit.
+    address public verifier;
+    bool public requireEmail;
+
+    function setEmailPolicy(address verifier_, bool requireEmail_) external onlyOwner {
+        verifier = verifier_;
+        requireEmail = requireEmail_;
+        emit EmailPolicyUpdated(verifier_, requireEmail_);
+    }
+
+    /// @notice Bind `holder` to a verified email: emailHash = keccak256(abi.encode(salt, email)), signed by the
+    ///         verifier (EIP-712, see EmailAttest). Anyone may submit it. A newer attestation replaces the old one.
+    function attestEmail(address holder, bytes32 emailHash, uint64 expiry, bytes calldata sig) external {
+        EmailAttest.attest(_emails, verifier, holder, emailHash, expiry, sig);
+    }
+
+    /// @notice The verifier or the owner removes a binding (e.g. at the person's request).
+    function revokeEmail(address holder) external {
+        EmailAttest.revoke(_emails, verifier, owner(), holder);
+    }
+
+    /// @notice A holder's binding: the salted hash, until when it counts, and the nonce the next attestation signs.
+    function emailOf(address holder) external view returns (bytes32 emailHash, uint64 verifiedUntil, uint64 nonce) {
+        EmailAttest.Email storage e = _emails[holder];
+        return (e.hash, e.verifiedUntil, e.nonce);
+    }
+
+    function _needEmail(address who, uint256 why) internal view {
+        if (!requireEmail || _emails[who].verifiedUntil >= block.timestamp) return;
+        if (why == 0) revert IssuerEmailNotVerified(who);
+        if (why == 1) revert SubscriberEmailNotVerified(who);
+        revert RecipientEmailNotVerified(who);
     }
 
     /// @notice Apply a report as the fallback reporter. Same payload and checks as `onReport`.
@@ -267,6 +315,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         Def.Step memory s = Def.step(core, startStep);
         if (s.kind != Def.START) revert WrongStepKind();
         if (roles[s.role] != msg.sender) revert WrongRole();
+        _needEmail(msg.sender, 0);
 
         pid = ++processCount;
         for (uint256 a = 0; a < assetTokens.length; a++) {
@@ -324,6 +373,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         }
         address holder = _roles[pid][s.role];
         if (holder != msg.sender && holder != address(0)) revert WrongRole();
+        if (holder == address(0)) _needEmail(msg.sender, 1); // acting in an OPEN role: e.g. subscribing
         _runStep(r, step);
         _advance(r);
         _save(r);
@@ -371,6 +421,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         bytes memory core = _core(pid);
         if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_ISSUED) revert NotTransferable();
         if (amount <= 0 || to == address(0) || to == ESCROW) revert BadInputs();
+        _needEmail(to, 2);
         _debit(pid, msg.sender, asset, amount);
         _credit(pid, to, asset, amount);
         emit UnitsTransferred(pid, asset, msg.sender, to, amount);
