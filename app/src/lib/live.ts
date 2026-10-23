@@ -1,6 +1,7 @@
 /**
- * Live reads: fetch from the API and re-fetch when the indexer reports a change (Server-Sent Events on
- * /api/stream), with a slow poll in case the stream drops.
+ * Live reads: fetch from the API and re-fetch when the indexer reports a change. One shared poller asks
+ * /api/updates?since=<seq> every few seconds (the backend is D1, which has no push), and each hook re-fetches when
+ * a change matches it; a slow fallback poll covers anything missed.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { decodeEvmDef, type WorkflowDef } from '@sn/core';
@@ -8,24 +9,53 @@ import { hexToBytes } from '@sn/sdk';
 import { api, type NoteDetail, type NoteFilters, type NoteItem, type PortfolioItem } from './api';
 
 const FALLBACK_POLL_MS = 20_000;
+const UPDATES_POLL_MS = 4_000;
 
-/** A counter that bumps when the stream reports a change matching `query` (debounced), or on the fallback poll. */
+type Change = { chain: string; notes: string[] | null };
+const listeners = new Set<(changes: Change[]) => void>();
+let seq: number | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+async function pollUpdates() {
+  timer = null;
+  if (!listeners.size) return;
+  try {
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      const r = await fetch(seq === null ? '/api/updates' : `/api/updates?since=${seq}`, { cache: 'no-store' });
+      if (r.ok) {
+        const u = await r.json() as { seq: number; changes: Change[] };
+        const first = seq === null;
+        seq = u.seq;
+        if (!first && u.changes.length) for (const l of listeners) l(u.changes);
+      }
+    }
+  } catch { /* offline: try again next tick */ }
+  if (listeners.size && !timer) timer = setTimeout(pollUpdates, UPDATES_POLL_MS);
+}
+
+function subscribe(l: (changes: Change[]) => void) {
+  listeners.add(l);
+  if (!timer) timer = setTimeout(pollUpdates, 0);
+  return () => { listeners.delete(l); };
+}
+
+/** A counter that bumps when a change matching `query` is reported (debounced), or on the fallback poll.
+ * `query` is '' for "anything", or "?notes=<id>" for one note. */
 function useLiveTick(query: string | null) {
   const [tick, setTick] = useState(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (query === null) return;
+    const want = new URLSearchParams(query).get('notes');
     const bump = () => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setTick(x => x + 1), 250);
+      if (debounce.current) clearTimeout(debounce.current);
+      debounce.current = setTimeout(() => setTick(x => x + 1), 250);
     };
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource(`/api/stream${query}`);
-      es.addEventListener('notes', bump);
-    } catch { /* no EventSource: the poll still runs */ }
+    const stop = subscribe(changes => {
+      if (!want || changes.some(c => c.notes === null || c.notes.includes(want))) bump();
+    });
     const poll = setInterval(() => setTick(x => x + 1), FALLBACK_POLL_MS);
-    return () => { es?.close(); clearInterval(poll); if (timer.current) clearTimeout(timer.current); };
+    return () => { stop(); clearInterval(poll); if (debounce.current) clearTimeout(debounce.current); };
   }, [query]);
   return [tick, useCallback(() => setTick(x => x + 1), [])] as const;
 }

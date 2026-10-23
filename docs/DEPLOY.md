@@ -119,3 +119,62 @@ pm2 logs sn-arb-keeper --lines 20                      # "... Task_FixStrike [..
 
 After a seeded note completes, add its transactions to `docs/evidence.json` (see `scripts/landing-proof.ts` for the
 shape) and to docs/SUBMISSION.md, then `npm run deploy` again so the landing page shows them.
+
+## 8. Cutover to Cloudflare D1 (the whole backend on the Worker)
+
+All internal data moves to D1: the indexer's read model, templates, email subscriptions (emails and salts),
+verification codes, preferences and the notification outbox (`web/migrations/`). The Worker serves the API from
+D1 and runs the indexer and the notifier on a one-minute cron (`services/edge`, wrangler environment `edge`).
+Afterwards only the CRE keeper and the issuer bots run on this server; Postgres, `sn-arb-indexer`, `sn-arb-api`
+and the `sn-arb-tunnel` (api.notes.markets) are retired.
+
+Rehearse first, locally: `E2E=1 bash scripts/dev-local-d1.sh` (anvil fork + `wrangler dev --local` with a local
+D1 + the app end-to-end check).
+
+```bash
+cd web
+export CLOUDFLARE_ACCOUNT_ID=325f8b322c30ee0f5460cfdaef82ecf5
+
+# 1. Create the database, put its id into wrangler.jsonc (env.edge.d1_databases[0].database_id), commit.
+npx wrangler d1 create notes-markets
+
+# 2. Schema.
+npx wrangler d1 migrations apply DB --remote --env edge
+
+# 3. Deploy the edge Worker, still proxying the API to the server while D1 backfills.
+#    (Set "API_MODE": "proxy" in env.edge.vars for this deploy.)
+bash build.sh && npx wrangler deploy --env edge
+#    Secrets do not carry over between environments: set them for env edge.
+grep '^SN_PROXY_SECRET=' ../.env.server | cut -d= -f2 | npx wrangler secret put SN_PROXY_SECRET --env edge
+
+# 4. Backfill: the cron indexes from each engine's deployment block (deployments/server/indexer.json startBlock).
+#    Watch it catch up; the cursor per chain should reach the head within a few cron runs.
+npx wrangler tail --env edge --format json | grep '"cron":"indexer"'
+npx wrangler d1 execute DB --remote --env edge --command "SELECT chain, cursor, head, updated_at FROM chains"
+
+# 5. Templates: re-seed the library through the API once it serves from D1 (they are signed; no copy needed),
+#    or copy them from Postgres:
+#    psql "$DATABASE_URL" -Atc "SELECT json_agg(t) FROM templates t" > /tmp/templates.json   then insert via
+#    `npx wrangler d1 execute DB --remote --env edge --file <generated inserts.sql>`.
+
+# 6. Switch: "API_MODE": "edge" in env.edge.vars (the default), redeploy, verify.
+bash build.sh && npx wrangler deploy --env edge
+curl -s https://notes.markets/api/health          # chains with cursor near head, served by the Worker
+curl -s "https://notes.markets/api/notes?limit=5" # the live notes
+curl -s "https://notes.markets/api/updates"       # {"seq":…,"changes":[]}
+
+# 7. Retire the old backend (only after 6 verifies).
+pm2 delete sn-arb-indexer sn-arb-api sn-arb-tunnel && pm2 save
+docker stop sn-arb-pg   # keep the volume a while as a backup; `docker rm sn-arb-pg` later
+HOME=/root/.cloudflared-notes cloudflared tunnel delete sn-arb-api   # and remove the api.notes.markets DNS record
+```
+
+Notes:
+- Email: when notes.markets is onboarded for Email Sending, add the `send_email` binding (`EMAIL`) to `env.edge`
+  and set `"EMAIL_SENDING": "on"`. Until then the outbox fills and nothing is sent.
+- A redeployed engine on a chain: the indexer refuses a chain row whose engine changed. Index the new engine
+  under a new key (e.g. `arbitrum-sepolia-v2`), or reset the chain: delete its rows from `chains`, `blocks`,
+  `events`, `definitions`, and its notes/holdings/note_underlyings (`WHERE chain = …` / `note_id LIKE '<chain>:%'`).
+- Limits per cron run (services/edge/src/scheduled.ts): ≤ 800 D1 queries of the 1,000 allowed, ≤ 700 RPC calls
+  of the 1,000 subrequests allowed (paid plan; the free plan's 50 subrequests is too few), 20 s of wall time.
+  Each batch is at most 150 events and 25 notes, cut at a block boundary.
