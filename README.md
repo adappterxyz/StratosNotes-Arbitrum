@@ -5,7 +5,7 @@ testnet**, with **Chainlink CRE** as the calculation agent. A note raises funds 
 locked in the note; the issuer funds each payment before it falls due, or the holders are paid what they are owed from the collateral
 ([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Built for the Arbitrum Hackerhouse.
 
-- Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app
+- Site: https://notes.markets · App: https://notes.markets/app
 - Submission: [docs/SUBMISSION.md](docs/SUBMISSION.md) · Demo: [docs/DEMO.md](docs/DEMO.md) · Deploy: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 | Path | What it is |

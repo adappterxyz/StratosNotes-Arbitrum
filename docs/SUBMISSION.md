@@ -5,7 +5,7 @@ to the AI or a BPMN canvas, sold for stablecoins on Arbitrum Sepolia and Robinho
 the subscriptions against collateral locked in the note and funds each payment before it falls due, Chainlink CRE is
 the calculation agent, and a missed payment hands the collateral to the holders.
 
-- Site: https://notes.stratoslab.app · App: https://notes.stratoslab.app/app
+- Site: https://notes.markets · App: https://notes.markets/app
 - Code: https://github.com/adappterxyz/StratosNotes-Arbitrum
 - Demo script: [DEMO.md](DEMO.md) · Runbook: [DEPLOY.md](DEPLOY.md) · How the money works: [NOTE-ECONOMICS.md](NOTE-ECONOMICS.md)
 - Earlier build (Solana, TOKEN2049, won Chainlink's CRE track): https://sp.stratoslab.app
@@ -56,7 +56,7 @@ template / term sheet / AI / canvas -> BPMN -> compiler -> definition (bytes, co
    issuer: pledge, fund, top up -> escrow (engine-held) -> pay holders | default: escrow to holders | release
                                    ^ onReport via KeystoneForwarder
 Chainlink feeds (Ethereum, Arbitrum One) -> CRE notes-keeper-evm (observations, collateral prices, deadlines)
-indexer (Postgres) -> API (Hono) -> app (wagmi) ; notes.stratoslab.app = one Cloudflare Worker (landing, app, AI)
+indexer (Postgres) -> API (Hono) -> app (wagmi) ; notes.markets = one Cloudflare Worker (landing, app, AI)
 ```
 
 ## Evidence

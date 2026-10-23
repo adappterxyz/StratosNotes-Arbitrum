@@ -9,9 +9,14 @@
     "binding": "ASSETS",
     // dist/ = the landing page at /, the app under /app/ (npm run build).
     "not_found_handling": "none",
-    "run_worker_first": ["/api/*", "/app", "/app/*"]
+    "run_worker_first": true
   },
-  "routes": [{ "pattern": "notes.stratoslab.app", "custom_domain": true }],
+  "routes": [
+    { "pattern": "notes.markets", "custom_domain": true },
+    { "pattern": "www.notes.markets", "custom_domain": true },
+    // The earlier domain: redirected to notes.markets (worker.ts) so shared links keep working.
+    { "pattern": "notes.stratoslab.app", "custom_domain": true }
+  ],
   "workers_dev": false,
   "preview_urls": false,
   // The AI assistant runs here (Workers AI); everything else under /api/ goes to the API on the server.
@@ -19,7 +24,7 @@
   "ratelimits": [{ "name": "AI_LIMIT", "namespace_id": "4601", "simple": { "limit": 20, "period": 60 } }],
   "vars": {
     // The API (services/api) behind its own Cloudflare Tunnel (docs/DEPLOY.md).
-    "API_ORIGIN": "https://notes-api.stratoslab.app"
+    "API_ORIGIN": "https://api.notes.markets"
   }
   // Secret: SN_PROXY_SECRET (the same value the API has), so the API trusts the client IP this Worker forwards:
   //   npx wrangler secret put SN_PROXY_SECRET

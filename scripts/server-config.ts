@@ -3,13 +3,13 @@
  *   deployments/server/indexer.json   services/indexer (INDEXER_CONFIG)
  *   deployments/server/api.json       services/api (API_CONFIG)
  *
- *   npx tsx scripts/server-config.ts            # SITE=https://notes.stratoslab.app by default
+ *   npx tsx scripts/server-config.ts            # SITE=https://notes.markets by default
  *
  * No secrets: DATABASE_URL, SN_PROXY_SECRET and the rest come from the environment (docs/DEPLOY.md).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
-const SITE = process.env.SITE ?? 'https://notes.stratoslab.app';
+const SITE = process.env.SITE ?? 'https://notes.markets';
 const CHAINS = [
   { key: 'arbitrum-sepolia', chainId: 421614, rpc: process.env.RPC_ARBITRUM_SEPOLIA ?? 'https://sepolia-rollup.arbitrum.io/rpc' },
   { key: 'robinhood-testnet', chainId: 46630, rpc: process.env.RPC_ROBINHOOD_TESTNET ?? 'https://rpc.testnet.chain.robinhood.com' },

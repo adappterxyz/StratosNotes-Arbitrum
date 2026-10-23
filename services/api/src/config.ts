@@ -2,7 +2,7 @@
  * API configuration (a JSON file, with secrets from the environment only).
  *
  * {
- *   "allowedOrigins": ["https://notes.stratoslab.app"],
+ *   "allowedOrigins": ["https://notes.markets"],
  *   "trustProxy": true,                       // take the client IP from X-Forwarded-For (behind a load balancer)
  *   "chains": [{ "key": "arbitrum-sepolia", "rpc": "https://…", "engine": "0x…", "lens": "0x…", "fromBlock": 123,
  *                "stablecoin": { "symbol": "USDC", "address": "0x…", "decimals": 6 },
