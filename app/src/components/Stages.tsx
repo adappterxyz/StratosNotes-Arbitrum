@@ -8,10 +8,10 @@ import { isAddress, zeroAddress } from 'viem';
 import { signMessage } from 'wagmi/actions';
 import { AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import {
-  dec, definitionId, FKIND, PRODUCT_LABELS, reservePerUnit, simulatePerf, templateMessage, totalPerUnit, underlyingLabel,
+  dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, simulateNote, simulatePerf, templateMessage, totalPerUnit, underlyingLabel,
   type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
-import { FIELD_LABEL, headline, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
+import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
 import { useAddress, useChains, useSigner } from '../lib/chains';
@@ -104,6 +104,7 @@ export function ValidatePanel({ issues, onSelect }: { issues: { errors: Issue[];
 export function PayoffPanel({ doc }: { doc: DocInfo }) {
   const p = doc.basis;
   const [path, setPath] = useState<number[]>(() => new Array(p?.observations ?? 0).fill(100));
+  const [ratioPct, setRatioPct] = useState<number | null>(null);
   if (!p || doc.edited || doc.origin !== 'product') {
     return (
       <>
@@ -116,9 +117,13 @@ export function PayoffPanel({ doc }: { doc: DocInfo }) {
   const perfs = Array.from({ length: n }, (_, k) => (path[k] ?? 100) / 100);
   const r = simulatePerf(p, perfs);
   const basket = p.underlyings.length > 1;
+  const eco = economicsOf(p);
+  const ratio = (ratioPct ?? eco.collateralRatioPct) / 100;
+  // The issuer's side along the same path, per 100 of face: what it must fund for each period, and by when.
+  const calls = simulateNote(p, { perfs, sold: 100, ratio: 0, collateral: [] }).calls;
   return (
     <>
-      <Head title="Payoff" sub="The reference payoff the on-chain workflow is tested against." />
+      <Head title="Payoff" sub="The reference payoff the on-chain workflow is tested against, and what the issuer must fund to pay it." />
       <div className="section">
         <span className="label">Payout per 100 at maturity</span>
         <PayoffChart params={p} />
@@ -140,6 +145,32 @@ export function PayoffPanel({ doc }: { doc: DocInfo }) {
             <tr><td><strong>Total per 100</strong></td><td className="r num"><strong>{(totalPerUnit(r) * 100).toFixed(2)}</strong></td></tr>
           </tbody>
         </table>
+      </div>
+      <div className="section" data-funding-calls>
+        <span className="label">The issuer's funding calls along this path (per 100 of face)</span>
+        <table className="t">
+          <thead><tr><th>Period</th><th>Due by</th><th className="r">Issuer funds</th></tr></thead>
+          <tbody>
+            {calls.length === 0 && <tr><td colSpan={3} className="muted small">Nothing to pay along this path.</td></tr>}
+            {calls.map(c => (
+              <tr key={c.period}>
+                <td>{c.period}{c.final ? (r.calledAt === c.period ? ' · autocall' : ' · maturity') : ''}</td>
+                <td className="small">observation {c.period} + {eco.settlementLagDays} day{eco.settlementLagDays === 1 ? '' : 's'}; grace {eco.gracePeriodDays} day{eco.gracePeriodDays === 1 ? '' : 's'}</td>
+                <td className="r num">{c.perUnit ? (c.perUnit * 100).toFixed(2) : ''}{c.deliver ? `${c.perUnit ? ' + ' : ''}${(c.deliver.perUnit * 100).toFixed(4)} t${c.deliver.symbol}` : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="xs muted">The subscriptions go to the issuer when the book closes; each payment is a call on the issuer, funded into the note's escrow before its date. Unfunded at the end of the grace period, the note defaults.</p>
+      </div>
+      <div className="section" data-default-outcome>
+        <span className="label">If the issuer defaults</span>
+        <div className="field">
+          <label htmlFor="po-ratio">Collateral ratio, % of the notional</label>
+          <input id="po-ratio" type="number" min={0} max={1000} value={ratioPct ?? eco.collateralRatioPct} onChange={e => setRatioPct(Number(e.target.value))} />
+        </div>
+        <p className="small">Holders receive everything in escrow, pro rata: collateral worth at least <strong className="num">{(ratio * 100).toFixed(2)}</strong> per 100 of face, counted after haircuts ({eco.collateral.map(c => `${c.symbol === 'USD' ? 'USDC' : `t${c.symbol}`} ${c.haircutPct}%`).join(', ')}) at the last Chainlink prices, plus any payment the issuer had funded but not yet paid.</p>
+        <p className="xs muted">{ratio >= 1 ? 'Fully secured: on a default, collateral at least matches the face value outstanding.' : `Partly secured: up to ${((1 - ratio) * 100).toFixed(0)} per 100 of face rests on the issuer's credit.`} Coverage is checked at the strike and every observation; below the requirement the issuer must top up within the grace period.</p>
       </div>
     </>
   );
@@ -207,6 +238,11 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [isin] = useState(() => 'XS' + String(Date.now()).slice(-10));
+  const ecoDefaults = economicsOf(doc.basis ?? { productType: 'fcn', name: '', issuePricePct: 100, underlyings: [], observations: 1 });
+  const [ratioPct, setRatioPct] = useState(ecoDefaults.collateralRatioPct);
+  const [haircuts, setHaircuts] = useState<Record<string, number>>(() => Object.fromEntries(ecoDefaults.collateral.map(c => [c.symbol, c.haircutPct])));
+  const [pledges, setPledges] = useState<Record<string, string>>({});
+  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(null);
   const chain = byKey[chainKey];
 
   if (!built) return <><Head title="Issue" /><div className="section"><p className="small muted">Fix the errors in Validate first.</p></div></>;
@@ -222,20 +258,34 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
     if (every.unit === 'months') { const d = new Date(strikeAt * 1000); d.setUTCMonth(d.getUTCMonth() + every.n * k); return Math.floor(d.getTime() / 1000); }
     return strikeAt + k * every.n * (every.unit === 'days' ? 86400 : 60);
   };
-  const p = doc.basis;
   const sym = chain?.cfg.stablecoin.symbol ?? 'USDC';
-  const perUnitReserve = p ? (reservePerUnit(p) ?? (p.participationPct ?? 0) / 100) : 0;
-  const reserve = Math.ceil(size * perUnitReserve * 100) / 100;
+  // Collateral and payment timing: per issuance. Minutes-apart demo schedules get seconds; real ones, days.
+  const names = new Set(inputs.map(f => f.name));
+  const collateralSyms = [...names].filter(n => n.startsWith('pledge_')).map(n => n.slice(7));
+  const stepSec = every.unit === 'minutes' ? every.n * 60 : every.unit === 'days' ? every.n * 86400 : every.n * 30 * 86400;
+  const demo = every.unit === 'minutes';
+  const t = timing ?? (demo
+    ? { lag: Math.min(30, Math.floor(stepSec / 4)), grace: Math.min(60, Math.floor(stepSec / 3)) }
+    : { lag: ecoDefaults.settlementLagDays * 86400, grace: ecoDefaults.gracePeriodDays * 86400 });
+  const required = (ratioPct / 100) * size;
+  const pledgeOf = (c: string) => pledges[c] ?? (c === 'USD' && collateralSyms.length === 1 ? String(Math.ceil(required / ((haircuts[c] ?? 100) / 100) * 100) / 100) : '');
+  const usdCoverage = collateralSyms.reduce((a, c) => a + (c === 'USD' ? (Number(pledgeOf(c)) || 0) * (haircuts[c] ?? 100) / 100 : 0), 0);
+  const timingBad = hasSchedule && t.lag + t.grace > stepSec ? 'The payment date plus grace must fall before the next observation: shorten the lag or grace, or observe less often.' : t.grace > MAX_GRACE_DAYS * 86400 ? `The grace period is at most ${MAX_GRACE_DAYS} days.` : '';
   const auto = (name: string): string | null => {
     if (name === 'notional') return String(size);
     if (name === 'isin') return values.isin ?? isin;
     if (hasSchedule && plan.dateFields.includes(name)) return String(dateOf(name));
-    if (name === 'reserve' && p && values.reserve === undefined) return reserve.toFixed(2);
+    if (name === 'lag') return String(t.lag);
+    if (name === 'grace') return String(t.grace);
+    if (name === 'collateralRatio') return String(ratioPct / 100);
+    if (name.startsWith('haircut_')) return String((haircuts[name.slice(8)] ?? 100) / 100);
+    if (name.startsWith('pledge_')) return pledgeOf(name.slice(7));
     return null;
   };
   const kindOf = (name: string) => inputs.find(f => f.name === name)?.kind;
   const valueOf = (name: string) => auto(name) ?? values[name] ?? (kindOf(name) === FKIND.Date ? toLocalInput(strikeAt) : '');
-  const generic = inputs.filter(f => !(['notional', 'isin'].includes(f.name) || (hasSchedule && plan.dateFields.includes(f.name))));
+  const handled = (n: string) => ['notional', 'isin', 'lag', 'grace', 'collateralRatio'].includes(n) || /^(haircut|pledge)_/.test(n) || (hasSchedule && plan.dateFields.includes(n));
+  const generic = inputs.filter(f => !handled(f.name));
   // Cash settles in the network's stablecoin; a delivered underlying (tETH, tTSLA…) needs its token on that network.
   const isCash = (token?: string) => !token || /^(t?USD|USDC|USDG)$/i.test(token);
   const tokenOf = (token?: string) => (isCash(token) ? chain?.cfg.stablecoin.address : chain?.cfg.tokens?.[token!]);
@@ -247,10 +297,11 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
     const step = (s: string) => setProgress(x => [...x, s]);
     try {
       if (hasSchedule && strikeAt < Date.now() / 1000 + 60) throw new Error('The strike date must be at least a minute away.');
-      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}: physical delivery is not available there yet.`);
+      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.`);
+      if (timingBad) throw new Error(timingBad);
       const value = (f: { name: string; kind: number }): InputValue => {
         const raw = valueOf(f.name).trim();
-        if (!raw) throw new Error(`Enter ${FIELD_LABEL[f.name] ?? f.name}.`);
+        if (!raw) throw new Error(`Enter ${fieldLabel(f.name)}.`);
         if (f.kind === FKIND.Text) return { kind: 'text', value: raw };
         if (f.kind === FKIND.Party) { if (!isAddress(raw)) throw new Error(`${f.name}: enter an address.`); return { kind: 'party', value: raw }; }
         if (f.kind === FKIND.Date) return { kind: 'number', value: BigInt(/^\d+$/.test(raw) ? raw : Math.floor(new Date(raw).getTime() / 1000)) };
@@ -273,7 +324,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const deposits = plan.steps.filter(s => s.deposits.length);
   return (
     <>
-      <Head title="Issue" sub="Pre-trade terms for this issuance. Publishing opens the book: investors subscribe until the strike date, then Chainlink CRE takes over." />
+      <Head title="Issue" sub="Pre-trade terms for this issuance, and the collateral you pledge. Publishing opens the book: investors subscribe until the strike date (their stablecoin is yours), then Chainlink CRE observes, and you fund each payment before its date." />
       <div className="section">
         {config.chains.length > 1 && (
           <div className="field">
@@ -314,24 +365,57 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
           <p className="xs muted">Strike {new Date(strikeAt * 1000).toLocaleString()}; then {plan.dateFields.filter(f => f !== 'strikeDate').map(f => (every.unit === 'minutes' ? new Date(dateOf(f) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(dateOf(f) * 1000).toLocaleDateString([], { dateStyle: 'medium' }))).join(' · ')}. Minutes apart runs a whole lifecycle on-chain while you watch.</p>
         </div>
       )}
+      {names.has('collateralRatio') && (
+        <div className="section" data-collateral>
+          <span className="label">Collateral (pledged now, locked in the note's escrow)</span>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="is-ratio">Collateral ratio, % of the notional</label>
+              <input id="is-ratio" type="number" min={0} max={1000} value={ratioPct} onChange={e => setRatioPct(Number(e.target.value))} />
+              <span className="hint">Required: {fmtMoney(required)} {sym} of collateral value, checked at the strike and every observation.</span>
+            </div>
+            {collateralSyms.map(c => {
+              const tok = c === 'USD' ? sym : `t${c}`;
+              return (
+                <div key={c} className="field">
+                  <label htmlFor={`is-pledge-${c}`}>{tok} pledged · haircut <input aria-label={`${tok} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</label>
+                  <input id={`is-pledge-${c}`} inputMode="decimal" value={pledgeOf(c)} onChange={e => setPledges(x => ({ ...x, [c]: e.target.value }))} placeholder={`${tok} amount`} />
+                  {c !== 'USD' && <span className="hint">Valued by Chainlink at the strike; with {collateralSyms.length > 1 ? 'the other assets' : 'nothing else'} it must cover {fmtMoney(required)} {sym}.</span>}
+                </div>
+              );
+            })}
+          </div>
+          {collateralSyms.every(c => c === 'USD') && <p className={`xs ${usdCoverage + 1e-9 >= required ? 'muted' : 'err'}`}>Coverage at the strike: {fmtMoney(usdCoverage)} {sym} of {fmtMoney(required)} required{usdCoverage + 1e-9 >= required ? '.' : ': top it up, or the note goes into a margin call at the strike.'}</p>}
+        </div>
+      )}
+      {names.has('grace') && (
+        <div className="section" data-timing>
+          <span className="label">Payments: funded by you before each payment date</span>
+          <div className="form-grid">
+            <div className="field"><label htmlFor="is-lag">Settlement lag ({demo ? 'seconds' : 'days'} after each observation)</label><input id="is-lag" type="number" min={0} value={demo ? t.lag : t.lag / 86400} onChange={e => setTiming({ ...t, lag: Math.max(0, Number(e.target.value) || 0) * (demo ? 1 : 86400) })} /></div>
+            <div className="field"><label htmlFor="is-grace">Grace period ({demo ? 'seconds' : 'days'}, up to {MAX_GRACE_DAYS} days)</label><input id="is-grace" type="number" min={0} value={demo ? t.grace : t.grace / 86400} onChange={e => setTiming({ ...t, grace: Math.max(0, Number(e.target.value) || 0) * (demo ? 1 : 86400) })} /></div>
+          </div>
+          <p className="xs muted">The subscriptions are yours when the book closes. Each observation fixes what is owed; fund it into escrow before the payment date ({demo ? `${t.lag}s` : `${t.lag / 86400} days`} after the observation). Unfunded, a {demo ? `${t.grace}s` : `${t.grace / 86400}-day`} grace period runs; unfunded after that, the collateral goes to the holders.</p>
+          {timingBad && <div className="notice warn">{timingBad}</div>}
+        </div>
+      )}
       {generic.length > 0 && (
         <div className="section">
           <span className="label">Terms</span>
           <div className="form-grid">
             {generic.map(f => (
               <div key={f.name} className="field">
-                <label htmlFor={`is-${f.name}`}>{(FIELD_LABEL[f.name] ?? f.name).replace('USDC', sym)} <span className="dim">({KIND_NAME[f.kind]})</span></label>
+                <label htmlFor={`is-${f.name}`}>{fieldLabel(f.name).replace('USDC', sym)} <span className="dim">({KIND_NAME[f.kind]})</span></label>
                 <input id={`is-${f.name}`} type={f.kind === FKIND.Date ? 'datetime-local' : 'text'} value={valueOf(f.name)}
                   onChange={e => setValues(v => ({ ...v, [f.name]: e.target.value }))} />
-                {f.name === 'reserve' && p && <span className="hint">Worst case above par: {fmtMoney(reserve)} {sym}{p.productType === 'ppn' ? ' (sized for a 100% rise)' : ''}.</span>}
               </div>
             ))}
           </div>
         </div>
       )}
       <div className="section">
-        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} from your wallet ({[...new Set(built.ir.assets.filter(a => a.kind === 'cash').map(a => (isCash(a.token) ? sym : a.token!)))].join(', ')}); the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar.</p>}
-        {unsupported.length > 0 && <div className="notice warn">Physical delivery needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
+        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar.</p>}
+        {unsupported.length > 0 && <div className="notice warn">This note needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
         <button className="btn primary lg" disabled={!me || busy || !chain} onClick={issue}>
           {me ? (busy ? 'Issuing…' : 'Publish and open the book') : 'Connect a wallet to issue'}
         </button>

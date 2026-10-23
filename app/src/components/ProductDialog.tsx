@@ -7,8 +7,8 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
-  EXAMPLE_PRODUCTS, FEEDS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses, simulatePerf, totalPerUnit, validateProductParams,
-  type ProductParams, type ProductType,
+  COLLATERAL_SYMBOLS, DEFAULT_HAIRCUT, economicsOf, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses,
+  simulatePerf, totalPerUnit, validateProductParams, type CollateralSymbol, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from './PayoffChart';
 
@@ -25,7 +25,13 @@ function NumField({ id, label, value, onChange, hint, step = 'any' }: { id: stri
 
 export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial<ProductParams>) => void }) {
   const use = productUses(p.productType);
-  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct });
+  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays });
+  const eco = economicsOf(p);
+  const colSyms = eco.collateral.map(c => c.symbol);
+  const toggleCol = (c: CollateralSymbol) => {
+    if (colSyms.includes(c)) { if (colSyms.length > 1) set({ collateral: eco.collateral.filter(x => x.symbol !== c) }); }
+    else if (colSyms.length < MAX_COLLATERAL) set({ collateral: [...eco.collateral, { symbol: c, haircutPct: DEFAULT_HAIRCUT[c] }] });
+  };
   const symbols = p.underlyings.map(u => u.symbol);
   const toggleUnd = (k: keyof typeof FEEDS) => {
     if (symbols.includes(k)) { if (symbols.length > 1) set({ underlyings: p.underlyings.filter(u => u.symbol !== k) }); }
@@ -77,12 +83,30 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
             <option value="physical">Physical delivery</option>
           </select>
           <span className="hint">{p.settlement === 'physical'
-            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (t${p.underlyings.length > 1 ? 'ETH/tBTC/tSOL' : p.underlyings[0]?.symbol}); the issuer deposits a delivery reserve at issue.`
+            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (t${p.underlyings.length > 1 ? p.underlyings.map(u => u.symbol).join('/t') : p.underlyings[0]?.symbol}); the issuer funds the delivery before maturity.`
             : 'Holders receive final ÷ strike in USDC.'}</span>
         </div>
       )}
       {use.protection && <NumField id="pd-prot" label="Protection %" value={p.protectionPct} onChange={v => set({ protectionPct: v })} />}
       {use.protection && <NumField id="pd-part" label="Participation %" value={p.participationPct} onChange={v => set({ participationPct: v })} />}
+      <div className="field wide">
+        <span className="lbl">Collateral the issuer pledges</span>
+        <div className="row" role="group" aria-label="Collateral">
+          {COLLATERAL_SYMBOLS.map(c => (
+            <button key={c} type="button" className={`chip ${colSyms.includes(c) ? 'on' : ''}`} aria-pressed={colSyms.includes(c)} onClick={() => toggleCol(c)}
+              disabled={!colSyms.includes(c) && colSyms.length >= MAX_COLLATERAL}>
+              {c === 'USD' ? 'USDC' : `t${c}`}
+            </button>
+          ))}
+        </div>
+        <span className="hint">Locked in the note's escrow until the final payment; on a default it goes to the holders. Tokens count at {eco.collateral.filter(c => c.symbol !== 'USD').map(c => `${c.haircutPct}% (t${c.symbol})`).join(', ') || 'their Chainlink price after a haircut'} of their Chainlink value.</span>
+      </div>
+      {eco.collateral.filter(c => c.symbol !== 'USD').map(c => (
+        <NumField key={c.symbol} id={`pd-hc-${c.symbol}`} label={`t${c.symbol} counted at %`} value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
+      ))}
+      <NumField id="pd-ratio" label="Collateral ratio % of notional" value={eco.collateralRatioPct} onChange={v => set({ collateralRatioPct: v })} hint="Default; set per issuance" />
+      <NumField id="pd-lag" label="Payment lag (days)" value={eco.settlementLagDays} onChange={v => set({ settlementLagDays: v })} hint="After each observation" />
+      <NumField id="pd-grace" label={`Grace period (days, 0-${MAX_GRACE_DAYS})`} value={eco.gracePeriodDays} onChange={v => set({ gracePeriodDays: v })} hint="Then default" />
     </div>
   );
 }
@@ -103,7 +127,7 @@ export default function ProductDialog({ initial, onClose, onCreate }: { initial:
         <div className="modal-head">
           <div>
             <h2 id="pd-title">Structured product</h2>
-            <p className="xs muted">A verified payoff engine from a term sheet. Size, strike date and observation dates are set when you issue.</p>
+            <p className="xs muted">A verified payoff engine from a term sheet, secured by collateral the issuer pledges. Size, dates and the collateral amounts are set when you issue.</p>
           </div>
           <button className="btn" onClick={onClose} aria-label="Close"><X className="i" /></button>
         </div>

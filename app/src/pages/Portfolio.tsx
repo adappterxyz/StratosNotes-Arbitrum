@@ -29,7 +29,7 @@ export default function Portfolio() {
 
   return (
     <main className="page">
-      <div className="page-head"><div><h1>Portfolio</h1><p>Notes you hold or issued, and the cash each one owes you.</p></div></div>
+      <div className="page-head"><div><h1>Portfolio</h1><p>Notes you hold or issued, and the cash each one owes you: coupons and redemptions for holders, the subscriptions raised for issuers.</p></div></div>
       {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text} {msg.tx && msg.explorer && <a href={`${msg.explorer}/tx/${msg.tx}`} target="_blank" rel="noreferrer">View transaction</a>}</div>}
       {positions.length === 0 ? (
         <div className="empty"><strong>No positions yet.</strong><Link to="/" className="btn">Browse open books</Link></div>
@@ -48,7 +48,9 @@ export default function Portfolio() {
                     <td>{issuer ? 'Issuer' : 'Investor'}</td>
                     <td><span className={`pill ${p.view.phase}`}><span className="dot" />{PHASE_LABEL[p.view.phase]}</span></td>
                     <td className="r num">{fmtMoney(p.position.units)}</td>
-                    <td className="r num" data-cash>{fmtMoney(p.position.cash)} {sym}</td>
+                    <td className="r num" data-cash>{fmtMoney(p.position.cash)} {sym}
+                      {p.position.holdings.some(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n) && <div className="xs muted"><Link to={`/note/${encodeURIComponent(p.id)}`}>+ tokens to withdraw</Link> (delivered, or collateral after a default)</div>}
+                    </td>
                     <td className="r"><button className="btn" disabled={!(p.position.cash > 0) || !!busy || !byKey[p.chain]} onClick={() => withdraw(p.id, p.chain, p.view.name, p.position.cash)}>{busy === p.id ? 'Withdrawing…' : 'Withdraw'}</button></td>
                   </tr>
                 );

@@ -8,6 +8,11 @@ export const short = (s: string) => `${s.slice(0, 6)}…${s.slice(-4)}`;
 
 /** What happens next, in a few words. */
 export function nextEvent(o: NoteView) {
+  const e = o.economics;
+  if (o.phase === 'defaulted') return 'Defaulted: collateral to holders';
+  if (e?.marginCall) return `Margin call: top-up due ${fmtDate(e.marginCall.deadline)}`;
+  if (e?.inGrace) return `Payment ${e.inGrace.period} in grace until ${fmtDate(e.inGrace.deadline)}`;
+  if (e?.nextCall) return `Payment ${e.nextCall.period} ${e.nextCall.funded ? 'funded' : 'due'} ${fmtDate(e.nextCall.payDate)}`;
   if (o.phase === 'book') return o.strikeDate ? `Book closes ${fmtDate(o.strikeDate)}` : 'Book open';
   if (o.phase === 'fixing') return 'Waiting for the strike fixing';
   if (o.phase === 'live') {

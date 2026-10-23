@@ -5,6 +5,7 @@ import { ArrowLeft, Radio, ShieldCheck } from 'lucide-react';
 import { dec, defToBpmn, instantiateProduct, SCALE } from '@sn/core';
 import { CASH_ASSET, headline, NOTE_ASSET, noteView, PHASE_LABEL, positionOf } from '@sn/sdk';
 import TasksPanel from '../components/TasksPanel';
+import EconomicsPanel from '../components/EconomicsPanel';
 import HoldersPanel from '../components/HoldersPanel';
 import BpmnView from '../components/BpmnView';
 import PayoffChart from '../components/PayoffChart';
@@ -37,7 +38,8 @@ export default function OfferingPage() {
   const chain = byKey[s.chain];
   const sym = chain?.cfg.stablecoin.symbol ?? 'USDC';
   const explorer = chain?.cfg.explorer;
-  const mine = me ? positionOf(s, me) : null;
+  const mine = me ? positionOf(s, me, def ?? undefined) : null;
+  const isIssuer = !!me && me.toLowerCase() === o.issuer.toLowerCase();
   const remaining = Math.max(0, o.notional - o.sold);
   const cost = (Number(units) || 0) * o.params.issuePricePct / 100;
   const subscribable = !!def && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
@@ -55,8 +57,10 @@ export default function OfferingPage() {
     return chain.adapter.transferUnits(await signer(s.chain), s.id, xfer.to.trim(), dec(xfer.units), progress);
   });
   const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => chain.adapter.withdraw(await signer(s.chain), s.id, asset, undefined, progress));
-  // Delivered tokens (physical settlement), withdrawable like cash.
-  const delivered = me ? s.holdings.filter(h => h.owner === me && h.asset > CASH_ASSET && BigInt(h.balance) > 0n) : [];
+  // Delivered tokens (physical settlement) and collateral received on a default, withdrawable like cash.
+  const delivered = mine?.other ?? [];
+  // The economics panel runs the issuer's funding, top-up and delivery windows; the generic task list skips them.
+  const economicSteps = def ? def.steps.map(x => x.id).filter(x => /^Task_(Fund\d+|TopUp_|FundDelivery_)/.test(x)) : [];
 
   const basket = o.unds.length > 1;
   const levels = (k: number) => o.unds.map(u => `${u.symbol} ${fmtPrice(u.observed[k])}`).join(' · ');
@@ -71,7 +75,7 @@ export default function OfferingPage() {
       when: t,
       value: o.perfs[k] !== undefined ? (basket ? `worst ${fmtPct(o.perfs[k])} (${levels(k)})` : `${fmtPrice(o.unds[0].observed[k])} (${fmtPct(o.perfs[k])})`) : undefined,
       state: (o.perfs[k] !== undefined ? 'done' : o.phase === 'live' && k === o.perfs.length ? 'now' : 'later') as 'done' | 'now' | 'later',
-      ...(o.phase === 'redeemed' && o.perfs[k] === undefined ? { value: o.outcome?.calledAt ? `not needed: called at ${o.outcome.calledAt}` : 'not observed' } : {}),
+      ...((o.phase === 'redeemed' || o.phase === 'defaulted') && o.perfs[k] === undefined ? { value: o.phase === 'defaulted' ? 'not reached: defaulted' : o.outcome?.calledAt ? `not needed: called at ${o.outcome.calledAt}` : 'not observed' } : {}),
     })),
   ] : [];
   const secsAgo = Math.max(0, Math.round(now - updatedAt / 1000));
@@ -166,26 +170,29 @@ export default function OfferingPage() {
             </section>
           )}
 
-          {def && <TasksPanel state={s} def={def} onDone={refresh} hide={o.custom ? [] : ['Task_Subscribe']} />}
+          {def && o.economics && <EconomicsPanel e={o.economics} state={s} def={def} issuer={o.issuer} sym={sym} now={now} onDone={refresh} />}
+
+          {def && <TasksPanel state={s} def={def} onDone={refresh} hide={[...(o.custom ? [] : ['Task_Subscribe']), ...economicSteps]} />}
 
           {mine && (mine.units > 0 || mine.cash > 0 || delivered.length > 0) && (
             <section className="card" data-position>
               <h3>Your position</h3>
               <div className="kv">
                 <div><span className="label">Note units</span><span className="v" data-units>{fmtMoney(mine.units)}</span></div>
-                <div><span className="label">Cash to withdraw</span><span className="v" data-cash>{fmtMoney(mine.cash)}</span></div>
+                <div><span className="label">{isIssuer ? 'Proceeds to withdraw' : 'Cash to withdraw'}</span><span className="v" data-cash>{fmtMoney(mine.cash)}</span></div>
               </div>
-              <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>Withdraw {sym}</button>
+              <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>{isIssuer ? `Withdraw proceeds (${sym})` : `Withdraw ${sym}`}</button>
               {delivered.map(h => {
-                const name = def?.assets[h.asset]?.name ?? `asset ${h.asset}`;
+                const name = h.name.replace(/^Collateral /, '');
+                const kind = h.name.startsWith('Collateral ') ? (isIssuer ? 'Collateral released' : 'Collateral received') : 'Delivered';
                 return (
-                  <div key={h.asset} className="spread small">
-                    <span>Delivered <span className="num">{(Number(BigInt(h.balance)) / Number(SCALE)).toFixed(6)}</span> {name}</span>
+                  <div key={h.asset} className="spread small" data-other-asset={h.name}>
+                    <span>{kind} <span className="num">{h.amount.toFixed(6)}</span> {name}</span>
                     <button className="btn" disabled={busy} onClick={() => withdraw(h.asset)}>Withdraw {name}</button>
                   </div>
                 );
               })}
-              {mine.units > 0 && o.phase !== 'redeemed' && (
+              {mine.units > 0 && o.phase !== 'redeemed' && o.phase !== 'defaulted' && (
                 <div className="stack" style={{ gap: 8, borderTop: '1px solid hsl(var(--border))', paddingTop: 10 }}>
                   <span className="label">Transfer notes</span>
                   <div className="field"><label htmlFor="x-to">To wallet</label><input id="x-to" className="num" value={xfer.to} onChange={e => setXfer({ ...xfer, to: e.target.value })} placeholder="0x…" /></div>

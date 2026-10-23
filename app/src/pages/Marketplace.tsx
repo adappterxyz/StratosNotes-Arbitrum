@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { PRODUCT_LABELS, type ProductType } from '@sn/core';
 import { headline, PHASE_LABEL, PHASES, type Phase } from '@sn/sdk';
 import { useChains } from '../lib/chains';
-import { agentLabel, fmtMoney, nextEvent } from '../lib/format';
+import { agentLabel, fmtMoney, fmtPct, nextEvent } from '../lib/format';
 import { useNotes } from '../lib/live';
 
 const SYMBOLS = ['ETH', 'BTC', 'SOL', 'HYPE', 'TSLA', 'AAPL', 'NVDA', 'SPY'];
@@ -72,7 +72,7 @@ export default function Marketplace() {
           <div className="card scroll-x" style={{ padding: 0 }}>
             <table className="t">
               <thead>
-                <tr><th>Note</th><th>Underlying</th><th>Network</th><th>Status</th><th className="r">Size</th><th style={{ minWidth: 140 }}>Subscribed</th><th className="r">Paid / unit</th><th>Next</th></tr>
+                <tr><th>Note</th><th>Underlying</th><th>Network</th><th>Status</th><th className="r">Size</th><th style={{ minWidth: 140 }}>Subscribed</th><th className="r">Coverage</th><th className="r">Paid / unit</th><th>Next</th></tr>
               </thead>
               <tbody>
                 {shown.map(({ id, view: o }) => {
@@ -93,6 +93,7 @@ export default function Marketplace() {
                         <div className="bar"><span style={{ width: `${pct}%` }} /></div>
                         <div className="xs muted num" style={{ marginTop: 3 }}>{fmtMoney(o.sold, 0)} · {pct.toFixed(0)}%</div>
                       </td>
+                      <td className="r num" title={o.economics?.ratio !== null && o.economics?.ratio !== undefined ? `Required: ${(o.economics.ratio * 100).toFixed(0)}% of the notional` : undefined}>{o.economics?.coveragePct != null ? fmtPct(o.economics.coveragePct) : o.economics?.ratio != null ? `${(o.economics.ratio * 100).toFixed(0)}% req.` : '—'}</td>
                       <td className="r num">{o.outcome ? o.outcome.perUnit.toFixed(4) : '—'}</td>
                       <td className="small muted">{nextEvent(o)}</td>
                     </tr>

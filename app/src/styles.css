@@ -121,6 +121,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: hsl(var
 .pill.fixing { color: hsl(var(--warning)); background: hsl(var(--warning) / 0.1); border-color: hsl(var(--warning) / 0.3); }
 .pill.live { color: hsl(var(--accent)); background: hsl(var(--accent) / 0.12); border-color: hsl(var(--accent) / 0.35); }
 .pill.redeemed { color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); border-color: hsl(var(--border)); }
+.pill.defaulted { color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.1); border-color: hsl(var(--destructive) / 0.35); }
+.xs.err, .err.xs { color: hsl(var(--destructive)); }
 .pill.plain { color: hsl(var(--muted-foreground)); background: hsl(var(--surface-elevated)); border-color: hsl(var(--border)); }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font: 500 12px var(--font); border: 1px solid hsl(var(--border)); background: hsl(var(--surface-elevated)); color: hsl(var(--muted-foreground)); cursor: pointer; }
 .chip.on { color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.5); background: hsl(var(--primary) / 0.1); }
