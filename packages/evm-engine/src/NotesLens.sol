@@ -32,6 +32,9 @@ contract NotesLens {
         uint128 tags;
         /// One per field up to the highest set field.
         bytes32[] values;
+        /// Every role's account, every asset: balances[role * nAssets + asset] (engine fixed point; 0 for an
+        /// open role). Keepers read the escrow's balances to see what a guard such as "Funded?" sees.
+        int256[] balances;
     }
 
     mapping(bytes32 => Stored) internal _published;
@@ -92,6 +95,15 @@ contract NotesLens {
         s.values = new bytes32[](n);
         for (uint256 f = 0; f < n; f++) {
             if ((p.tags >> (2 * f)) & 3 != 0) (, s.values[f]) = engine.valueOf(pid, f);
+        }
+        bytes memory core = engine.definitionCore(p.definition);
+        uint256 roles = uint8(core[1]);
+        uint256 assets = uint8(core[3]);
+        s.balances = new int256[](roles * assets);
+        for (uint256 r = 0; r < roles; r++) {
+            address acct = engine.roleOf(pid, r);
+            if (acct == address(0)) continue;
+            for (uint256 a = 0; a < assets; a++) s.balances[r * assets + a] = engine.balanceOf(pid, acct, a);
         }
     }
 

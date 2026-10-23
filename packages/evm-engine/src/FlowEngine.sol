@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {CreReceiver} from "./cre/CreReceiver.sol";
 import {Def} from "./lib/Def.sol";
+import {DefCheck} from "./lib/DefCheck.sol";
 import {SSTORE2} from "./lib/SSTORE2.sol";
 
 /// @title FlowEngine - runs compiled BPMN workflows (structured notes) on an EVM chain
@@ -21,6 +22,12 @@ import {SSTORE2} from "./lib/SSTORE2.sol";
 ///         date; captures from inputs, oracle reports (bounds-checked) or expressions; and an internal holdings
 ///         ledger with ERC-20 vaults behind cash assets, atomic DvP, distribute-to-every-holder and transfers.
 ///
+///         Escrow: a role the definition marks escrow is held by the engine itself (ESCROW, an address nobody
+///         has a key for). Pledged collateral and funded payments sit on its account: nobody can withdraw them
+///         or move them; only the workflow's own operations do (pay holders, distribute on default, release).
+///         Expressions read accounts (`balance(role, asset)`) and the time (`now`), so a workflow can check that
+///         a payment is funded or that collateral covers the note, and wait on a deadline.
+///
 /// @dev Events (the indexer's whole input; together they rebuild every process from the log alone):
 ///      - DefinitionRegistered(id, creator, pointer, meta): a workflow; `meta` is the names/term-sheet JSON.
 ///      - ProcessStarted(pid, definition, creator, ref, roles, assetTokens): a run and who holds each role.
@@ -32,13 +39,16 @@ import {SSTORE2} from "./lib/SSTORE2.sol";
 ///      - UnitsTransferred(pid, asset, from, to, amount): a holder moved units (also shows as HoldingChanged).
 ///      - ReportProcessed(pid, step, values, reporter): a report applied; `reporter` is the KeystoneForwarder
 ///        (Chainlink CRE) or the fallback reporter (a signed keeper, for chains without CRE).
+///      - Milestone(pid, code, step, actor): a step the workflow marks as a business event completed:
+///        1 collateral pledged, 2 collateral released, 3 funding deposited, 4 margin call, 5 margin call cured,
+///        6 payment made, 7 payment missed, 8 defaulted (packages/core types.ts MILESTONES).
 ///      - FallbackReporterUpdated(previous, next): the owner changed the fallback reporter (0 = off).
 ///      - ProcessCompleted(pid): no tokens left.
 ///
 ///      Caps (each bounds a loop): MAX_ROLES 8, MAX_FIELDS 64, MAX_ASSETS 8, MAX_TOKENS 32 live tokens,
 ///      MAX_HOLDERS 64 ledger accounts per process (a distribute pays each once: ~25k gas per holder on a
-///      first credit, so 64 holders stay under HyperEVM's 3M-gas small blocks), MAX_ADVANCE 256 straight-through
-///      steps per transaction, MAX_DEPOSITS 4 ERC-20 pulls per step.
+///      first credit; a default distributes every escrow asset, so at most ~8 x 64 credits), MAX_ADVANCE 256
+///      straight-through steps per transaction, MAX_DEPOSITS 4 ERC-20 pulls per step.
 ///
 ///      Cross-chain (CCIP) is not in v1: report step 0xFFFE is reserved for CRE payout decisions (Phase 5).
 contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
@@ -59,6 +69,8 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     uint16 public constant STEP_ADVANCE = 0xFFFF; // report: just run what is due
     uint16 public constant STEP_PAYOUT = 0xFFFE; // report: reserved for cross-chain payouts
     uint16 public constant NO_CHOICE = 0xFFFF;
+    /// The escrow account: held by the engine for each note (no key exists for this address).
+    address public constant ESCROW = address(uint160(uint256(keccak256("stratosnotes.flowengine.escrow"))));
 
     uint8 public constant RUNNING = 0;
     uint8 public constant COMPLETED = 1;
@@ -147,6 +159,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     event UnitsTransferred(uint256 indexed pid, uint8 indexed asset, address indexed from, address to, int256 amount);
     event ReportProcessed(uint256 indexed pid, uint16 indexed step, int256[] values, address reporter);
     event FallbackReporterUpdated(address indexed previous, address indexed next);
+    event Milestone(uint256 indexed pid, uint8 indexed code, uint16 step, address actor);
     event ProcessCompleted(uint256 indexed pid);
 
     error UnknownDefinition();
@@ -223,7 +236,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         if (coreLen > data.length || coreLen < Def.HEADER) revert Def.BadDefinition();
         if (coreLen > SSTORE2.MAX_DATA) revert DefinitionTooLarge();
         bytes memory core = data[:coreLen];
-        Def.check(core, MAX_ROLES, MAX_FIELDS, MAX_ASSETS);
+        DefCheck.check(core, MAX_ROLES, MAX_FIELDS, MAX_ASSETS);
         address pointer = SSTORE2.write(core);
         // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
         _defs[id] = Definition(pointer, uint32(coreLen), msg.sender);
@@ -261,7 +274,12 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             if (cash) _assetTokens[pid][a] = assetTokens[a];
         }
         for (uint256 k = 0; k < roles.length; k++) {
-            if (roles[k] != address(0)) _roles[pid][k] = roles[k];
+            if (Def.roleFlags(core, k) & Def.R_ESCROW != 0) {
+                if (roles[k] != address(0)) revert BadInputs(); // the engine holds escrow: nobody may claim it
+                _roles[pid][k] = ESCROW;
+            } else if (roles[k] != address(0)) {
+                _roles[pid][k] = roles[k];
+            }
         }
         _procs[pid] = Proc({
             definition: definition,
@@ -348,7 +366,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     function transferUnits(uint256 pid, uint8 asset, address to, int256 amount) external nonReentrant whenNotPaused {
         bytes memory core = _core(pid);
         if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_ISSUED) revert NotTransferable();
-        if (amount <= 0 || to == address(0)) revert BadInputs();
+        if (amount <= 0 || to == address(0) || to == ESCROW) revert BadInputs();
         _debit(pid, msg.sender, asset, amount);
         _credit(pid, to, asset, amount);
         emit UnitsTransferred(pid, asset, msg.sender, to, amount);
@@ -589,6 +607,20 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             if (code == 0) {
                 if (sp >= 32) revert BadExpression();
                 st[sp++] = Def.i64(c, p + 3);
+                continue;
+            }
+            if (code == Def.X_BALANCE || code == Def.X_NOW) {
+                int256 x;
+                if (code == Def.X_NOW) {
+                    x = int256(block.timestamp) * SCALE;
+                } else {
+                    uint256 rf = Def.u16(c, p + 1);
+                    address acct = _roles[r.pid][rf >> 8];
+                    if (acct == address(0)) return (false, 0); // an open role has no single account
+                    x = _balances[r.pid][acct][rf & 0xFF];
+                }
+                if (sp >= 32) revert BadExpression();
+                st[sp++] = x;
                 continue;
             }
             if (code == 1) {
@@ -833,6 +865,9 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             } else {
                 (bool ok, int256 v) = _eval(r, Def.u16(c, p + 3));
                 if (!ok) revert FieldNotSet();
+                // Expressions compute in fixed point; integer, date and bool fields are stored plain (e.g. a
+                // payment date computed as obsDate + lag is unix seconds).
+                if (Def.fieldKind(c, field) != Def.F_DECIMAL) v /= SCALE;
                 // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
                 _setCapture(r, field, TAG_NUMBER, bytes32(uint256(v)));
             }
@@ -856,6 +891,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
                 r.stepsRun++;
                 // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
                 emit StepRun(r.pid, uint16(i), uint8(s.kind), r.signer);
+                _milestone(r, i, s);
                 return;
             }
             // The window has closed: pass the token on, nothing else.
@@ -902,6 +938,12 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         r.stepsRun++;
         // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
         emit StepRun(r.pid, uint16(i), uint8(s.kind), r.signer);
+        _milestone(r, i, s);
+    }
+
+    function _milestone(Run memory r, uint256 i, Def.Step memory s) internal {
+        // forge-lint: disable-next-line(unsafe-typecast) milestone < 16, steps < 0xFFFE (DefCheck)
+        if (s.milestone != 0) emit Milestone(r.pid, uint8(s.milestone), uint16(i), r.signer);
     }
 
     /// Can this token's step run with nobody's input?
