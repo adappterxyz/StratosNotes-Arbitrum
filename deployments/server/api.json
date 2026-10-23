@@ -8,47 +8,47 @@
     {
       "key": "arbitrum-sepolia",
       "rpc": "https://sepolia-rollup.arbitrum.io/rpc",
-      "engine": "0x83F653e5843FfD39A3aC1DE856D838f651225ab4",
-      "lens": "0x4532fca7Aa4dD54FC981D62836D3852ce7bdb7B2",
-      "fromBlock": 322035310,
+      "engine": "0x774D56991b73cB254842d302Cc1fd82f2846f370",
+      "lens": "0xE8d9Fa95ad823A20B0e2c3FC0f017C15de98A410",
+      "fromBlock": 322077169,
       "stablecoin": {
         "symbol": "tUSD",
-        "address": "0x18bc23891DB7a8c9FF9553B927A56c5e2cf42220",
+        "address": "0x84B74d2157013b601C1cb217F54041De790C1F8f",
         "decimals": 6
       },
-      "tokenFaucet": "0x37184A9D436B9e8F2225cAFd5474E60A5d18FDEb",
+      "tokenFaucet": "0x4d530a52027540E922A5fF1A141454d5207562f3",
       "tokens": {
-        "tAAPL": "0x31FAa920215E089A75df0CAd4E45d2f237b59f6C",
-        "tBTC": "0x5Daa05c6D9866AEC94D7E73462e09F8bC40C6fcD",
-        "tETH": "0x199816ce7e0b2366b408D6F8c3158844f06E3099",
-        "tNVDA": "0xdFf0853baa3D226dB46Be5CeDF5E085EA5681a50",
-        "tSOL": "0x35A795B62a682F521A4ead43E90D889A9DfD33Ed",
-        "tSPY": "0xC30E1Aa84c2344E0C94A8872e11D630C81339c9B",
-        "tTSLA": "0x9f2dC87062845551490017bFBF780cb08399EC72",
-        "tUSD": "0x18bc23891DB7a8c9FF9553B927A56c5e2cf42220"
+        "tAAPL": "0xbDA4Cc537e698c3F189ad48D8a966E750ab90E2e",
+        "tBTC": "0x75A2Efd0325d63D8d5c3cb7f722B7bF56AAc7b66",
+        "tETH": "0xBE5FBF8c218661f2f7B4A44A16FB3aF31273A7Fa",
+        "tNVDA": "0x073bEf44Df543721eA94C4ceD240083243540a71",
+        "tSOL": "0xD18d25Dae34658FC129D46EF62531E8D245Ba599",
+        "tSPY": "0x3Afa26C3e7101FEA8b60b4c23f0ab8fffeb79B66",
+        "tTSLA": "0x50F3f98473e916E8B30308EFCa9c256A1546Bb0d",
+        "tUSD": "0x84B74d2157013b601C1cb217F54041De790C1F8f"
       }
     },
     {
       "key": "robinhood-testnet",
       "rpc": "https://rpc.testnet.chain.robinhood.com",
-      "engine": "0x4532fca7Aa4dD54FC981D62836D3852ce7bdb7B2",
-      "lens": "0x37184A9D436B9e8F2225cAFd5474E60A5d18FDEb",
-      "fromBlock": 141297464,
+      "engine": "0xA1C0A6c72d07D885e2b91ecaD4AabE758F446C35",
+      "lens": "0xCb510Dcdd6E3BB3C19f041EEe6D3b383227583Fe",
+      "fromBlock": 141379929,
       "stablecoin": {
         "symbol": "tUSD",
-        "address": "0xF486dfaa1111Dd20B931b304Ec7d0B967463a086",
+        "address": "0xC4fc65Eee16b9cDC44c07057D1FFE2771645a545",
         "decimals": 6
       },
-      "tokenFaucet": "0x18bc23891DB7a8c9FF9553B927A56c5e2cf42220",
+      "tokenFaucet": "0x774D56991b73cB254842d302Cc1fd82f2846f370",
       "tokens": {
-        "tAAPL": "0x23F3204db957A78cE3E193fCEd3ff023D2ef3068",
-        "tBTC": "0xb50E2A93437eDac4885295cC022837AFF0dD9df4",
-        "tETH": "0xbE645b90198c22bDcA5a3fc7ed2b3d58bd0C13ef",
-        "tNVDA": "0x5724c3362795733F7906826Bfaa71b758A13eeB3",
-        "tSOL": "0xf1Ef65D880e9bcE21252ffbAcbcb5FBC2a0f5B07",
-        "tSPY": "0xF3D825E904e03c59b720395Ff2641567a94aC81A",
-        "tTSLA": "0x5Cae30A78C8b0f174DF9CD4f35e184cA352c2584",
-        "tUSD": "0xF486dfaa1111Dd20B931b304Ec7d0B967463a086"
+        "tAAPL": "0x073bEf44Df543721eA94C4ceD240083243540a71",
+        "tBTC": "0xBE5FBF8c218661f2f7B4A44A16FB3aF31273A7Fa",
+        "tETH": "0x84B74d2157013b601C1cb217F54041De790C1F8f",
+        "tNVDA": "0x50F3f98473e916E8B30308EFCa9c256A1546Bb0d",
+        "tSOL": "0x75A2Efd0325d63D8d5c3cb7f722B7bF56AAc7b66",
+        "tSPY": "0xbDA4Cc537e698c3F189ad48D8a966E750ab90E2e",
+        "tTSLA": "0xD18d25Dae34658FC129D46EF62531E8D245Ba599",
+        "tUSD": "0xC4fc65Eee16b9cDC44c07057D1FFE2771645a545"
       }
     }
   ]

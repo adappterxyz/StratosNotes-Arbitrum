@@ -2,17 +2,17 @@
   "chain": "arbitrum-sepolia",
   "pid": "1",
   "name": "Demo Worst-of Phoenix on ETH, BTC",
-  "definition": "0xc3d561219c04ecf1f3d29981c864369a8fd8afd62f3e7c5d0ce21fdd7e40311e",
-  "engine": "0x83F653e5843FfD39A3aC1DE856D838f651225ab4",
-  "fromBlock": "322035776",
-  "strikeAt": 1792755205,
+  "definition": "0x1cf759093b2a0a330076b0b28c0c387374af6ac1a2484692e05a6a8ebf5dbde3",
+  "engine": "0x774D56991b73cB254842d302Cc1fd82f2846f370",
+  "fromBlock": "322078082",
+  "strikeAt": 1792938171,
   "obsAt": [
-    1792755505,
-    1792755805,
-    1792756105
+    1793024571,
+    1793110971,
+    1793197371
   ],
-  "lag": 75,
-  "grace": 100,
+  "lag": 21600,
+  "grace": 28800,
   "pledge": 2000,
   "investors": [
     {
