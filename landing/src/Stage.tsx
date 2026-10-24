@@ -132,7 +132,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
         <div ref={heroRef} className="stage-hero">
           <div className="wrap hero-inner">
             <span className="badge"><i />Live on testnet</span>
-            <h1>Structured notes, on-chain.</h1>
+            <h1>Structured<br />notes,<br />on-chain.</h1>
             <p className="sub">Issued by anyone. Coupons in USDG. Chainlink CRE automates the entire lifecycle.</p>
             <ul className="outcomes" aria-label="How a note can end">
               <li><b>Price holds</b> coupons in USDG, full principal back</li>
