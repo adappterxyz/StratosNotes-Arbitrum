@@ -1,4 +1,5 @@
 import type { NoteView } from '@sn/sdk';
+import { BaseError, ContractFunctionRevertedError } from 'viem';
 
 export const fmtMoney = (x: number, dp = 2) => (Number.isFinite(x) ? x : 0).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
 export const fmtPrice = (x: number) => x.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -30,8 +31,38 @@ export function agentLabel(o: Pick<NoteView, 'reports'>) {
   return `Chainlink CRE (${o.reports.cre}) and fallback keeper (${o.reports.fallback})`;
 }
 
+/** What the engine's refusals mean, in the words a person acting on the page would use. */
+const ENGINE_ERRORS: Record<string, string> = {
+  IssuerEmailNotVerified: 'verify your email before issuing (Alerts in the top bar)',
+  SubscriberEmailNotVerified: 'verify your email before subscribing (Alerts in the top bar)',
+  RecipientEmailNotVerified: 'the receiving wallet has no verified email',
+  WindowClosed: 'the window for this step has closed',
+  NotDue: 'this step is not due yet',
+  WrongRole: 'this wallet does not hold the role for this step',
+  StepNotActive: 'this step is not open right now',
+  ProcessFinished: 'the note has finished',
+  EnforcedPause: 'the engine is paused',
+  DefinitionTooLarge: 'the workflow is too large for the engine (use fewer observations or underlyings)',
+  BadDefinition: 'the engine could not read the compiled workflow',
+  InsufficientBalance: 'not enough balance',
+  SafeERC20FailedOperation: 'the token transfer failed (check the token balance and allowance)',
+};
+
+/** One readable line for an error: the engine's own reason when it refused, never a cut-off "reason:". */
 export const errText = (e: unknown) => {
+  if (e instanceof BaseError) {
+    const r = e.walk(x => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;
+    if (r) {
+      const head = e.message.split('\n')[0].replace(/ with the following (reason|signature):?$/, '').replace(/\.$/, '');
+      const name = r.data?.errorName;
+      const args = r.data?.args?.length ? ` (${r.data.args.map(String).join(', ')})` : '';
+      const why = name ? (ENGINE_ERRORS[name] ?? `${name}${args}`) : r.reason ?? (r.signature ? `error ${r.signature}` : 'no reason given');
+      return `${head}: ${why}.`;
+    }
+  }
   const m = e instanceof Error ? e.message : String(e);
-  // viem errors carry long details; the first line says what happened.
-  return m.split('\n')[0].replace(/^.*User rejected the request\..*$/i, 'You rejected the request in your wallet.');
+  if (/User rejected the request/i.test(m)) return 'You rejected the request in your wallet.';
+  // viem errors carry long details; the first line says what happened, unless it ends where the details begin.
+  const lines = m.split('\n').map(l => l.trim()).filter(Boolean);
+  return /:$/.test(lines[0] ?? '') && lines[1] ? `${lines[0]} ${lines[1]}` : lines[0] ?? m;
 };
