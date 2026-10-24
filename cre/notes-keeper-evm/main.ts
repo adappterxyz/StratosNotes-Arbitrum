@@ -20,6 +20,7 @@ import { decodeFunctionResult, encodeFunctionData, zeroAddress, type Address, ty
 import { z } from 'zod'
 import { decodeEvmDef, encodeEvmReport } from '../../packages/core/src/compile-evm'
 import { checkRound, dueReports, routeFeed, type DueReport, type FeedRef } from '../../packages/core/src/keeper'
+import { collateralShortfalls, erc20ReadAbi, remoteVaultAbi, type VaultReading } from '../../packages/core/src/crosschain'
 import type { WorkflowDef } from '../../packages/core/src/def-types'
 import { feedAbi, lensAbi } from '../../packages/sdk/src/evm/abi'
 import { hexToBytes, snapshotToState } from '../../packages/sdk/src/evm/state'
@@ -57,6 +58,14 @@ const configSchema = z.object({
   finalityAllowanceSec: z.number().int().nonnegative(),
   /** Optional: send a recorded feed (lowercase address) to another source, e.g. a chain's own feeds. */
   feedRoutes: z.record(z.object({ feed: address, feedChain: z.string(), staleness: z.number().int().positive().optional() })).optional(),
+  /**
+   * Optional: cross-chain collateral (stage 1). For each vault on an asset chain (Robinhood) and its receipt on
+   * the home chain, check every run that the vault still backs the receipts (packages/core/src/crosschain.ts).
+   */
+  vaults: z.array(z.object({
+    homeChain: z.string(), receipt: address, assetChain: z.string(), vault: address, token: address,
+    label: z.string().optional(), stateBlock: z.enum(['finalized', 'latest']).optional(),
+  })).optional(),
 })
 type Config = z.infer<typeof configSchema>
 type ChainConfig = Config['chains'][number]
@@ -161,7 +170,25 @@ export const onCron = (runtime: Runtime<Config>): string => {
       ;(ok ? written : failed).push(tag)
     }
   }
-  return JSON.stringify({ due, written, failed })
+  // Cross-chain collateral: does every vault still back the receipts outstanding at home?
+  const readings: VaultReading[] = []
+  for (const w of cfg.vaults ?? []) {
+    const at = w.stateBlock ?? 'finalized'
+    const asset = client(w.assetChain)
+    const home = client(w.homeChain)
+    const num = (evm: EVMClient, to: string, abi: typeof remoteVaultAbi | typeof erc20ReadAbi, functionName: string, args: unknown[]) =>
+      decodeFunctionResult({ abi, functionName, data: view(runtime, evm, to, encodeFunctionData({ abi, functionName, args } as never), at) } as never) as unknown as bigint
+    readings.push({
+      watch: w,
+      locked: num(asset, w.vault, remoteVaultAbi, 'locked', [w.token]),
+      unclaimedTotal: num(asset, w.vault, remoteVaultAbi, 'unclaimedTotal', [w.token]),
+      vaultBalance: num(asset, w.token, erc20ReadAbi, 'balanceOf', [w.vault]),
+      receiptsOutstanding: num(home, w.receipt, erc20ReadAbi, 'totalSupply', []),
+    })
+  }
+  const shortfalls = collateralShortfalls(readings).map(s => `${s.watch.label ?? s.watch.token} ${s.kind} missing ${s.missing}`)
+  for (const s of shortfalls) runtime.log(`[collateral shortfall] ${s}`)
+  return JSON.stringify({ due, written, failed, ...(cfg.vaults?.length ? { vaults: readings.length, shortfalls } : {}) })
 }
 
 export const initWorkflow = (config: Config) => [
