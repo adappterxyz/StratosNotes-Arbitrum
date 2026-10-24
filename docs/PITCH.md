@@ -29,7 +29,7 @@ Judging criteria, and the slide that serves each:
 | 1:25–1:40 | 6 Product and go-to-market | GTM canvas, PMF | Slide 6 | "We start with crypto-native issuers raising against what they hold, and investors who want yield with a term sheet. Retail comes later, through a licensed partner. We charge 50 basis points to issue and 25 a year to service, all shown upfront." |
 | 1:40–1:50 | 7 Team and raise | Team and ask | Slide 7 | "I'm Kwang. I worked on the MAS Project Guardian tokenized note pilot at Marketnode and won Best Use of Chainlink CRE at TOKEN2049. We're also Canton Network validators, our path to institutions. We're raising 500 thousand dollars for the audit and our first notes." |
 
-Total: about 280 words, 1:47 at a steady 2.6 words a second. One story: banks only → two groups left out → anyone can issue, Chainlink runs it → it works (demo) → you can check it (contracts) → how it grows (GTM) → who and what we need (team, raise). Record the demo takes first, then
+Total: about 290 words, about 1:50 at a steady 2.6 words a second. One story: banks only → two groups left out → anyone can issue, Chainlink runs it → it works (demo) → you can check it (contracts) → how it grows (GTM) → who and what we need (team, raise). Record the demo takes first, then
 the voice-over.
 
 ### Slide text
