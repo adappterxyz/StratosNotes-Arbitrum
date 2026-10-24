@@ -4,8 +4,8 @@
  * and one SDK adapter per chain. Writes go through `useActions`, which puts the wallet on the note's chain
  * first.
  */
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
-import { connectorsForWallets, darkTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { connectorsForWallets, darkTheme, lightTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { injectedWallet } from '@rainbow-me/rainbowkit/wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, defineChain, http, type Chain, type PublicClient, type WalletClient } from 'viem';
@@ -95,11 +95,21 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     return { config, byKey, wagmi };
   }, [config]);
   const queryClient = useMemo(() => new QueryClient(), []);
+  // The wallet modal follows the app theme: light by default, navy when the user picks the dark theme.
+  const [dark, setDark] = useState(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const on = () => setDark(document.documentElement.classList.contains('dark'));
+    window.addEventListener('sn-theme', on);
+    return () => window.removeEventListener('sn-theme', on);
+  }, []);
+  const rkTheme = useMemo(() => (dark
+    ? darkTheme({ accentColor: '#4C8DFF', accentColorForeground: '#0A1628', borderRadius: 'medium', fontStack: 'system' })
+    : lightTheme({ accentColor: '#1F5FD6', accentColorForeground: '#FFFFFF', borderRadius: 'medium', fontStack: 'system' })), [dark]);
   return (
     <Ctx.Provider value={value}>
       <WagmiProvider config={value.wagmi}>
         <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider theme={darkTheme({ accentColor: '#4C8DFF', accentColorForeground: '#0A1628', borderRadius: 'medium', fontStack: 'system' })} modalSize="compact">
+          <RainbowKitProvider theme={rkTheme} modalSize="compact">
             {children}
           </RainbowKitProvider>
         </QueryClientProvider>
