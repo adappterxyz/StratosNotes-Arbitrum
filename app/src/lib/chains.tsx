@@ -40,7 +40,11 @@ export function prepareConfig(config: AppConfig): AppConfig {
       const usdg = CASH_TOKENS[c.key];
       const tokens: Record<string, `0x${string}`> = { ...(EXTERNAL_TOKENS[c.key] ?? {}), ...c.tokens };
       if (!usdg) return { ...c, tokens };
-      if (c.stablecoin?.address) tokens[TEST_CASH_TOKEN.token] = c.stablecoin.address;
+      // An older deployment's own test dollar, when the API still names it the stablecoin. Never overwrite a tUSD the
+      // API already lists: that would relabel every tUSD note as USDG.
+      if (c.stablecoin?.address && c.stablecoin.address.toLowerCase() !== usdg.toLowerCase() && !tokens[TEST_CASH_TOKEN.token]) {
+        tokens[TEST_CASH_TOKEN.token] = c.stablecoin.address;
+      }
       return { ...c, tokens, stablecoin: { symbol: CASH_TOKEN.token, address: usdg, decimals: CASH_TOKEN.decimals } };
     });
   return { ...config, chains };
