@@ -103,8 +103,8 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     return () => window.removeEventListener('sn-theme', on);
   }, []);
   const rkTheme = useMemo(() => (dark
-    ? darkTheme({ accentColor: '#4C8DFF', accentColorForeground: '#0A1628', borderRadius: 'medium', fontStack: 'system' })
-    : lightTheme({ accentColor: '#1F5FD6', accentColorForeground: '#FFFFFF', borderRadius: 'medium', fontStack: 'system' })), [dark]);
+    ? darkTheme({ accentColor: '#12A971', accentColorForeground: '#0E1116', borderRadius: 'medium', fontStack: 'system' })
+    : lightTheme({ accentColor: '#0E1116', accentColorForeground: '#FFFFFF', borderRadius: 'medium', fontStack: 'system' })), [dark]);
   return (
     <Ctx.Provider value={value}>
       <WagmiProvider config={value.wagmi}>

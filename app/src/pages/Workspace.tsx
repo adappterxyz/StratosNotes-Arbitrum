@@ -269,7 +269,7 @@ export default function Workspace() {
                           <span className="label">{PRODUCT_LABELS[p.productType]} · {underlyingLabel(p)}</span>
                           <span className="n">{p.name}</span>
                           <span className="xs muted">{headline(p)}</span>
-                          <span className="xs row" style={{ color: 'hsl(var(--primary))', gap: 4 }}>Open <ArrowRight className="i" style={{ width: 12, height: 12 }} /></span>
+                          <span className="xs row" style={{ color: 'hsl(var(--accent-text))', gap: 4 }}>Open <ArrowRight className="i" style={{ width: 12, height: 12 }} /></span>
                         </button>
                       ))}
                     </div>

@@ -30,8 +30,8 @@ export default function PayoffChart({ params }: { params: ProductParams }) {
       ))}
       {[20, 40, 60, 80, 100, 120, 140].map(x => <text key={x} x={sx(x)} y={H - 10} textAnchor="middle">{x}%</text>)}
       {[...new Set(marks)].map(m => <line key={m} x1={sx(m)} x2={sx(m)} y1={T} y2={H - B} stroke="hsl(var(--accent) / 0.6)" strokeDasharray="3 3" />)}
-      <path d={area} fill="hsl(var(--primary) / 0.12)" />
-      <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth="2.5" />
+      <path d={area} fill="hsl(var(--accent) / 0.12)" />
+      <path d={path} fill="none" stroke="hsl(var(--accent))" strokeWidth="2.5" />
       <line x1={L} x2={W - R} y1={sy(100)} y2={sy(100)} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" />
     </svg>
   );

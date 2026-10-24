@@ -69,19 +69,25 @@ export function fill(text: string, vars: Vars, html = false): string {
     const m = /^\{\{\s*([A-Za-z]+)\s*\}\}$/.exec(p);
     if (!m) return escapeHtml(p);
     const v = vars[m[1]] ?? '';
-    if (/^https?:\/\/[^\s"<>]+$/.test(v)) return `<a href="${escapeHtml(v)}" style="color:#3b82f6">${escapeHtml(v)}</a>`;
+    if (/^https?:\/\/[^\s"<>]+$/.test(v)) return `<a href="${escapeHtml(v)}" style="color:#0B7A52">${escapeHtml(v)}</a>`;
     return escapeHtml(v);
   }).join('').replace(/\n/g, '<br>');
 }
 
-/** The brand frame: dark navy header, white body, one blue accent. Inline styles (email clients ignore <style>). */
+/**
+ * The brand frame (docs/brand/logo-guide.pdf): Paper ground, a white card with 1px lines, the text lockup ("notes" in
+ * Ink, bold; a Signal-green square dot; "markets" in Slate) so it shows even with images blocked, Ink text and the
+ * darker Signal for links. Inline styles only (email clients ignore <style>).
+ */
 function frame(bodyHtml: string, footerHtml: string): string {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0b1426">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:24px 12px"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe1ec;border-radius:10px;overflow:hidden">
-<tr><td style="background:#0b1426;padding:16px 24px;color:#ffffff;font-weight:600;font-size:16px;letter-spacing:.2px">notes.markets</td></tr>
-<tr><td style="padding:24px;font-size:15px;line-height:1.55">${bodyHtml}</td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid #e6eaf2;font-size:12px;line-height:1.5;color:#5b6b84">${footerHtml}</td></tr>
+  const font = "'Geist',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+  const lockup = `<span style="font-family:${font};font-size:20px;letter-spacing:-0.5px;white-space:nowrap"><b style="color:#0E1116;font-weight:700">notes</b><span style="display:inline-block;width:4px;height:4px;background:#12A971;margin:0 1px 0 1px;vertical-align:baseline"></span><span style="color:#4A5060;font-weight:400">markets</span></span>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;700&display=swap" rel="stylesheet"></head><body style="margin:0;padding:0;background:#F4F5F7;font-family:${font};color:#0E1116">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F5F7;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border:1px solid #E3E5EA;border-radius:10px;overflow:hidden">
+<tr><td style="padding:18px 24px;border-bottom:1px solid #E3E5EA">${lockup}</td></tr>
+<tr><td style="padding:24px;font-size:15px;line-height:1.6;color:#0E1116">${bodyHtml}</td></tr>
+<tr><td style="padding:16px 24px;border-top:1px solid #E3E5EA;font-size:12px;line-height:1.5;color:#6B7280">${footerHtml}</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -93,7 +99,7 @@ export function render(t: TemplateText, vars: Vars, unsubscribe?: string): Rende
   const subject = fill(t.subject, vars).replace(/\s+/g, ' ').trim().slice(0, 200);
   const text = fill(t.body, vars) + (unsubscribe ? `\n\n--\nStop these emails: ${unsubscribe}` : '') + '\n\nnotes.markets';
   const footer = unsubscribe
-    ? `You get this because you turned on email alerts for your wallet on notes.markets. <a href="${escapeHtml(unsubscribe)}" style="color:#3b82f6">Stop these emails</a>.`
+    ? `You get this because you turned on email alerts for your wallet on notes.markets. <a href="${escapeHtml(unsubscribe)}" style="color:#0B7A52">Stop these emails</a>.`
     : 'You get this because someone asked to verify this address on notes.markets.';
   return { subject, html: frame(fill(t.body, vars, true), footer), text };
 }

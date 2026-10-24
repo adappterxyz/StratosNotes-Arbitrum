@@ -46,7 +46,7 @@ export default function AiPanel({ draft, onResult, onClose }: { draft: () => Pro
   return (
     <aside className="ws-ai" aria-label="AI assistant">
       <div className="ws-bar" style={{ justifyContent: 'space-between' }}>
-        <span className="row small" style={{ fontWeight: 600 }}><Sparkles className="i" style={{ color: 'hsl(var(--primary))' }} />AI assistant</span>
+        <span className="row small" style={{ fontWeight: 600 }}><Sparkles className="i" style={{ color: 'hsl(var(--accent-text))' }} />AI assistant</span>
         <button className="btn" onClick={onClose} aria-label="Hide the AI assistant"><X className="i" /></button>
       </div>
       <div className="chat">
