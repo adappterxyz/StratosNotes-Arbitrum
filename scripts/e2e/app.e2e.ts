@@ -223,7 +223,9 @@ try {
   });
   check(out2.defaulted?.period === firstDue, `reference: the issuer missed payment ${firstDue} -> default; ${out2.perUnit.cash} cash and ${out2.perUnit.collateral.USD} collateral per unit`);
   const chain2 = (await adapter.getNote(defaultId))!;
-  const colAsset = def2.assets.findIndex(a => a.name === 'Collateral tUSD');
+  // The stablecoin collateral asset (named after the cash token: USDG since the switch, tUSD before it).
+  const colAsset = def2.assets.findIndex(a => /^Collateral (USDG|t?USD|USDC)$/.test(a.name));
+  const colName = def2.assets[colAsset]?.name ?? 'Collateral USDG';
   for (const inv of DEFAULTS) {
     const addr = acct(inv.i).address.toLowerCase();
     const col = Number(BigInt(chain2.holdings.find(h => h.owner === addr && h.asset === colAsset)?.balance ?? '0')) / Number(SCALE);
@@ -231,7 +233,7 @@ try {
   }
   await role(page, 'Investor A');
   await page.goto(`${APP}/note/${encodeURIComponent(defaultId)}`);
-  const colRow = page.locator('[data-other-asset="Collateral tUSD"]');
+  const colRow = page.locator(`[data-other-asset="${colName}"]`);
   await colRow.waitFor({ timeout: 60_000 });
   const usdc = chainNote.assetTokens[1] as Address;
   let before = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
