@@ -377,8 +377,8 @@ export default function IssueWizard() {
                     </button>
                   </div>
                   <span className="hint">{remote
-                    ? 'USDG, TSLA or AMZN stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes). Nothing is bridged.'
-                    : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA or AMZN, lock them on Robinhood Chain.'}</span>
+                    ? 'USDG, TSLA, AMZN, AMD or PLTR stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes), and the note sends them back there when it lets them go. Nothing is bridged.'
+                    : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA, AMZN, AMD or PLTR, lock them on Robinhood Chain.'}</span>
                 </div>
               )}
               <div className="field">

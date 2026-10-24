@@ -191,7 +191,10 @@ export function chainTokenFor(chain: NoteChain, sym: string): ChainToken | undef
  * these three: nothing else is carried over (NFLX's receipt exists but has no feed; no others will be added).
  */
 export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
-  robinhood: { USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 } },
+  robinhood: {
+    USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 },
+    AMD: { token: 'AMD.rh', decimals: 18 }, PLTR: { token: 'PLTR.rh', decimals: 18 },
+  },
 };
 
 /**

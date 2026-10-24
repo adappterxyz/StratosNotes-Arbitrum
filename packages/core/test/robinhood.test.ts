@@ -54,10 +54,10 @@ describe('real tokens per chain', () => {
       { symbol: 'USD', token: 'USDG' }, { symbol: 'ETH', token: 'WETH' },
       { symbol: 'TSLA', token: 'TSLA' }, { symbol: 'AMZN', token: 'AMZN' }, { symbol: 'AMD', token: 'AMD' }, { symbol: 'PLTR', token: 'PLTR' },
     ]);
-    // Locked on Robinhood for an Arbitrum note: only the three receipts that exist (nothing new is carried over).
+    // Locked on Robinhood for an Arbitrum note: the vault's assets (gateway v2 receipts); ETH stays on its own chain.
     expect(collateralChoices({ collateralChain: 'robinhood' })).toEqual([
       { symbol: 'USD', token: 'USDG.rh' }, { symbol: 'ETH', token: null },
-      { symbol: 'TSLA', token: 'TSLA.rh' }, { symbol: 'AMZN', token: 'AMZN.rh' }, { symbol: 'AMD', token: null }, { symbol: 'PLTR', token: null },
+      { symbol: 'TSLA', token: 'TSLA.rh' }, { symbol: 'AMZN', token: 'AMZN.rh' }, { symbol: 'AMD', token: 'AMD.rh' }, { symbol: 'PLTR', token: 'PLTR.rh' },
     ]);
     for (const chain of NOTE_CHAINS) for (const cc of ['note', 'robinhood'] as const) {
       for (const c of collateralChoices({ chain, collateralChain: cc })) if (c.token) expect(isRetiredTestToken(c.token)).toBe(false);
@@ -165,10 +165,11 @@ describe('collateral locked on Robinhood Chain (cross-chain receipts)', () => {
     expect(tokens).toContain('TSLA.rh');
     expect(tokens).toContain('USDG.rh');
   });
-  it('has no receipt beyond USDG.rh, TSLA.rh and AMZN.rh: ETH stays on its own chain', () => {
+  it('locks only the vault\'s assets (USDG, TSLA, AMZN, AMD, PLTR): ETH stays on its own chain', () => {
     expect(collateralTokenOf({ collateralChain: 'robinhood' }, 'ETH')).toBeUndefined();
     expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'ETH', haircutPct: 70 }] }).join(' ')).toMatch(/ETH can't be locked on Robinhood Chain/);
-    expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'AMD', haircutPct: 60 }] }).join(' ')).toMatch(/AMD can't be locked/);
+    expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'AMD', haircutPct: 60 }] })).toEqual([]);
+    expect(collateralTokenOf({ collateralChain: 'robinhood' }, 'PLTR')).toEqual({ token: 'PLTR.rh', decimals: 18 });
   });
   it('leaves notes without the option (and their template ids) unchanged', () => {
     expect(collateralTokenOf({}, 'USD')).toEqual(collateralTokenOf({ collateralChain: 'note' }, 'USD'));
