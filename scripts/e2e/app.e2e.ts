@@ -250,13 +250,14 @@ try {
 
   // Portfolio: Investor A sees note 1's cash and withdraws it.
   await page.goto(`${APP}/portfolio`);
+  await page.getByRole('tab', { name: /To withdraw/ }).click();
   const row = page.locator(`tr[data-note="${paidId}"]`);
   await row.waitFor({ timeout: 30_000 });
   const want = money(600 * perUnit);
-  const cell = (await row.locator('[data-cash]').textContent())?.trim();
-  check(!!cell?.startsWith(`${want} USDC`), `portfolio shows ${cell} (want ${want} USDC)`);
+  const cell = (await row.locator('[data-cash] .num').first().textContent())?.trim();
+  check(cell === want, `portfolio shows ${cell} USDC to withdraw (want ${want})`);
   before = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
-  await row.getByRole('button', { name: 'Withdraw' }).click();
+  await row.getByRole('button', { name: /^Withdraw / }).click();
   await page.getByText(/^Withdrew /).waitFor({ timeout: 120_000 });
   after = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
   const got = Number(after - before) / 1e6;
