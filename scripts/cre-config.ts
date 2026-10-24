@@ -4,10 +4,15 @@
  *   npx tsx scripts/cre-config.ts staging       # arbitrum-sepolia + robinhood-testnet
  *   npx tsx scripts/cre-config.ts production    # arbitrum-one (Robinhood mainnet has no CRE yet)
  *   npx tsx scripts/cre-config.ts local-fork deployments/local/arbitrum-fork.json
+ *   GATEWAY=0x... npx tsx scripts/cre-config.ts local-fork ...   # also flush that HomeGateway v2 on the fork
+ *
+ * Staging also gets the auto-release gateway to flush (deployments/crosschain-testnet.json home.gateway, only when
+ * home.version >= 2) and the vaults to check.
  *
  * A chain without a deployment file gets the zero address, which the workflow refuses (fails closed).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { keeperGateways } from '../packages/core/src/crosschain';
 import { HTTP_FEED_CHAINS } from '../packages/core/src/feed-rpc';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -32,6 +37,18 @@ function crossChainVaults() {
     label, stateBlock: 'latest' as const,
   })));
 }
+/** Auto-release gateways the keeper flushes: staging from the cross-chain deployment (v2 only); a local fork
+ * only when GATEWAY names one (e.g. the live gateway, present on an Arbitrum Sepolia fork). */
+function gateways() {
+  if (target === 'staging' && existsSync('deployments/crosschain-testnet.json')) {
+    return keeperGateways(JSON.parse(readFileSync('deployments/crosschain-testnet.json', 'utf8')), CRE_NAMES, { stateBlock: 'latest' });
+  }
+  if (target === 'local-fork' && process.env.GATEWAY) {
+    return keeperGateways({ home: { chain: 'arbitrum-sepolia', gateway: process.env.GATEWAY, version: 2 } }, CRE_NAMES, { stateBlock: 'latest' });
+  }
+  return [];
+}
+const flushGateways = gateways();
 /** Earlier engines whose notes are still running (deployments/archive/<v>/<chain>.json): the keeper keeps
  * driving them to maturity after a redeploy. Staging only; LEGACY=v3,... (default v3 when the folder exists). */
 const legacyEngines = (ch: { file: string; chainSelectorName: string }) => (target !== 'staging' ? [] : (process.env.LEGACY ?? 'v3').split(',').filter(Boolean)
@@ -52,6 +69,8 @@ const config = {
     };
   }),
   maxReportsPerRun: 5,
+  // Auto-release (docs/CROSS-CHAIN.md, CRE report spec): read each home chain's gateway queue and flush it.
+  ...(flushGateways.length ? { gateways: flushGateways } : {}),
   // Cross-chain collateral (docs/CROSS-CHAIN.md): every run, check that each Robinhood vault still backs the
   // receipts outstanding on Arbitrum. Staging only, from deployments/crosschain-testnet.json.
   ...(target === 'staging' && existsSync('deployments/crosschain-testnet.json') ? { vaults: crossChainVaults() } : {}),
@@ -65,4 +84,4 @@ const config = {
 };
 const out = `cre/notes-keeper-evm/config.${target === 'staging' ? 'staging' : target === 'production' ? 'production' : 'local-fork'}.json`;
 writeFileSync(out, JSON.stringify(config, null, 2) + '\n');
-console.log(`${out}: ${config.chains.map(c => `${c.chainSelectorName} engine ${c.engine}`).join(', ')}`);
+console.log(`${out}: ${config.chains.map(c => `${c.chainSelectorName} engine ${c.engine}`).join(', ')}${flushGateways.map(g => `; flush gateway ${g.gateway} on ${g.chainSelectorName}`).join('')}`);

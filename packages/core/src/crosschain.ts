@@ -123,6 +123,44 @@ export function planFlush(q: ReleaseQueueReading, opts: { maxItems?: number; bas
   return { flush: true, maxItems: n, gasLimit: base + per * BigInt(n) };
 }
 
+/** `releaseQueue()`'s decoded outputs, in order, as a reading for planFlush. */
+export function releaseQueueReading(r: readonly [bigint, bigint, bigint, bigint, bigint]): ReleaseQueueReading {
+  const [pending, head, queued, pool, nextFee] = r;
+  return { pending, head, queued, pool, nextFee };
+}
+
+/** The keeper's one log line per gateway and run: what waits, and what it does about it. */
+export function describeFlush(tag: string, q: ReleaseQueueReading, plan: FlushPlan): string {
+  const state = `${q.pending} release(s) waiting (head ${q.head}, queued ${q.queued}), fee pool ${q.pool} wei, next fee ${q.nextFee} wei`;
+  if (plan.flush) return `${tag} gateway flush: ${state} -> flush up to ${plan.maxItems} (gas ${plan.gasLimit})`;
+  const why = plan.reason === 'pool-short' ? 'pool-short: the fee pool cannot pay the next release, top it up'
+    : plan.reason === 'no-vault' ? 'no-vault: the next release\'s chain has no vault configured (operator)' : 'nothing to send';
+  return `${tag} gateway flush: ${state} -> no report (${why})`;
+}
+
+/** The keeper's gateway entry per home chain (CRE config `gateways`), with the flush gas settings. */
+export interface KeeperGateway {
+  chainSelectorName: string; gateway: string; maxItems: number; baseGas: string; gasPerItem: string;
+  stateBlock?: 'finalized' | 'latest';
+}
+
+/**
+ * The gateway the keeper flushes, from deployments/crosschain-testnet.json: only an auto-release gateway
+ * (home.version >= 2; a v1 gateway has no queue). `creNames` maps deployment chain names to CRE selector names.
+ */
+export function keeperGateways(
+  x: { home: { chain: string; gateway?: string; version?: number } }, creNames: Record<string, string>,
+  opts: { stateBlock?: 'finalized' | 'latest' } = {},
+): KeeperGateway[] {
+  const h = x.home;
+  if (!h.gateway || (h.version ?? 1) < 2) return [];
+  const chainSelectorName = creNames[h.chain];
+  if (!chainSelectorName) throw new Error(`no CRE chain name for ${h.chain}`);
+  // Base gas above planFlush's 150k default: one release through the KeystoneForwarder measured ~395k on an Arbitrum
+  // Sepolia fork (450k would leave ~12%), and Arbitrum also charges L1 data gas inside the limit.
+  return [{ chainSelectorName, gateway: h.gateway, maxItems: 10, baseGas: '250000', gasPerItem: '300000', ...(opts.stateBlock ? { stateBlock: opts.stateBlock } : {}) }];
+}
+
 const word = (v: bigint) => BigInt.asUintN(256, v).toString(16).padStart(64, '0');
 
 /** The flush report: abi.encode(uint8 kind = REPORT_FLUSH, uint256 maxItems), as 0x-hex (64 bytes). */

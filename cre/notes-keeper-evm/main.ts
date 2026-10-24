@@ -15,6 +15,9 @@
 //  4. Writes a DON-signed report to the chain's FlowEngine through the KeystoneForwarder:
 //     abi.encode(uint256 pid, uint16 step, int256[] values). The engine bounds-checks every value, runs the
 //     step and everything after it that needs nobody (coupons, autocall, redemption) in that transaction.
+//  5. Cross-chain auto-release (HomeGateway v2, docs/CROSS-CHAIN.md "CRE report spec"): reads each home chain's
+//     gateway queue (one call) and, when releases wait and the fee pool pays for them, writes a flush report
+//     abi.encode(uint8 1, uint256 maxItems) to the gateway, which sends them over CCIP. Counts as a report.
 import {
   bytesToHex, CronCapability, EVMClient, encodeCallMsg, getNetwork, handler,
   LAST_FINALIZED_BLOCK_NUMBER, LATEST_BLOCK_NUMBER, prepareReportRequest, Runner, TxStatus, type Runtime,
@@ -23,7 +26,10 @@ import { decodeFunctionResult, encodeFunctionData, zeroAddress, type Address, ty
 import { z } from 'zod'
 import { decodeEvmDef, encodeEvmReport } from '../../packages/core/src/compile-evm'
 import { checkRound, dueReports, routeFeed, type DueReport, type FeedRef } from '../../packages/core/src/keeper'
-import { collateralShortfalls, erc20ReadAbi, remoteVaultAbi, type VaultReading } from '../../packages/core/src/crosschain'
+import {
+  collateralShortfalls, describeFlush, encodeFlushReport, erc20ReadAbi, planFlush, releaseQueueAbi, releaseQueueReading,
+  remoteVaultAbi, type VaultReading,
+} from '../../packages/core/src/crosschain'
 import type { WorkflowDef } from '../../packages/core/src/def-types'
 import { readingToRound } from '../../packages/core/src/feed-rpc'
 import { feedAbi, lensAbi } from '../../packages/sdk/src/evm/abi'
@@ -72,6 +78,20 @@ const configSchema = z.object({
    * Optional: cross-chain collateral (stage 1). For each vault on an asset chain (Robinhood) and its receipt on
    * the home chain, check every run that the vault still backs the receipts (packages/core/src/crosschain.ts).
    */
+  /**
+   * Optional: auto-release gateways (HomeGateway v2), one per home chain. Each run reads the release queue (one
+   * call; 'latest' by default, the gateway re-checks everything) and, when planFlush says so, writes a flush report
+   * to the gateway. A flush counts against maxReportsPerRun. Gas: baseGas + gasPerItem x releases; maxItems caps
+   * one report (the gateway sends at most 25).
+   */
+  gateways: z.array(z.object({
+    chainSelectorName: z.string(),
+    gateway: deployed,
+    maxItems: z.number().int().min(1).max(25).optional(),
+    baseGas: z.string().regex(/^\d+$/).optional(),
+    gasPerItem: z.string().regex(/^\d+$/).optional(),
+    stateBlock: z.enum(['finalized', 'latest']).optional(),
+  })).optional(),
   vaults: z.array(z.object({
     homeChain: z.string(), receipt: address, assetChain: z.string(), vault: address, token: address,
     label: z.string().optional(), stateBlock: z.enum(['finalized', 'latest']).optional(),
@@ -202,6 +222,46 @@ export const onCron = (runtime: Runtime<Config>): string => {
     runtime.log(`${tag} [${values.join(',')}] -> ${done ? `written ${bytesToHex(resp.txHash!)}` : `failed: ${resp.errorMessage || resp.txStatus}`}`)
     ;(done ? written : failed).push(tag)
   }
+  // Auto-release: flush each home chain's gateway queue when releases wait and the fee pool can pay for them.
+  // One read per gateway; the write counts as a report. Engine reports go first: they are due at a date.
+  const flushed: string[] = []
+  for (const g of cfg.gateways ?? []) {
+    const tag = g.chainSelectorName
+    if (readsThisRun >= READ_LIMIT) {
+      runtime.log(`${tag} gateway flush: skipped (no chain reads left this run)`)
+      continue
+    }
+    const evm = client(g.chainSelectorName)
+    let reading
+    try {
+      reading = releaseQueueReading(decodeFunctionResult({
+        abi: releaseQueueAbi, functionName: 'releaseQueue',
+        data: view(runtime, evm, g.gateway, encodeFunctionData({ abi: releaseQueueAbi, functionName: 'releaseQueue' }), g.stateBlock ?? 'latest'),
+      }))
+    } catch (e) {
+      runtime.log(`${tag} gateway flush: queue read failed: ${(e as Error).message}`)
+      failed.push(`${tag} gateway flush`)
+      continue
+    }
+    const plan = planFlush(reading, {
+      maxItems: g.maxItems,
+      baseGas: g.baseGas !== undefined ? BigInt(g.baseGas) : undefined,
+      gasPerItem: g.gasPerItem !== undefined ? BigInt(g.gasPerItem) : undefined,
+    })
+    if (plan.flush && budget <= 0) {
+      runtime.log(`${describeFlush(tag, reading, plan)}: deferred (maxReportsPerRun reached)`)
+      continue
+    }
+    runtime.log(describeFlush(tag, reading, plan))
+    if (!plan.flush) continue
+    budget--
+    const report = runtime.report(prepareReportRequest(encodeFlushReport(plan.maxItems))).result()
+    const resp = evm.writeReport(runtime, { receiver: g.gateway, report, gasConfig: { gasLimit: plan.gasLimit.toString() } }).result()
+    const done = resp.txStatus === TxStatus.SUCCESS && !!resp.txHash && resp.txHash.length > 0
+    const ftag = `${tag} gateway flush ${plan.maxItems}`
+    runtime.log(`${ftag} -> ${done ? `written ${bytesToHex(resp.txHash!)}` : `failed: ${resp.errorMessage || resp.txStatus}`}`)
+    ;(done ? flushed : failed).push(ftag)
+  }
   // Cross-chain collateral: does every vault still back the receipts outstanding at home?
   // Four reads per vault, within what this run has left; a rotating start so every vault is checked in turn.
   const readings: VaultReading[] = []
@@ -225,7 +285,7 @@ export const onCron = (runtime: Runtime<Config>): string => {
   }
   const shortfalls = collateralShortfalls(readings).map(s => `${s.watch.label ?? s.watch.token} ${s.kind} missing ${s.missing}`)
   for (const s of shortfalls) runtime.log(`[collateral shortfall] ${s}`)
-  return JSON.stringify({ due, written, failed, ...(cfg.vaults?.length ? { vaults: readings.length, shortfalls } : {}) })
+  return JSON.stringify({ due, written, failed, ...(cfg.gateways?.length ? { flushed } : {}), ...(cfg.vaults?.length ? { vaults: readings.length, shortfalls } : {}) })
 }
 
 export const initWorkflow = (config: Config) => [

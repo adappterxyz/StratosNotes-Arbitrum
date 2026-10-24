@@ -43,6 +43,16 @@
     }
   ],
   "maxReportsPerRun": 5,
+  "gateways": [
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia-arbitrum-1",
+      "gateway": "0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89",
+      "maxItems": 10,
+      "baseGas": "250000",
+      "gasPerItem": "300000",
+      "stateBlock": "latest"
+    }
+  ],
   "vaults": [
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",

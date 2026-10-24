@@ -187,6 +187,7 @@ through its CCIP router; the vault accepts RELEASE only from the home chain sele
   | `pushTo` of a default's collateral to 2 holders, both queued (engine + receipts + gateway) | ~295,000 | |
   | `flush` of 1 release on the real Arbitrum Sepolia router (fork, Chainlink Local) | ~270,000 | report gas: 150k + 300k per release |
   | CRE flush report of 2 releases incl. their RELEASE execution on the vault (Chainlink Local, same chain) | ~239,000 | |
+  | CRE flush report through the real MockKeystoneForwarder (`cre workflow simulate --broadcast`, Arbitrum Sepolia fork, real router), 1 / 2 releases | ~395,000 / ~580,000 | keeper config: 250k + 300k per release |
   | RELEASE execution on the vault (unchanged) | ~82,000 | destination gas limit 300,000 |
 
 - Bytecode: HomeGateway v2 17,837 B (was 10,678; it creates the receipts and is now a CRE receiver),
@@ -216,6 +217,16 @@ it says so, one write per run, on the home chain:
 - **Config** the keeper needs per home chain: the gateway address (deployments/crosschain-testnet.json
   `home.gateway`) and its gas settings. Racing the issuer bot's fallback flush is harmless: whoever is second
   finds less (or nothing) to send.
+- **Wired** (cre/notes-keeper-evm/main.ts): config `gateways: [{ chainSelectorName, gateway, maxItems, baseGas,
+  gasPerItem, stateBlock }]`, emitted by `scripts/cre-config.ts staging` from `home.gateway` when `home.version >= 2`
+  (`keeperGateways`; base gas 250k: one release through the forwarder measured ~395k). Each run, after the engine
+  reports: one read per gateway (skipped when the run's 15 reads are spent), one log line (`<chain> gateway flush:
+  N release(s) waiting … -> flush up to n (gas g)` or `-> no report (empty | pool-short | no-vault)`), and the
+  report, which counts against `maxReportsPerRun` (deferred to the next run when the engine reports used it up).
+  The run's result lists it under `flushed`. Verified on an Arbitrum Sepolia fork against the live gateway:
+  releases queued by receipts leaving the engine (impersonated, fork only), then the simulator's flush report
+  emitted `ReleaseSent` with CCIP message ids from the real router (`GATEWAY=<gateway> npx tsx
+  scripts/cre-config.ts local-fork deployments/arbitrum-sepolia.json` adds the gateway to the fork config).
 
 ## Stage 2 (next)
 
