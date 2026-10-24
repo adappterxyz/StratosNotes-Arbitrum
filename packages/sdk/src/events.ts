@@ -10,6 +10,8 @@
 import type { FieldValue, NoteState } from './model';
 import { noteId } from './model';
 
+const SCALE_BIG = 10_000_000_000n;
+
 export type EngineEvent =
   | { name: 'DefinitionRegistered'; id: string; creator: string; meta: string }
   | { name: 'ProcessStarted'; pid: string; definition: string; creator: string; ref: string; roles: string[]; assetTokens: string[] }
@@ -20,6 +22,20 @@ export type EngineEvent =
   | { name: 'Deposited'; pid: string; asset: number; account: string; base: string }
   | { name: 'Withdrawn'; pid: string; asset: number; account: string; base: string }
   | { name: 'UnitsTransferred'; pid: string; asset: number; from: string; to: string; amount: string }
+  /** The ERC-20 of a note's units (FlowEngine v4: one NoteToken clone per issued asset). */
+  | { name: 'NoteTokenCreated'; pid: string; asset: number; token: string }
+  /**
+   * A payout (coupon, redemption, delivery, a default's distribution): `perUnit` of cash asset `asset` to every
+   * holder of `holding` units but the payer, O(1) on-chain (an accumulator). The read model credits each holder
+   * here; `retire` redeems the units with it. `period` counts this asset's distributions on the note (1-based).
+   */
+  | { name: 'DistributionRecorded'; pid: string; asset: number; period: number; holding: number; step: number; payer: string; perUnit: string; total: string; supply: string; retire: boolean; hash: string }
+  /** A payout pushed to a holder's wallet: `amount` in the token's base units; `payoutId` is its receipt id. */
+  | { name: 'PayoutPaid'; pid: string; asset: number; period: number; holder: string; amount: string; payoutId: string }
+  /** A pushed payment that could not be sent (e.g. a frozen address): it stays withdrawable. */
+  | { name: 'PayoutDeferred'; pid: string; asset: number; period: number; holder: string; amount: string }
+  /** A push round reached the last holder (or was superseded): its count, total and rolling hash of payoutIds. */
+  | { name: 'DistributionSettled'; pid: string; asset: number; period: number; paidCount: number; paidTotal: string; rollingHash: string }
   /** `via`: which agent submitted the report, classified when ingested. */
   | { name: 'ReportProcessed'; pid: string; step: number; values: string[]; reporter: string; via: 'cre' | 'fallback' }
   | { name: 'ProcessCompleted'; pid: string }
@@ -72,6 +88,32 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
       n.holdings.sort((a, b) => a.asset - b.asset || a.owner.localeCompare(b.owner));
       break;
     }
+    case 'NoteTokenCreated': {
+      const tokens = [...s.assetTokens];
+      tokens[e.asset] = normAccount(e.token);
+      n.assetTokens = tokens;
+      break;
+    }
+    case 'DistributionRecorded': {
+      // Credit every holder its share now, as the chain's accumulator does: the chain logs a cash balance only
+      // when it settles (units move, a withdrawal, a push), and every such balance includes all it accrued.
+      const payer = normAccount(e.payer);
+      const perUnit = BigInt(e.perUnit);
+      const credit = new Map<string, bigint>();
+      if (BigInt(e.supply) > 0n && perUnit !== 0n) {
+        for (const h of s.holdings) {
+          if (h.asset !== e.holding || h.owner === payer) continue;
+          const pay = (BigInt(h.balance) * perUnit) / SCALE_BIG;
+          if (pay > 0n) credit.set(h.owner, pay);
+        }
+      }
+      let holdings = s.holdings.map(h => (h.asset === e.asset && credit.has(h.owner) ? { ...h, balance: (BigInt(h.balance) + credit.get(h.owner)!).toString() } : h));
+      for (const [owner, pay] of credit) if (!holdings.some(h => h.asset === e.asset && h.owner === owner)) holdings.push({ asset: e.asset, owner, balance: pay.toString() });
+      // Redeemed: the units read zero from now on (the chain retires them in one write, not per holder).
+      if (e.retire) holdings = holdings.filter(h => h.asset !== e.holding);
+      n.holdings = holdings.sort((a, b) => a.asset - b.asset || a.owner.localeCompare(b.owner));
+      break;
+    }
     case 'TokensUpdated':
       n.status = e.status; n.stepsRun = e.stepsRun; n.tokens = [...e.tokens];
       break;
@@ -87,7 +129,9 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
       n.milestones = [...(s.milestones ?? []), { code: e.code, step: e.step, at: ctx.at }];
       break;
     default:
-      break; // StepRun, deposits, withdrawals and transfers are history; their effects arrive as HoldingChanged
+      // StepRun, deposits, withdrawals, transfers and payout receipts are history; their effects arrive as
+      // HoldingChanged (and DistributionRecorded).
+      break;
   }
   return n;
 }

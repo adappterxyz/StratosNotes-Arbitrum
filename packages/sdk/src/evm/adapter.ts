@@ -10,9 +10,10 @@ import { decodeEvmDef, evmInput, toBase, type EvmInput, type WorkflowDef } from 
 import type { ChainAdapter, IssueRequest, Progress, Submitted } from '../adapter';
 import { applyEvent, hasPid, type EngineEvent } from '../events';
 import { depositAmounts, type InputValue, type PlanStep } from '../issue';
+import { NOTE_ASSET } from '../model';
 import { isBookStep, noteId, parseNoteId, type ChainInfo, type FieldValue, type NoteId, type NoteState } from '../model';
 import { decodeEngineLog, fieldValue } from './decode';
-import { flowEngineAbi, notesLensAbi } from './generated';
+import { flowEngineAbi, noteTokenAbi, notesLensAbi } from './generated';
 import { bytesToHex, hexToBytes, tagOf } from './state';
 
 const NO_CHOICE = 0xffff;
@@ -76,10 +77,10 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     if (proc.definition === `0x${'0'.repeat(64)}`) return null;
     const def = await this.getDefinition(proc.definition);
     if (!def) return null;
-    const [tokens, holders] = await Promise.all([
-      this.client.readContract({ ...e, functionName: 'tokensOf', args: [pid] }),
-      this.client.readContract({ ...e, functionName: 'holdersOf', args: [pid] }),
-    ]);
+    const tokens = await this.client.readContract({ ...e, functionName: 'tokensOf', args: [pid] });
+    // Every account the note has had: from its HoldingChanged logs (units and cash alike).
+    const changed = await this.client.getContractEvents({ ...e, eventName: 'HoldingChanged', args: { pid }, fromBlock: this.dep.fromBlock ?? 0n });
+    const holders = [...new Set(changed.map(l => (l.args.owner as Address).toLowerCase()))] as Address[];
     const roles = await Promise.all(def.roles.map((_, i) => this.client.readContract({ ...e, functionName: 'roleOf', args: [pid, BigInt(i)] })));
     const assetTokens = await Promise.all(def.assets.map((_, i) => this.client.readContract({ ...e, functionName: 'assetTokenOf', args: [pid, BigInt(i)] })));
     const values: NoteState['values'] = {};
@@ -202,6 +203,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     if (!issuer) throw new Error('Connect a wallet to issue.');
     const tx: string[] = [];
     const reg = await this.registerDefinition(w, req.definition, onProgress);
+    const token = req.token ?? { name: `notes.markets ${req.def.name || 'note'}`.slice(0, 64), symbol: `nm${req.ref % 1000n}` };
     tx.push(...reg.tx);
     // Open roles (the book) are anyone's and escrow is the engine's: both are address 0 at the start.
     const roles = req.plan.openRoles.map((open, i) => (open || req.plan.escrowRoles?.[i] ? zeroAddress : issuer));
@@ -211,7 +213,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     tx.push(...start.tx);
     const started = await this.send(w, {
       address: this.dep.engine, abi: flowEngineAbi, functionName: 'startProcess',
-      args: [reg.definition, req.ref, roles, assetTokens, req.plan.start.index, start.args],
+      args: [reg.definition, req.ref, roles, assetTokens, req.plan.start.index, start.args, token.name, token.symbol],
     }, 'Start the issuance', onProgress);
     tx.push(started.transactionHash);
     const ev = parseEventLogs({ abi: flowEngineAbi, logs: started.logs, eventName: 'ProcessStarted' })[0];
@@ -273,10 +275,51 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     return { tx: [...r.tx, sent.transactionHash] };
   }
 
+  /** The ERC-20 of the note's units (FlowEngine v4); null for an issued asset without one. */
+  async noteToken(id: NoteId): Promise<Address | null> {
+    const t = await this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'assetTokenOf', args: [this.pidOf(id), BigInt(NOTE_ASSET)] });
+    return t === zeroAddress ? null : t;
+  }
+
+  /** wallet_watchAsset parameters for the note's token ("Add to wallet"). */
+  async watchAssetParams(id: NoteId): Promise<{ type: 'ERC20'; options: { address: Address; symbol: string; decimals: number } } | null> {
+    const t = await this.noteToken(id);
+    if (!t) return null;
+    const symbol = await this.client.readContract({ address: t, abi: noteTokenAbi, functionName: 'symbol' });
+    return { type: 'ERC20', options: { address: t, symbol: symbol.slice(0, 11), decimals: 6 } };
+  }
+
+  /** Whether `who` may receive units now (a current verified email when the engine requires one). */
+  async canReceive(who: string): Promise<boolean> {
+    const e = { address: this.dep.engine, abi: flowEngineAbi } as const;
+    const [required, email] = await Promise.all([
+      this.client.readContract({ ...e, functionName: 'requireEmail' }),
+      this.client.readContract({ ...e, functionName: 'emailOf', args: [who as Address] }),
+    ]);
+    return !required || Number(email[1]) * 1000 > Date.now();
+  }
+
+  /** A transfer of the note token: whole token base units (1 = 1e4 engine fixed point). */
   async transferUnits(w: WalletClient, id: NoteId, to: string, units: bigint, onProgress?: Progress): Promise<Submitted> {
-    const pid = this.pidOf(id);
-    const r = await this.send(w, { address: this.dep.engine, abi: flowEngineAbi, functionName: 'transferUnits', args: [pid, 0, to as Address, units] }, 'Transfer units', onProgress);
+    if (units <= 0n || units % 10_000n !== 0n) throw new Error('Units move in steps of 0.000001.');
+    const token = await this.noteToken(id);
+    if (!token) throw new Error('This note has no unit token (it runs on an older engine).');
+    if (!(await this.canReceive(to))) throw new Error('The recipient has no verified email: only verified addresses can receive units.');
+    const r = await this.send(w, { address: token, abi: noteTokenAbi, functionName: 'transfer', args: [to as Address, units / 10_000n] }, 'Transfer units', onProgress);
     return { tx: [r.transactionHash] };
+  }
+
+  async claimable(id: NoteId, owner: string, asset: number): Promise<bigint> {
+    return this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'balanceOf', args: [this.pidOf(id), owner as Address, BigInt(asset)] });
+  }
+
+  async pushPayouts(w: WalletClient, id: NoteId, asset: number, count: number, onProgress?: Progress): Promise<Submitted & { left: number }> {
+    const pid = this.pidOf(id);
+    const args = [pid, asset, 2n ** 256n - 1n, BigInt(count)] as const;
+    const { result } = await this.client.simulateContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'pushPayouts', args, account: w.account! });
+    const r = await this.send(w, { address: this.dep.engine, abi: flowEngineAbi, functionName: 'pushPayouts', args: [...args] }, 'Push payouts', onProgress);
+    // `left` as of the simulation: what the transaction itself left (a holder joining meanwhile shows next time).
+    return { tx: [r.transactionHash], left: Number(result) };
   }
 
   async withdraw(w: WalletClient, id: NoteId, asset: number, amount?: bigint, onProgress?: Progress): Promise<Submitted> {

@@ -47,6 +47,16 @@ export function decodeEngineLog(log: { data: Hex; topics: readonly Hex[] }, isFa
     case 'Deposited': return { name: 'Deposited', pid: s('pid'), asset: Number(a.asset), account: lc(s('from')), base: s('base') };
     case 'Withdrawn': return { name: 'Withdrawn', pid: s('pid'), asset: Number(a.asset), account: lc(s('to')), base: s('base') };
     case 'UnitsTransferred': return { name: 'UnitsTransferred', pid: s('pid'), asset: Number(a.asset), from: lc(s('from')), to: lc(s('to')), amount: s('amount') };
+    case 'NoteTokenCreated': return { name: 'NoteTokenCreated', pid: s('pid'), asset: Number(a.asset), token: lc(s('token')) };
+    case 'DistributionRecorded': return {
+      name: 'DistributionRecorded', pid: s('pid'), asset: Number(a.asset), period: Number(a.period), holding: Number(a.holding), step: Number(a.step),
+      payer: lc(s('payer')), perUnit: s('perUnit'), total: s('total'), supply: s('supplyAtPayment'), retire: Boolean(a.retire), hash: lc(s('distributionHash')),
+    };
+    case 'PayoutPaid': return { name: 'PayoutPaid', pid: s('pid'), asset: Number(a.asset), period: Number(a.period), holder: lc(s('holder')), amount: s('amount'), payoutId: lc(s('payoutId')) };
+    case 'PayoutDeferred': return { name: 'PayoutDeferred', pid: s('pid'), asset: Number(a.asset), period: Number(a.period), holder: lc(s('holder')), amount: s('amount') };
+    case 'DistributionSettled': return {
+      name: 'DistributionSettled', pid: s('pid'), asset: Number(a.asset), period: Number(a.period), paidCount: Number(a.paidCount), paidTotal: s('paidTotal'), rollingHash: lc(s('rollingHash')),
+    };
     case 'ReportProcessed': {
       const reporter = lc(s('reporter'));
       return { name: 'ReportProcessed', pid: s('pid'), step: Number(a.step), values: (a.values as bigint[]).map(String), reporter, via: isFallback(reporter) ? 'fallback' : 'cre' };

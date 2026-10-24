@@ -3,6 +3,7 @@ export * from './evm/state';
 export * from './evm/reader';
 export * from './evm/generated';
 export * from './evm/decode';
+export * from './evm/payouts';
 export * from './evm/adapter';
 export * from './model';
 export * from './events';

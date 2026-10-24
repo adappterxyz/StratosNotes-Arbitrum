@@ -111,3 +111,19 @@ export function fieldLabel(name: string): string {
   if (/^obsDate\d+$/.test(name)) return `Observation ${name.slice(7)} date`;
   return name;
 }
+
+/**
+ * The ERC-20 name and symbol of a note's units (FlowEngine v4 creates one NoteToken per note): e.g.
+ * "notes.markets ETH/BTC Phoenix 26-10" and "nmETHBTC1". `seq` tells apart notes on the same underlyings
+ * (the issuer's reference, or the note count); `maturity` (unix seconds) gives the YY-MM suffix.
+ */
+export function noteTokenMeta(o: { label: string; underlyings: string[]; maturity?: number; seq?: number | bigint }): { name: string; symbol: string } {
+  const unds = o.underlyings.map(u => u.replace(/[^A-Za-z0-9]/g, '').toUpperCase()).filter(Boolean);
+  const d = o.maturity ? new Date(o.maturity * 1000) : null;
+  const ym = d ? ` ${String(d.getUTCFullYear()).slice(2)}-${String(d.getUTCMonth() + 1).padStart(2, '0')}` : '';
+  const label = o.label.replace(/\s+/g, ' ').trim() || 'Note';
+  const name = `notes.markets ${unds.length ? `${unds.join('/')} ` : ''}${label}${ym}`.slice(0, 64);
+  const seq = o.seq === undefined ? '' : String(BigInt(o.seq) % 1000n);
+  const symbol = `nm${unds.join('').slice(0, 8) || 'NOTE'}${seq}`.slice(0, 14);
+  return { name, symbol };
+}

@@ -23,6 +23,8 @@ export interface IssueRequest {
   cashTokens: Record<number, string>;
   /** Inputs for the start step and each pre-trade step: step index -> field index -> value. */
   inputs: Record<number, Record<number, InputValue>>;
+  /** The ERC-20 name and symbol of the note's units (sdk noteTokenMeta); derived from the workflow if absent. */
+  token?: { name: string; symbol: string };
 }
 
 export type Progress = (message: string) => void;
@@ -51,8 +53,21 @@ export interface ChainAdapter<Signer> {
   executeStep(signer: Signer, id: NoteId, step: number, inputs: Record<number, InputValue>, choice?: number, onProgress?: Progress): Promise<Submitted>;
   /** Buy `units` (engine fixed point) from an open book, paying in the note's stablecoin. */
   subscribe(signer: Signer, id: NoteId, units: bigint, onProgress?: Progress): Promise<Submitted>;
-  /** Move note units (engine fixed point), in whole or in part. */
+  /**
+   * Move note units (engine fixed point, whole token base units), in whole or in part: a transfer of the note's
+   * ERC-20. The recipient must have a verified email when the engine requires one; payouts made before the
+   * transfer stay with the sender.
+   */
   transferUnits(signer: Signer, id: NoteId, to: string, units: bigint, onProgress?: Progress): Promise<Submitted>;
   /** Withdraw a cash or delivered-token balance to the holder's wallet (all of it by default). */
   withdraw(signer: Signer, id: NoteId, asset: number, amount?: bigint, onProgress?: Progress): Promise<Submitted>;
+  /** What `owner` can withdraw of an asset now: payouts not pushed yet (or deferred) plus other cash (fixed point). */
+  claimable(id: NoteId, owner: string, asset: number): Promise<bigint>;
+  /** The ERC-20 of the note's units (null for notes from an engine without note tokens). */
+  noteToken(id: NoteId): Promise<string | null>;
+  /**
+   * Push the latest payout of `asset` to the next `count` holders' wallets (anyone may; the caller pays gas).
+   * Returns how many holders are still to push in this round.
+   */
+  pushPayouts(signer: Signer, id: NoteId, asset: number, count: number, onProgress?: Progress): Promise<Submitted & { left: number }>;
 }
