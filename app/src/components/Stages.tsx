@@ -12,7 +12,7 @@ import {
   templateMessage, totalPerUnit, underlyingLabel,
   type CollateralSymbol, type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
-import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
+import { FIELD_LABEL, fieldLabel, headline, noteTokenMeta, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
 import { useAddress, useChains, useSigner } from '../lib/chains';
@@ -336,7 +336,15 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
       step(`Workflow compiled: ${c.def.steps.length} steps, ${c.bytes.length.toLocaleString()} bytes.`);
       const cashTokens = Object.fromEntries(plan.cashAssets.map(a => [a, tokenOf(built.ir.assets[a].token)!]));
       const w = await signer(chainKey);
-      const r = await chain.adapter.issue(w, { definition: c.bytes, def: c.def, plan, ref: BigInt(Date.now()), cashTokens, inputs: byStep }, step);
+      // The note's units are an ERC-20: e.g. "notes.markets ETH/BTC Phoenix 26-10" / "nmETHBTC1".
+      const basis = doc.basis;
+      const lastObs = hasSchedule && basis?.observations ? dateOf(`obsDate${basis.observations}`) : undefined;
+      const ref = BigInt(Date.now());
+      const token = noteTokenMeta({
+        label: basis ? PRODUCT_LABELS[basis.productType] ?? 'Note' : c.def.name || 'Note',
+        underlyings: (basis?.underlyings ?? []).map(u => u.symbol), maturity: lastObs, seq: ref,
+      });
+      const r = await chain.adapter.issue(w, { definition: c.bytes, def: c.def, plan, ref, cashTokens, inputs: byStep, token }, step);
       step('Book open.');
       nav(`/note/${encodeURIComponent(r.id)}`);
     } catch (e) { setError(errText(e)); }

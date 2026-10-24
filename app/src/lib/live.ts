@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { decodeEvmDef, type WorkflowDef } from '@sn/core';
 import { hexToBytes } from '@sn/sdk';
-import { api, type NoteDetail, type NoteFilters, type NoteItem, type PortfolioItem } from './api';
+import { api, type NoteDetail, type NoteFilters, type NoteItem, type PortfolioItem, type PayoutItem } from './api';
 
 const FALLBACK_POLL_MS = 20_000;
 const UPDATES_POLL_MS = 4_000;
@@ -94,13 +94,16 @@ export function useNote(id: string | undefined) {
 export function usePortfolio(address: string | undefined) {
   const [tick, refresh] = useLiveTick(address ? '' : null);
   const [positions, setPositions] = useState<PortfolioItem[] | undefined>(undefined);
+  const [payouts, setPayouts] = useState<PayoutItem[] | undefined>(undefined);
   useEffect(() => {
-    if (!address) { setPositions(undefined); return; }
+    if (!address) { setPositions(undefined); setPayouts(undefined); return; }
     let live = true;
-    api.portfolio(address).then(r => { if (live) setPositions(r.positions); }).catch(() => { if (live) setPositions([]); });
+    api.portfolio(address)
+      .then(r => { if (live) { setPositions(r.positions); setPayouts(r.payouts ?? []); } })
+      .catch(() => { if (live) { setPositions([]); setPayouts([]); } });
     return () => { live = false; };
   }, [address, tick]);
-  return { positions, refresh };
+  return { positions, payouts, refresh };
 }
 
 /** The current time (unix seconds), re-rendered every `ms`. */

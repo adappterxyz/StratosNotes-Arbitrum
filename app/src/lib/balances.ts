@@ -67,3 +67,25 @@ export function useWalletBalances(address: string | null) {
   }, [address, byKey, tick]);
   return { data, refresh };
 }
+
+/**
+ * What `address` can withdraw of each note's cash asset, read from the chain (FlowEngine balanceOf: payouts not
+ * pushed to the wallet yet, deferred ones, and other cash on the account). Undefined while loading or for a note
+ * whose chain is not configured; the read model's figure is the fallback.
+ */
+export function useClaimable(address: string | null, notes: Array<{ id: string; chain: string }>, asset = 1, tick = 0) {
+  const { byKey } = useChains();
+  const [data, setData] = useState<Map<string, bigint>>(new Map());
+  const key = notes.map(n => n.id).join(',');
+  useEffect(() => {
+    if (!address || !notes.length) { setData(new Map()); return; }
+    let live = true;
+    Promise.all(notes.map(async n => {
+      const c = byKey[n.chain];
+      if (!c) return null;
+      try { return [n.id, await c.adapter.claimable(n.id, address, asset)] as const; } catch { return null; }
+    })).then(rows => { if (live) setData(new Map(rows.filter((r): r is readonly [string, bigint] => !!r))); });
+    return () => { live = false; };
+  }, [address, key, asset, tick, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return data;
+}

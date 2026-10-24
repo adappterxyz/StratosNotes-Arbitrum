@@ -36,6 +36,8 @@ export interface NoteItem { id: string; chain: string; definition: string; view:
 export interface NoteDetail { state: NoteState; view: NoteView }
 export interface HistoryEvent { seq: number; name: string; block: number; tx: string; at: number; data: Record<string, unknown> }
 export interface PortfolioItem extends NoteItem { position: { units: number; cash: number; holdings: NoteState['holdings'] } }
+/** A payout pushed to the wallet (FlowEngine v4): `amount` in the cash token's base units, `payoutId` its receipt. */
+export interface PayoutItem { noteId: string; asset: number; period: number; amount: string; payoutId: string; tx: string; at: number }
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -59,7 +61,7 @@ export const api = {
   note: (id: string) => call<NoteDetail>(`/api/notes/${encodeURIComponent(id)}`),
   history: (id: string) => call<{ events: HistoryEvent[] }>(`/api/notes/${encodeURIComponent(id)}/history`),
   definition: (chain: string, id: string) => call<{ id: string; bytes: `0x${string}` }>(`/api/definitions/${chain}/${id}`),
-  portfolio: (address: string) => call<{ positions: PortfolioItem[] }>(`/api/portfolio/${address}`),
+  portfolio: (address: string) => call<{ positions: PortfolioItem[]; payouts?: PayoutItem[] }>(`/api/portfolio/${address}`),
   templates: () => call<TemplateSummary[]>('/api/templates'),
   template: (definition: string) => call<TemplateEntry>(`/api/templates/${definition}`),
   saveTemplate: (entry: Omit<TemplateEntry, 'createdAt'>, signature: string) =>

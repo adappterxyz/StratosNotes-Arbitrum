@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { isAddress } from 'viem';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Info, Radio, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Info, Radio, ShieldCheck, WalletCards } from 'lucide-react';
 import { dec, defToBpmn, instantiateProduct, SCALE } from '@sn/core';
 import { CASH_ASSET, NOTE_ASSET, noteView, PHASE_LABEL, positionOf } from '@sn/sdk';
 import TasksPanel from '../components/TasksPanel';
@@ -19,6 +19,7 @@ import { CurrentState } from '../components/NoteState';
 import { AssetIcon, AssetStack } from '../components/AssetIcon';
 import { FullTerms, Specs, YieldBlock } from '../components/Listing';
 import { listingOf } from '../lib/listing';
+import { useClaimable } from '../lib/balances';
 
 export default function OfferingPage() {
   const { id: rawId } = useParams();
@@ -38,6 +39,9 @@ export default function OfferingPage() {
   // Subscribing is two transactions (a one-time approval, then the swap): shown as steps.
   const [subStep, setSubStep] = useState<{ approve: StepState; swap: StepState } | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string; tx?: string } | null>(null);
+  const [claimTick, setClaimTick] = useState(0);
+  // What I can withdraw, from the chain (payouts not pushed to my wallet yet, or deferred).
+  const claim = useClaimable(me, note?.state ? [{ id: note.state.id, chain: note.state.chain }] : [], CASH_ASSET, claimTick + (note?.state.updatedAt ?? 0));
   // Stock products redraw from their term sheet; custom workflows from the definition.
   const xml = useMemo(() => (!o || !def ? '' : o.custom ? defToBpmn(def) : instantiateProduct(o.params).bpmnXml), [o?.custom, def]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -48,7 +52,11 @@ export default function OfferingPage() {
   const chain = byKey[s.chain];
   const sym = cashSymbol(chain?.cfg, s.assetTokens?.[1]);
   const explorer = chain?.cfg.explorer;
-  const mine = me ? positionOf(s, me, def ?? undefined) : null;
+  const pos = me ? positionOf(s, me, def ?? undefined) : null;
+  const chainCash = claim.get(s.id);
+  const mine = pos && chainCash !== undefined ? { ...pos, cash: Number(chainCash) / Number(SCALE) } : pos;
+  // The note's units as an ERC-20 (FlowEngine v4): zero address for notes on an older engine.
+  const noteToken = s.assetTokens?.[NOTE_ASSET] && !/^0x0{40}$/i.test(s.assetTokens[NOTE_ASSET]) ? s.assetTokens[NOTE_ASSET] : null;
   const isIssuer = !!me && me.toLowerCase() === o.issuer.toLowerCase();
   const remaining = Math.max(0, o.notional - o.sold);
   // Default to a round amount that fits what is left in the book.
@@ -57,7 +65,7 @@ export default function OfferingPage() {
   const subscribable = !!def && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
   const run = async (what: string, f: () => Promise<{ tx: string[] }>) => {
     setBusy(true); setMsg(null);
-    try { const r = await f(); setMsg({ kind: 'ok', text: what, tx: r.tx[r.tx.length - 1] }); refresh(); }
+    try { const r = await f(); setMsg({ kind: 'ok', text: what, tx: r.tx[r.tx.length - 1] }); refresh(); setClaimTick(t => t + 1); }
     catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
     finally { setBusy(false); }
   };
@@ -82,6 +90,13 @@ export default function OfferingPage() {
   const transfer = () => run(`Transferred ${xfer.units} units.`, async () => {
     if (!isAddress(xfer.to.trim())) throw new Error('Enter the recipient wallet address.');
     return chain.adapter.transferUnits(await signer(s.chain), s.id, xfer.to.trim(), dec(xfer.units), progress);
+  });
+  const addToWallet = () => run('Added the note token to your wallet.', async () => {
+    const w = await signer(s.chain);
+    const p = await chain.adapter.watchAssetParams(s.id);
+    if (!p) throw new Error('This note has no unit token.');
+    await w.watchAsset(p);
+    return { tx: [] };
   });
   const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => chain.adapter.withdraw(await signer(s.chain), s.id, asset, undefined, progress));
   // Delivered tokens (physical settlement) and collateral received on a default, withdrawable like cash.
@@ -231,6 +246,13 @@ export default function OfferingPage() {
                 <div><span className="label">Note units</span><span className="v" data-units>{fmtMoney(mine.units)}</span></div>
                 <div><span className="label">{isIssuer ? 'Proceeds to withdraw' : 'Cash to withdraw'}</span><span className="v" data-cash>{fmtMoney(mine.cash)}</span></div>
               </div>
+              {noteToken && mine.units > 0 && (
+                <div className="spread small" data-note-token>
+                  <span>Your units are an ERC-20 token: <Addr value={noteToken} href={explorer ? `${explorer}/token/${noteToken}` : undefined} /></span>
+                  <button className="btn sm" disabled={busy} onClick={addToWallet}><WalletCards className="i" />Add to wallet</button>
+                </div>
+              )}
+              {!isIssuer && <span className="xs muted">Coupons and the redemption are paid straight to your wallet; anything that could not be sent waits here.</span>}
               <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>{isIssuer ? `Withdraw proceeds (${sym})` : `Withdraw ${sym}`}</button>
               {delivered.map(h => {
                 const name = h.name.replace(/^Collateral /, '');
@@ -248,7 +270,7 @@ export default function OfferingPage() {
                   <div className="field"><label htmlFor="x-to">To wallet</label><input id="x-to" className="num" value={xfer.to} onChange={e => setXfer({ ...xfer, to: e.target.value })} placeholder="0x…" /></div>
                   <div className="field"><label htmlFor="x-units">Units (up to {fmtMoney(mine.units)})</label><input id="x-units" inputMode="decimal" value={xfer.units} onChange={e => setXfer({ ...xfer, units: e.target.value })} /></div>
                   <button className="btn" disabled={busy || !(Number(xfer.units) > 0) || Number(xfer.units) > mine.units} onClick={transfer}>Transfer</button>
-                  <span className="xs muted">In whole or in part. Coupons and the redemption from now on go to whoever holds the units.</span>
+                  <span className="xs muted">In whole or in part, to a wallet with a verified email only. Payouts already made stay yours; from now on they go to whoever holds the units.</span>
                 </div>
               )}
             </section>
@@ -283,6 +305,7 @@ export default function OfferingPage() {
             <summary>Advanced: contract details</summary>
             <div className="adv-body small">
               <div className="spread"><span className="muted">Network</span><span>{chain?.cfg.name ?? s.chain}</span></div>
+              {noteToken && <div className="spread"><span className="muted">Note token (ERC-20)</span><Addr value={noteToken} href={explorer ? `${explorer}/token/${noteToken}` : undefined} /></div>}
               <div className="spread"><span className="muted">Engine · note #</span><span><Addr value={s.engine} href={explorer ? `${explorer}/address/${s.engine}` : undefined} /> · #{s.pid}</span></div>
               <div className="spread"><span className="muted">Workflow definition</span><Addr value={s.definition} /></div>
               <div className="spread"><span className="muted">Issuer</span><Addr value={o.issuer} href={explorer ? `${explorer}/address/${o.issuer}` : undefined} /></div>

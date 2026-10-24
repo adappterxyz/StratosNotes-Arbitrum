@@ -1,24 +1,25 @@
 /**
  * The portfolio, by category: wallet assets on each chain, notes you subscribed to, notes you issued, collateral
- * and receipts, and payouts waiting to be withdrawn. Every note row opens that note's current state.
+ * and receipts, payouts paid straight to the wallet (with their receipt ids), and payouts waiting to be withdrawn
+ * (deferred or not pushed yet, read from the chain). Every note row opens that note's current state.
  * `?address=0x…` shows any wallet read-only (no actions), e.g. to look at a demo investor.
  */
 import { cashSymbol } from '../lib/chains';
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isAddress } from 'viem';
-import { Coins, FileText, Landmark, Lock, RefreshCw, Wallet } from 'lucide-react';
+import { BadgeCheck, Coins, FileText, Landmark, Lock, RefreshCw, Wallet } from 'lucide-react';
 import { CASH_ASSET, type NoteView } from '@sn/sdk';
 import { useAddress, useChains, useSigner } from '../lib/chains';
 import { errText, fmtMoney, fmtPct, nextEvent } from '../lib/format';
 import { useNotes, usePortfolio } from '../lib/live';
-import { useWalletBalances } from '../lib/balances';
+import { useClaimable, useWalletBalances } from '../lib/balances';
 import { RedeemOnRobinhood } from '../components/CrossChainCollateral';
 import { Asset, AssetStack } from '../components/AssetIcon';
 import { StatePill, currentState } from '../components/NoteState';
 import { Addr } from '../components/ui';
 
-type Tab = 'wallet' | 'subscribed' | 'issued' | 'collateral' | 'withdraw';
+type Tab = 'wallet' | 'subscribed' | 'issued' | 'collateral' | 'paid' | 'withdraw';
 
 const symsOf = (o: NoteView) => (o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol));
 
@@ -31,7 +32,7 @@ export default function Portfolio() {
   const nav = useNavigate();
   const { byKey } = useChains();
   const signer = useSigner();
-  const { positions, refresh } = usePortfolio(address ?? undefined);
+  const { positions, payouts, refresh } = usePortfolio(address ?? undefined);
   const { notes } = useNotes({ status: 'all' });
   const { data: wallet, refresh: refreshWallet } = useWalletBalances(address);
   const [tab, setTab] = useState<Tab>('subscribed');
@@ -40,7 +41,13 @@ export default function Portfolio() {
 
   const subscribed = useMemo(() => (positions ?? []).filter(p => p.position.units > 0 && p.view.issuer.toLowerCase() !== address), [positions, address]);
   const issued = useMemo(() => (notes ?? []).filter(n => n.view.issuer.toLowerCase() === address), [notes, address]);
-  const withdrawable = useMemo(() => (positions ?? []).filter(p => p.position.cash > 0 || p.position.holdings.some(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n)), [positions]);
+  // What is left to withdraw, from the chain: payouts are pushed to wallets, so only deferred or not-yet-pushed
+  // amounts (and an issuer's raised cash) remain. The read model's figure is the fallback while it loads.
+  const [claimTick, setClaimTick] = useState(0);
+  const claim = useClaimable(address, positions ?? [], CASH_ASSET, claimTick);
+  const cashOf = (p: { id: string; position: { cash: number } }) => { const c = claim.get(p.id); return c === undefined ? p.position.cash : Number(c) / 1e10; };
+  const withdrawable = useMemo(() => (positions ?? []).filter(p => cashOf(p) > 1e-9 || p.position.holdings.some(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n)), [positions, claim]); // eslint-disable-line react-hooks/exhaustive-deps
+  const noteName = (id: string) => (positions ?? []).find(p => p.id === id)?.view.name ?? (notes ?? []).find(n => n.id === id)?.view.name ?? id;
   const due = issued.filter(n => currentState(n.view).key === 'due' || currentState(n.view).key === 'grace' || currentState(n.view).key === 'margin');
 
   if (!address) {
@@ -68,7 +75,7 @@ export default function Portfolio() {
       const w = await signer(chain);
       const r = await byKey[chain].adapter.withdraw(w, id, CASH_ASSET);
       setMsg({ kind: 'ok', text: `Withdrew ${fmtMoney(cash)} ${byKey[chain].cfg.stablecoin.symbol} from ${name}.`, tx: r.tx[r.tx.length - 1], explorer: byKey[chain].cfg.explorer });
-      refresh(); refreshWallet();
+      refresh(); refreshWallet(); setClaimTick(t => t + 1);
     } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
     finally { setBusy(''); }
   };
@@ -76,6 +83,7 @@ export default function Portfolio() {
   const tabs: Array<{ id: Tab; label: string; icon: ReactNode; n?: number; flag?: boolean }> = [
     { id: 'subscribed', label: 'Subscribed notes', icon: <FileText className="i" />, n: subscribed.length },
     { id: 'issued', label: 'Issued notes', icon: <Landmark className="i" />, n: issued.length, flag: due.length > 0 },
+    { id: 'paid', label: 'Paid to your wallet', icon: <BadgeCheck className="i" />, n: payouts?.length },
     { id: 'withdraw', label: 'To withdraw', icon: <Coins className="i" />, n: withdrawable.length, flag: withdrawable.length > 0 },
     { id: 'collateral', label: 'Collateral & receipts', icon: <Lock className="i" /> },
     { id: 'wallet', label: 'Wallet assets', icon: <Wallet className="i" /> },
@@ -88,7 +96,7 @@ export default function Portfolio() {
           <h1>Portfolio</h1>
           <p>{readOnly ? <>Viewing <Addr value={address} /> read-only.</> : 'Your notes, your assets on each chain, and what you can withdraw.'}</p>
         </div>
-        <button className="btn" onClick={() => { refresh(); refreshWallet(); }}><RefreshCw className="i" />Refresh</button>
+        <button className="btn" onClick={() => { refresh(); refreshWallet(); setClaimTick(t => t + 1); }}><RefreshCw className="i" />Refresh</button>
       </div>
       {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text} {msg.tx && msg.explorer && <a href={`${msg.explorer}/tx/${msg.tx}`} target="_blank" rel="noreferrer">View transaction</a>}</div>}
       {due.length > 0 && !readOnly && (
@@ -166,9 +174,44 @@ export default function Portfolio() {
           )
       )}
 
+      {tab === 'paid' && (
+        payouts === undefined ? <p className="muted">Loading…</p>
+          : payouts.length === 0 ? <Empty title="No payouts yet." body="Coupons, redemptions and deliveries are paid straight to your wallet, each with a receipt id you can check on-chain." />
+          : (
+            <div className="card scroll-x" style={{ padding: 0 }} data-paid>
+              <table className="t">
+                <thead><tr><th>Note</th><th className="r">Payment</th><th className="r">Amount</th><th>Receipt (payout id)</th><th>When</th></tr></thead>
+                <tbody>
+                  {payouts.map(p => {
+                    const chainKey = p.noteId.split(':')[0];
+                    const cfg = byKey[chainKey]?.cfg;
+                    const pos = (positions ?? []).find(x => x.id === p.noteId);
+                    const cashAsset = p.asset === CASH_ASSET;
+                    const sym = cashAsset ? cashSymbol(cfg, pos?.view.cashToken) : `asset ${p.asset}`;
+                    const amount = cashAsset ? Number(BigInt(p.amount)) / 10 ** (cfg?.stablecoin.decimals ?? 6) : Number(p.amount);
+                    return (
+                      <tr key={p.payoutId} {...rowProps(p.noteId, noteName(p.noteId))} data-payout={p.payoutId}>
+                        <td><strong>{noteName(p.noteId)}</strong><div className="xs muted">{cfg?.name ?? chainKey}</div></td>
+                        <td className="r num">#{p.period}</td>
+                        <td className="r num"><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{cashAsset ? fmtMoney(amount) : amount}</span>{cashAsset && <Asset sym={sym} size={16} />}</span></td>
+                        <td className="small num">
+                          {cfg?.explorer
+                            ? <a href={`${cfg.explorer}/tx/${p.tx}`} target="_blank" rel="noreferrer" title={`payoutId ${p.payoutId}: keccak256(chainid, engine, note, asset, period, holder, amount)`} onClick={e => e.stopPropagation()}>{p.payoutId.slice(0, 10)}…{p.payoutId.slice(-6)}</a>
+                            : <span title={p.payoutId}>{p.payoutId.slice(0, 10)}…{p.payoutId.slice(-6)}</span>}
+                        </td>
+                        <td className="small muted">{new Date(p.at * 1000).toLocaleDateString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+      )}
+
       {tab === 'withdraw' && (
         positions === undefined ? <p className="muted">Loading…</p>
-          : withdrawable.length === 0 ? <Empty title="Nothing to withdraw right now." body="Coupons, redemptions, delivered stock and (for issuers) the USDG you raised appear here when they're paid." />
+          : withdrawable.length === 0 ? <Empty title="Nothing to withdraw right now." body="Payouts go straight to your wallet (see Paid to your wallet). What could not be sent yet, delivered stock, and (for issuers) the USDG you raised appear here." />
           : (
             <div className="card scroll-x" style={{ padding: 0 }}>
               <table className="t">
@@ -177,15 +220,16 @@ export default function Portfolio() {
                   {withdrawable.map(p => {
                     const sym = cashSymbol(byKey[p.chain]?.cfg, p.view.cashToken);
                     const tokens = p.position.holdings.filter(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n);
+                    const cash = cashOf(p);
                     return (
                       <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
                         <td><strong>{p.view.name}</strong><div className="xs muted">{p.view.issuer.toLowerCase() === address ? 'Raised as issuer' : 'Paid to you'}</div></td>
-                        <td className="r num" data-cash><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{fmtMoney(p.position.cash)}</span><Asset sym={sym} size={16} /></span></td>
+                        <td className="r num" data-cash><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{fmtMoney(cash)}</span><Asset sym={sym} size={16} /></span></td>
                         <td className="small">{tokens.length ? <span className="muted">{tokens.length} token{tokens.length > 1 ? 's' : ''}: withdraw on the note page</span> : <span className="muted">—</span>}</td>
                         <td className="r">
-                          <button className="btn primary sm" disabled={readOnly || !(p.position.cash > 0) || !!busy || !byKey[p.chain]}
-                            onClick={e => { e.stopPropagation(); withdraw(p.id, p.chain, p.view.name, p.position.cash); }}>
-                            {busy === p.id ? 'Withdrawing…' : `Withdraw ${fmtMoney(p.position.cash)} ${sym}`}
+                          <button className="btn primary sm" disabled={readOnly || !(cash > 0) || !!busy || !byKey[p.chain]}
+                            onClick={e => { e.stopPropagation(); withdraw(p.id, p.chain, p.view.name, cash); }}>
+                            {busy === p.id ? 'Withdrawing…' : `Withdraw ${fmtMoney(cash)} ${sym}`}
                           </button>
                         </td>
                       </tr>

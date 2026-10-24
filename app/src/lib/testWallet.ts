@@ -49,6 +49,8 @@ export function installTestWallet(chainId: number, rpc: string): TestWallet {
           return null;
         }
         case 'wallet_addEthereumChain': return null;
+        // "Add to wallet": recorded for the e2e (window.__watchedAssets), accepted.
+        case 'wallet_watchAsset': ((window as unknown as { __watchedAssets?: unknown[] }).__watchedAssets ??= []).push(params); return true;
         case 'wallet_requestPermissions': return [{ parentCapability: 'eth_accounts' }];
         case 'wallet_getPermissions': return [{ parentCapability: 'eth_accounts' }];
         case 'personal_sign': return acct.signMessage({ message: { raw: params[0] as Hex } });
