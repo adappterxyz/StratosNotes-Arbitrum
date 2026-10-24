@@ -3,7 +3,7 @@ import { compile, EXAMPLE_PRODUCTS, instantiateProduct, parseBpmn, type Workflow
 import type { NoteState, NoteView } from '@sn/sdk';
 import { pgliteDb, type Db } from '@sn/indexer';
 import {
-  AlertsStore, drain, EmailNotConfigured, mockSender, pgSql, planNote, render, TEMPLATES, txDeltas, when, type NoteEvent, type Planned,
+  AlertsStore, drain, EmailNotConfigured, EmailRejected, mockSender, pgSql, planNote, render, TEMPLATES, txDeltas, when, type NoteEvent, type Planned,
 } from '../src';
 
 const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
@@ -174,11 +174,49 @@ describe('outbox (SQLite-compatible SQL, run here on PGlite)', () => {
     expect((await drain(store, mail, { now: NOW + 601, unsubscribeUrl: t => t })).sent).toBe(1);
   });
 
+  it('keeps a copy of each email as sent (and of one that failed for good), never of skipped ones', async () => {
+    const copies = await store.messages(ALICE, { limit: 50 });
+    expect(copies.map(m => [m.dedupe, m.status])).toEqual(expect.arrayContaining([['a', 'sent'], ['c', 'sent']]));
+    const a = copies.find(m => m.dedupe === 'a')!;
+    expect(a).toMatchObject({ recipient: 'a•••@example.com', noteId: 'n', noteLabel: 'N', category: 'payouts', subject: 'You were paid $1.00 on N' });
+    expect(a.html).toContain('has been paid');
+    expect(await store.messages(BOB, { limit: 50 })).toEqual([]); // Bob's was skipped
+    await store.enqueue([item({ dedupe: 'f', address: ALICE })], NOW);
+    const bounce = { send: async () => { throw new EmailRejected('bad address'); } };
+    expect((await drain(store, bounce, { now: NOW + 1, unsubscribeUrl: t => t })).failed).toBe(1);
+    expect((await store.messages(ALICE, { limit: 50 })).find(m => m.dedupe === 'f')).toMatchObject({ dedupe: 'f', status: 'failed', sentAt: NOW + 1 });
+  });
+
   it('a reminder past its moment is dropped; an unsubscribed person gets nothing', async () => {
     await store.enqueue([item({ dedupe: 'd', address: ALICE, expiresAt: NOW + 10 })], NOW);
     expect((await drain(store, mockSender(), { now: NOW + 20, unsubscribeUrl: t => t })).skipped).toBe(1);
     expect(await store.unsubscribe(`u${ALICE}`, NOW)).toBe(true);
     await store.enqueue([item({ dedupe: 'e', address: ALICE })], NOW);
     expect((await drain(store, mockSender(), { now: NOW + 30, unsubscribeUrl: t => t })).sent).toBe(0);
+  });
+
+  it('keeps the newest copies per address, pages them, and a store without the table still sends once', async () => {
+    const W = '0x00000000000000000000000000000000000000d1';
+    for (let i = 0; i < 7; i++) {
+      await store.record({ dedupe: `w${i}`, address: W, noteId: null, noteLabel: null, category: 'payouts', recipient: 'w•••@x.co', subject: `s${i}`, html: '', text: '', status: 'sent', createdAt: i, sentAt: 100 + (i >> 1) });
+    }
+    await store.trimMessages(W, 5);
+    const all = await store.messages(W, { limit: 50 });
+    expect(all.map(m => m.dedupe)).toEqual(['w6', 'w5', 'w4', 'w3', 'w2']);
+    const p1 = await store.messages(W, { limit: 2 });
+    const p2 = await store.messages(W, { limit: 2, before: { at: p1[1].sentAt, id: p1[1].dedupe } });
+    expect([...p1, ...p2].map(m => m.dedupe)).toEqual(['w6', 'w5', 'w4', 'w3']);
+
+    // Deployed before the email_messages migration: the copy fails, the email is still settled (never resent).
+    const broken = new AlertsStore({
+      all: (q, p) => pgSql(db).all(q, p),
+      run: async (q, p) => { if (/email_messages/.test(q)) throw new Error('no such table: email_messages'); await pgSql(db).run(q, p); },
+    });
+    await broken.setCategories(ALICE, ['payouts'], NOW);
+    await broken.enqueue([item({ dedupe: 'g', address: ALICE })], NOW);
+    const mail = mockSender();
+    expect((await drain(broken, mail, { now: NOW + 40, unsubscribeUrl: t => t })).sent).toBe(1);
+    expect((await drain(broken, mail, { now: NOW + 50, unsubscribeUrl: t => t })).sent).toBe(0);
+    expect(mail.sent).toHaveLength(1);
   });
 });

@@ -9,6 +9,7 @@
  *   GET  /api/alerts/status?address=                                                   -> verified? masked email, preferences
  *   POST /api/alerts/preferences    {address, categories, issuedAt, signature}
  *   POST /api/alerts/salt           {address, issuedAt, signature}                     -> the person's email, salt and hash (proof)
+ *   POST /api/alerts/emails         {address, issuedAt, signature, before?, limit?}    -> the wallet's own emails (copies), newest first
  *   POST /api/alerts/unsubscribe    {token}                                            -> one click, from any alert
  *   GET  /api/dev/emails?to=        (only with the in-memory dev sender)               -> what was "sent", for local e2e
  *
@@ -23,8 +24,8 @@ import { z } from 'zod';
 import { NOTIFY_CATEGORIES } from '@sn/core';
 import { flowEngineAbi } from '@sn/sdk';
 import type { EmailSender, MockSender } from './sender';
-import type { AlertsStore } from './store';
-import { alertsMessage, isEmail, maskEmail, normEmail, render, TEMPLATES } from './templates';
+import { MESSAGES_KEPT, type AlertsStore } from './store';
+import { alertsMessage, isEmail, maskEmail, normEmail, render, templateFor, TEMPLATES, type Vars } from './templates';
 
 /** The chains the API serves (key, RPC, engine), as in the API config. */
 export interface AlertsChain { key: string; rpc: string; engine: string }
@@ -51,6 +52,11 @@ const Signed = { address: Address_, issuedAt: z.number().int(), signature: z.str
 const StartBody = z.object({ ...Signed, email: z.string().max(254), categories: Categories });
 const PrefsBody = z.object({ ...Signed, categories: Categories });
 const SaltBody = z.object(Signed);
+const EmailsBody = z.object({
+  ...Signed,
+  before: z.object({ at: z.number().int().min(0), id: z.string().min(1).max(400) }).optional(),
+  limit: z.number().int().min(1).max(50).default(20),
+});
 const VerifyBody = z.object({ address: Address_, code: z.string().regex(/^\d{6}$/) });
 const AttestBody = z.object({ address: Address_, chain: z.string().regex(/^[a-z0-9-]{1,40}$/) });
 
@@ -210,6 +216,40 @@ export function alertsRoutes(app: Hono, deps: AlertsDeps, ctx: { config: { chain
     const bind = await store.binding(b.data.address);
     if (!bind?.verifiedAt) return err(c, 404, 'This wallet has no verified email.');
     return c.json({ address: bind.address, email: bind.email, salt: bind.salt, emailHash: bind.emailHash, formula: 'keccak256(abi.encode(bytes32 salt, string lowercase(trim(email))))' });
+  });
+
+  /**
+   * The emails sent to this wallet's verified address: copies kept by the notifier (the newest MESSAGES_KEPT),
+   * plus on the first page what is still queued. Only for the wallet that signs (EIP-191, issuedAt within ten
+   * minutes, so one signature serves "load more" for a while); never another address's mail, never the salt.
+   * Verification-code emails are not kept (their codes would be stored in the clear).
+   */
+  app.post('/api/alerts/emails', async c => {
+    if (!(await ctx.limiter.take('alerts-emails-ip', ctx.ipOf(c), 240, 3_600_000))) return err(c, 429, 'Too many requests; try again later.');
+    const b = EmailsBody.safeParse(await c.req.json().catch(() => null));
+    if (!b.success) return err(c, 400, 'Send {address, issuedAt, signature}.');
+    const bad = await checkSig(c, b.data, alertsMessage({ action: 'emails', address: b.data.address, issuedAt: b.data.issuedAt }));
+    if (bad) return bad;
+    if (!(await ctx.limiter.take('alerts-emails-addr', b.data.address, 240, 3_600_000))) return err(c, 429, 'Too many requests; try again later.');
+    const bind = await store.binding(b.data.address);
+    if (!bind?.verifiedAt) return err(c, 404, 'This wallet has no verified email.');
+    const page = await store.messages(bind.address, { before: b.data.before, limit: b.data.limit + 1 });
+    const more = page.length > b.data.limit;
+    const emails = page.slice(0, b.data.limit).map(m => ({
+      id: m.dedupe, at: m.sentAt, status: m.status, subject: m.subject, noteId: m.noteId, note: m.noteLabel, category: m.category,
+      to: m.recipient, html: m.html, text: m.text,
+    }));
+    // What is still to come (first page only): rendered now, as it would be sent.
+    const queued = b.data.before ? [] : (await store.queued(bind.address)).flatMap(q => {
+      const p = JSON.parse(q.payload) as { template?: string; subject?: string; body?: string; vars?: Vars };
+      const t = templateFor(p.template, p);
+      if (!t || !bind.email) return [];
+      const vars = p.vars ?? {};
+      const r = render(vars.reminder ? { ...t, subject: `Reminder: ${t.subject}` } : t, vars, `${appUrl}/alerts/unsubscribe?token=${bind.unsubscribeToken}`);
+      return [{ id: q.dedupe, at: Math.max(q.sendAfter, q.nextAt), status: 'queued' as const, subject: r.subject, noteId: q.noteId, note: vars.note ?? null, category: q.category, to: maskEmail(bind.email), html: r.html, text: r.text }];
+    });
+    const last = emails.at(-1);
+    return c.json({ address: bind.address, emails, queued, next: more && last ? { at: last.at, id: last.id } : null, kept: MESSAGES_KEPT });
   });
 
   app.post('/api/alerts/unsubscribe', async c => {

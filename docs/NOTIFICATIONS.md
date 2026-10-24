@@ -89,11 +89,34 @@ the holder's nonce, so an older attestation cannot be replayed.
 | `GET /api/alerts/status?address=` | verified?, masked email, preferences |
 | `POST /api/alerts/preferences` | `{address, categories, issuedAt, signature}` |
 | `POST /api/alerts/salt` | `{address, issuedAt, signature}`: the person's email, salt and hash |
+| `POST /api/alerts/emails` | `{address, issuedAt, signature, before?, limit?}`: the wallet's own emails (below) |
 | `POST /api/alerts/unsubscribe` | `{token}`: one click, from any alert |
 | `GET /api/dev/emails?to=` | local dev only (`EMAIL_SENDER=mock`): what was sent, for the e2e |
 
 The signed messages are built by `alertsMessage` (services/notifier/src/templates.ts); `issuedAt` must be within
-ten minutes. Rate limits: 10 code emails per IP and 5 per wallet an hour; 30 code checks per IP an hour.
+ten minutes. Rate limits: 10 code emails per IP and 5 per wallet an hour; 30 code checks per IP an hour; 240
+email-list reads per IP and per wallet an hour.
+
+## Emails sent (Alerts tab)
+
+Alerts shows a copy of every alert emailed to the wallet's verified address, newest first: when, subject, the
+note (a link to its page), status (sent, queued, failed) and the whole email (formatted, in a sandboxed iframe
+with no scripts, no same-origin access and a CSP that blocks remote loads; or as plain text).
+
+- **Who can read them.** Only the wallet: `POST /api/alerts/emails` needs an EIP-191 signature of
+  `alertsMessage({ action: 'emails', address, issuedAt })` ("Show the emails notes.markets sent me"), with
+  `issuedAt` within ten minutes, the same proof as the salt download. The app reuses one signature for "load
+  more" for eight minutes. The API returns only rows stored under that address's verified binding: no salt, no
+  other wallet's mail, the recipient masked (`a•••@x.com`), and a generic "could not be delivered" for failures
+  (never the provider's error).
+- **What is kept.** `drain` records each email in `email_messages` (web/migrations/0005_email_messages.sql) as it
+  was sent (subject, HTML, text, note id and name, category, status, time), or as it was when it failed for good.
+  Skipped and expired emails were never sent and are not listed. Queued emails are rendered from `email_outbox`
+  on the first page. Verification-code emails are not kept (the code would be stored in the clear). The copy is
+  written after the outbox row is settled and failures are only logged, so an email is never sent twice.
+- **Retention.** The newest 200 per address (`MESSAGES_KEPT`); older copies are deleted when a new one is
+  recorded. Emails sent before 0005 are backfilled from the outbox with their subject and note but no body.
+- **Paging.** `{ emails, queued, next, kept }`, `limit` 1–50 (default 20); pass `next` back as `before`.
 
 ## Turning on Email Sending (dashboard, once)
 
@@ -117,6 +140,6 @@ Cloudflare Email Service sending is in beta and needs the **Workers Paid** plan 
 
 ## Storage
 
-Everything is on Cloudflare D1 (database `notes-markets`): `email_bindings` (emails, salts, codes hashed) and
-`email_outbox` (web/migrations/0002_email.sql), the same schema as the notifier's `AlertsStore`. The Node API runs
+Everything is on Cloudflare D1 (database `notes-markets`): `email_bindings` (emails, salts, codes hashed),
+`email_outbox` (web/migrations/0002_email.sql) and `email_messages` (the copies; 0005_email_messages.sql), the same schema as the notifier's `AlertsStore`. The Node API runs
 the same store on Postgres for local dev only.

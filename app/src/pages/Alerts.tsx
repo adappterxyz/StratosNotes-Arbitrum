@@ -1,6 +1,6 @@
 /**
- * Email alerts: the connected wallet's verified email, what it gets emails about, and the proof of the on-chain
- * binding (the salt). Also the two pages emails link to: /alerts/confirm (verify by link instead of the code) and
+ * Email alerts: the connected wallet's verified email, what it gets emails about, the proof of the on-chain
+ * binding (the salt), and a copy of every email sent (EmailsSent). Also the two pages emails link to: /alerts/confirm (verify by link instead of the code) and
  * /alerts/unsubscribe (one click).
  */
 import { useEffect, useState } from 'react';
@@ -11,6 +11,7 @@ import { alertsMessage } from '@sn/notifier';
 import { alertsApi, type AlertStatus } from '../lib/alerts';
 import { useAddress, useChains, useSigner } from '../lib/chains';
 import { useVerifiedEmail } from '../components/VerifiedEmail';
+import { EmailsSent } from '../components/EmailsSent';
 
 export default function AlertsPage() {
   const address = useAddress();
@@ -40,7 +41,7 @@ export default function AlertsPage() {
 
   if (!address) return <main className="page"><div className="empty"><strong>Connect a wallet to set up email alerts.</strong></div></main>;
   return (
-    <main className="page" style={{ maxWidth: 640 }} data-alerts>
+    <main className="page" style={{ maxWidth: 720 }} data-alerts>
       <h1><Mail className="i" /> Email alerts</h1>
       <p className="muted small">Payment calls, payouts, margin calls and defaults on the notes you issue or hold, by email. Issuing and subscribing need a verified email.</p>
       <section className="card stack" style={{ gap: 12 }}>
@@ -76,6 +77,7 @@ export default function AlertsPage() {
         </section>
       )}
       {msg && <div className={`notice ${msg.kind === 'ok' ? 'ok' : 'err'}`} role="status">{msg.text}</div>}
+      {status?.verified && <EmailsSent address={address} chainKey={chainKey} />}
       {dialog}
     </main>
   );

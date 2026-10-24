@@ -8,6 +8,20 @@ export interface AlertStatus {
   categories: string[];
   unsubscribed: boolean;
 }
+/** One email from Alerts → Emails sent (POST /api/alerts/emails). `at`: when it was sent, or is due (queued). */
+export interface SentEmail {
+  id: string;
+  at: number;
+  status: 'sent' | 'queued' | 'failed';
+  subject: string;
+  noteId: string | null;
+  note: string | null;
+  category: string;
+  to: string;
+  html: string;
+  text: string;
+}
+export interface EmailsPage { address: string; emails: SentEmail[]; queued: SentEmail[]; next: { at: number; id: string } | null; kept: number }
 export interface Attestation { chain: string; chainId: number; engine: string; holder: string; emailHash: string; expiry: number; nonce: string; signature: string }
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
@@ -25,5 +39,6 @@ export const alertsApi = {
   attestation: (address: string, chain: string) => call<Attestation>('/api/alerts/attestation', { address, chain }),
   preferences: (b: { address: string; categories: string[]; issuedAt: number; signature: string }) => call<{ ok: boolean }>('/api/alerts/preferences', b),
   salt: (b: { address: string; issuedAt: number; signature: string }) => call<{ email: string; salt: string; emailHash: string; formula: string }>('/api/alerts/salt', b),
+  emails: (b: { address: string; issuedAt: number; signature: string; before?: { at: number; id: string }; limit?: number }) => call<EmailsPage>('/api/alerts/emails', b),
   unsubscribe: (token: string) => call<{ ok: boolean }>('/api/alerts/unsubscribe', { token }),
 };

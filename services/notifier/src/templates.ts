@@ -125,8 +125,8 @@ export const isEmail = (e: string) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}
  * What a wallet signs (EIP-191) to bind an email to it, change its alert preferences, or read its salt. The app
  * builds the same text; `issuedAt` (unix seconds) must be within ten minutes of the server's clock.
  */
-export function alertsMessage(a: { action: 'verify' | 'preferences' | 'salt'; address: string; email?: string; categories?: string[]; issuedAt: number }): string {
-  const what = a.action === 'verify' ? 'Verify my email for notes.markets' : a.action === 'preferences' ? 'Change my notes.markets email alerts' : 'Show my notes.markets email salt';
+export function alertsMessage(a: { action: 'verify' | 'preferences' | 'salt' | 'emails'; address: string; email?: string; categories?: string[]; issuedAt: number }): string {
+  const what = { verify: 'Verify my email for notes.markets', preferences: 'Change my notes.markets email alerts', salt: 'Show my notes.markets email salt', emails: 'Show the emails notes.markets sent me' }[a.action];
   return [
     what,
     '',

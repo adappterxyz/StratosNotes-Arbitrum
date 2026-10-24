@@ -57,7 +57,28 @@ export const ALERTS_SCHEMA = [
     sent_at       BIGINT
   )`,
   `CREATE INDEX IF NOT EXISTS email_outbox_due ON email_outbox (status, next_at)`,
+  // A copy of every alert email as it was sent (or as it was when it failed for good), for the person's own
+  // "Emails sent" list on Alerts. Keyed by the outbox dedupe key; the recipient is stored masked. The newest
+  // MESSAGES_KEPT per address are kept (older ones are trimmed when a new one is recorded).
+  `CREATE TABLE IF NOT EXISTS email_messages (
+    dedupe        TEXT PRIMARY KEY,
+    address       TEXT NOT NULL,
+    note_id       TEXT,
+    note_label    TEXT,
+    category      TEXT NOT NULL,
+    recipient     TEXT NOT NULL,
+    subject       TEXT NOT NULL,
+    html          TEXT NOT NULL,
+    text          TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    created_at    BIGINT NOT NULL,
+    sent_at       BIGINT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS email_messages_address ON email_messages (address, sent_at, dedupe)`,
 ];
+
+/** How many sent emails are kept per address (the newest; older copies are deleted). */
+export const MESSAGES_KEPT = 200;
 
 export interface Binding {
   address: string;
@@ -95,6 +116,26 @@ export interface OutboxItem {
   sendAfter: number;
   expiresAt: number | null;
 }
+
+/** One email as the person got it (or as it was when sending failed for good). */
+export interface SentMessage {
+  dedupe: string;
+  address: string;
+  noteId: string | null;
+  noteLabel: string | null;
+  category: string;
+  /** The recipient, masked (a•••@x.com). */
+  recipient: string;
+  subject: string;
+  html: string;
+  text: string;
+  status: 'sent' | 'failed';
+  createdAt: number;
+  sentAt: number;
+}
+
+/** An email still waiting in the outbox (scheduled, or held until sending works again). */
+export interface QueuedRow { dedupe: string; noteId: string | null; category: string; payload: string; sendAfter: number; nextAt: number }
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const toBinding = (r: Record<string, unknown>): Binding => ({
@@ -212,6 +253,50 @@ export class AlertsStore {
 
   async retry(dedupe: string, attempts: number, nextAt: number, error: string) {
     await this.sql.run('UPDATE email_outbox SET attempts = ?, next_at = ?, error = ? WHERE dedupe = ?', [attempts, nextAt, error, dedupe]);
+  }
+
+  /** Keep a copy of an email for the recipient's own list. A second copy of the same dedupe key is ignored. */
+  async record(m: SentMessage) {
+    await this.sql.run(
+      `INSERT INTO email_messages (dedupe, address, note_id, note_label, category, recipient, subject, html, text, status, created_at, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dedupe) DO NOTHING`,
+      [m.dedupe, m.address, m.noteId, m.noteLabel, m.category, m.recipient, m.subject, m.html, m.text, m.status, m.createdAt, m.sentAt],
+    );
+  }
+
+  /** Delete all but the newest `keep` copies for an address. */
+  async trimMessages(address: string, keep = MESSAGES_KEPT) {
+    await this.sql.run(
+      `DELETE FROM email_messages WHERE address = ? AND dedupe NOT IN (
+         SELECT dedupe FROM email_messages WHERE address = ? ORDER BY sent_at DESC, dedupe DESC LIMIT ?)`,
+      [address, address, keep],
+    );
+  }
+
+  /** An address's emails, newest first; `before` is the last one of the previous page. */
+  async messages(address: string, opts: { before?: { at: number; id: string }; limit: number }): Promise<SentMessage[]> {
+    const page = opts.before
+      ? await this.sql.all<Record<string, unknown>>(
+        `SELECT * FROM email_messages WHERE address = ? AND (sent_at < ? OR (sent_at = ? AND dedupe < ?))
+         ORDER BY sent_at DESC, dedupe DESC LIMIT ?`, [address, opts.before.at, opts.before.at, opts.before.id, opts.limit])
+      : await this.sql.all<Record<string, unknown>>(
+        'SELECT * FROM email_messages WHERE address = ? ORDER BY sent_at DESC, dedupe DESC LIMIT ?', [address, opts.limit]);
+    return page.map(r => ({
+      dedupe: String(r.dedupe), address: String(r.address), noteId: (r.note_id as string) ?? null, noteLabel: (r.note_label as string) ?? null,
+      category: String(r.category), recipient: String(r.recipient), subject: String(r.subject), html: String(r.html), text: String(r.text),
+      status: r.status === 'failed' ? 'failed' : 'sent', createdAt: Number(r.created_at), sentAt: Number(r.sent_at),
+    }));
+  }
+
+  /** An address's emails still waiting in the outbox, soonest first. */
+  async queued(address: string, limit = 20): Promise<QueuedRow[]> {
+    const rows = await this.sql.all<Record<string, unknown>>(
+      `SELECT dedupe, note_id, category, payload, send_after, next_at FROM email_outbox
+       WHERE address = ? AND status = 'pending' ORDER BY next_at, dedupe LIMIT ?`, [address, limit]);
+    return rows.map(r => ({
+      dedupe: String(r.dedupe), noteId: (r.note_id as string) ?? null, category: String(r.category), payload: String(r.payload),
+      sendAfter: Number(r.send_after), nextAt: Number(r.next_at),
+    }));
   }
 
   async counts(): Promise<Record<string, number>> {

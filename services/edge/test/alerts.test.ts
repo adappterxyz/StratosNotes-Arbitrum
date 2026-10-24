@@ -170,3 +170,82 @@ describe('notifier tick, end to end over the read model', () => {
     expect(mail.sent.length).toBe(before + sent.length);
   });
 });
+
+describe('emails sent (Alerts → Emails sent)', () => {
+  const emailsFor = async (acct: typeof aliceAcct, body: Record<string, unknown> = {}, address: string = acct.address) => {
+    const issuedAt = NOW;
+    const signature = await acct.signMessage({ message: alertsMessage({ action: 'emails', address, issuedAt }) });
+    return post('/api/alerts/emails', { address, issuedAt, signature, ...body });
+  };
+
+  it('returns a copy of every alert sent to the wallet, as it was sent, newest first', async () => {
+    const r = await emailsFor(aliceAcct);
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    const mine = mail.sent.filter(e => e.to === 'alice@example.com' && !/notes\.markets code/.test(e.subject));
+    expect(j.emails.map((e: { subject: string }) => e.subject).sort()).toEqual(mine.map(e => e.subject).sort());
+    const paid = j.emails.find((e: { subject: string }) => e.subject.startsWith('You were paid'));
+    expect(paid).toMatchObject({ status: 'sent', to: 'a•••@example.com', note: '12M Phoenix (memory) on ETH', category: 'payouts', at: NOW });
+    expect(paid.noteId).toMatch(/^local:/);
+    expect(paid.html).toBe(mine.find(e => e.subject === paid.subject)!.html);
+    expect(paid.text).toContain('Stop these emails');
+    // Never the salt or anyone else's mail; no code emails.
+    expect(JSON.stringify(j)).not.toMatch(/salt|issuer@example\.com|code is/);
+    expect(j.emails.every((e: { to: string }) => e.to === 'a•••@example.com')).toBe(true);
+  });
+
+  it('only the wallet itself can read its mail: another signer, a signature for another action or a stale one is refused', async () => {
+    // Bob signs for Alice's address.
+    expect((await emailsFor(bobAcct, {}, aliceAcct.address)).status).toBe(401);
+    // A signature for a different action.
+    const issuedAt = NOW;
+    const salt = await aliceAcct.signMessage({ message: alertsMessage({ action: 'salt', address: aliceAcct.address, issuedAt }) });
+    expect((await post('/api/alerts/emails', { address: ALICE, issuedAt, signature: salt })).status).toBe(401);
+    // Too old.
+    const old = NOW - 3600;
+    const stale = await aliceAcct.signMessage({ message: alertsMessage({ action: 'emails', address: aliceAcct.address, issuedAt: old }) });
+    expect((await post('/api/alerts/emails', { address: ALICE, issuedAt: old, signature: stale })).status).toBe(401);
+    // No address at all, or a wallet with no verified email.
+    expect((await post('/api/alerts/emails', {})).status).toBe(400);
+    const stranger = privateKeyToAccount(generatePrivateKey());
+    expect((await emailsFor(stranger)).status).toBe(404);
+    // The issuer sees only the issuer's mail.
+    const iss = await (await emailsFor(issuerAcct)).json();
+    expect(iss.emails.length).toBeGreaterThan(0);
+    expect(iss.emails.every((e: { to: string }) => e.to === 'i•••@example.com')).toBe(true);
+  });
+
+  it('pages with a cursor, and shows what is still queued on the first page', async () => {
+    const all = (await (await emailsFor(aliceAcct)).json()).emails as Array<{ id: string }>;
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    const p1 = await (await emailsFor(aliceAcct, { limit: 1 })).json();
+    expect(p1.emails.map((e: { id: string }) => e.id)).toEqual([all[0].id]);
+    expect(p1.next).toEqual({ at: NOW, id: all[0].id });
+    const p2 = await (await emailsFor(aliceAcct, { limit: 1, before: p1.next })).json();
+    expect(p2.emails.map((e: { id: string }) => e.id)).toEqual([all[1].id]);
+    expect(p2.queued).toEqual([]);
+
+    await alertsStore(store()).enqueue([{ dedupe: `later|${ALICE}`, address: ALICE, noteId: 'local:0xe1:1', category: 'payouts', sendAfter: NOW + 86_400, expiresAt: null,
+      payload: { template: 'payment-made', vars: { note: 'Later note', amount: '$2.00', period: '2', link: 'https://notes.markets/app/note/x' } } }], NOW);
+    const q = await (await emailsFor(aliceAcct)).json();
+    expect(q.queued).toEqual([expect.objectContaining({ id: `later|${ALICE}`, status: 'queued', subject: 'You were paid $2.00 on Later note', at: NOW + 86_400, note: 'Later note' })]);
+    expect(q.queued[0].html).toContain('/alerts/unsubscribe?token=');
+  });
+});
+
+describe('migration 0005 (email_messages)', () => {
+  it('backfills what the outbox knows about emails sent before it, without bodies', async () => {
+    const { MIGRATIONS } = await import('./d1');
+    const pre = await localD1(MIGRATIONS.filter(m => m.name < '0005'));
+    try {
+      await pre.db.prepare(`INSERT INTO email_outbox (dedupe, address, note_id, category, payload, send_after, status, next_at, created_at, sent_at)
+        VALUES ('d1', '0xa1', 'n1', 'payouts', '{"template":"payment-made","vars":{"note":"N1"}}', 10, 'sent', 10, 10, 11),
+               ('d2', '0xa1', NULL, 'payouts', '{"template":"payment-made","vars":{}}', 10, 'skipped', 10, 10, 11),
+               ('d3', '0xa1', 'n1', 'due', '{"template":"payment-due","vars":{"note":"N1"}}', 99, 'pending', 99, 10, NULL)`).run();
+      const { applyMigrations } = await import('../src/d1');
+      await applyMigrations(pre.db, MIGRATIONS);
+      const rows = (await pre.db.prepare('SELECT dedupe, subject, status, note_label, sent_at FROM email_messages').all()).results;
+      expect(rows).toEqual([{ dedupe: 'd1', subject: 'You were paid: N1', status: 'sent', note_label: 'N1', sent_at: 11 }]);
+    } finally { await pre.dispose(); }
+  });
+});
