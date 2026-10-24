@@ -99,7 +99,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
     const start = async () => {
       const [{ NoteScene }] = await Promise.all([
         import('./scene/NoteScene'),
-        document.fonts?.load?.('500 64px "IBM Plex Mono"').catch(() => undefined),
+        document.fonts?.load?.('500 64px "Geist Mono"').catch(() => undefined),
       ]);
       if (disposed) return;
       try {

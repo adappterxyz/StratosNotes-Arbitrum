@@ -39,7 +39,7 @@ const CARDS: Card[] = [
       aria: 'A price path that stays between a floor at 70% and an early-repayment level at 100%, with a coupon paid at each of four dates.',
       shapes: <>
         {baseline}
-        <rect x="14" y="30" width="176" height="36" fill="rgba(31,95,214,.08)" />
+        <rect x="14" y="30" width="176" height="36" fill="rgba(18,169,113,.08)" />
         <path d="M14 30H190" stroke="var(--c-alt)" strokeDasharray="4 4" {...thin} />
         <path d="M14 66H190" stroke="var(--c-floor)" strokeDasharray="4 4" {...thin} />
         {[70, 110, 150, 190].map(x => <path key={x} d={`M${x} 18V86`} stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />)}
@@ -64,7 +64,7 @@ const CARDS: Card[] = [
         {baseline}
         <path d="M102 10V86" stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />
         <polyline points="14,86 102,48 190,10" stroke="var(--c-out)" strokeDasharray="5 4" {...thin} />
-        <rect x="14" y="48" width="88" height="38" fill="rgba(21,128,90,.09)" />
+        <rect x="14" y="48" width="88" height="38" fill="rgba(18,169,113,.09)" />
         <polyline points="14,48 102,48 190,29" stroke="var(--c-line)" {...S} />
         <circle cx="102" cy="48" r="3.4" fill="var(--c-line)" />
       </>,
@@ -105,7 +105,7 @@ const CARDS: Card[] = [
       shapes: <>
         {baseline}
         <path d="M14 22H190" stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />
-        <polygon points="14,22 58,30 102,36 146,42 190,50 190,40 146,34 102,30 58,26" fill="rgba(31,95,214,.12)" />
+        <polygon points="14,22 58,30 102,36 146,42 190,50 190,40 146,34 102,30 58,26" fill="rgba(18,169,113,.12)" />
         <polyline points="14,22 58,30 102,36 146,42 190,50" stroke="var(--c-out)" strokeDasharray="5 4" {...thin} strokeWidth={1.5} />
         <polyline points="14,22 58,26 102,30 146,34 190,40" stroke="var(--c-line)" {...S} />
         {[58, 102, 146, 190].map(x => <rect key={x} x={x - 4} y="74" width="8" height="12" rx="1.5" fill="var(--c-pay)" />)}
@@ -126,7 +126,7 @@ const CARDS: Card[] = [
       shapes: <>
         <path d="M14 50H190" stroke="var(--c-axis)" {...thin} />
         <rect x="18" y="12" width="20" height="38" rx="3" fill="var(--c-pay)" />
-        <rect x="14" y="62" width="160" height="16" rx="4" {...thin} fill="rgba(31,95,214,.10)" stroke="var(--c-alt)" />
+        <rect x="14" y="62" width="160" height="16" rx="4" {...thin} fill="rgba(18,169,113,.10)" stroke="var(--c-alt)" />
         <path d="M30 66v-3a4 4 0 0 1 8 0v3" stroke="var(--c-alt)" {...thin} strokeWidth={1.6} />
         <rect x="28" y="66" width="12" height="9" rx="1.5" fill="var(--c-alt)" />
         {[70, 110, 150].map(x => <rect key={x} x={x - 6} y="50" width="12" height="7" rx="1.5" fill="var(--c-out)" />)}
@@ -158,7 +158,7 @@ const CARDS: Card[] = [
         <rect x="159" y="12" width="18" height="16" rx="3" {...thin} fill="none" stroke="var(--c-floor)" strokeDasharray="3 3" />
         <circle cx="168" cy="34" r="6" {...thin} fill="none" stroke="var(--c-floor)" strokeWidth={1.6} />
         <path d="M168 40V58" stroke="var(--c-floor)" {...thin} strokeWidth={1.6} />
-        <rect x="104" y="60" width="86" height="28" rx="4" {...thin} fill="rgba(31,95,214,.10)" stroke="var(--c-alt)" />
+        <rect x="104" y="60" width="86" height="28" rx="4" {...thin} fill="rgba(18,169,113,.10)" stroke="var(--c-alt)" />
       </>,
       labels: [
         { x: 30, y: 46, t: 'funded', a: 'middle', tone: 'pay' },

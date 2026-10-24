@@ -10,12 +10,12 @@ const STRATOS_URL = 'https://stratoslab.xyz';
 const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
 
 /** The wordmark: lowercase, with the dot as the one blue mark. */
-export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
+export function Wordmark({ size = 'md', dark = false }: { size?: 'md' | 'lg'; dark?: boolean }) {
   // Primary lockup (docs/brand/logo-guide.pdf): the payoff note, then "notes" in Geist Bold, a Signal-green square dot,
   // "markets" in Geist Regular, Slate.
   return (
-    <span className={`wordmark ${size}`} aria-label="notes.markets">
-      <img className="wm-mark" src="/brand/mark.svg" alt="" aria-hidden="true" />
+    <span className={`wordmark ${size}${dark ? ' on-dark' : ''}`} aria-label="notes.markets">
+      <img className="wm-mark" src={dark ? '/brand/mark-reversed.svg' : '/brand/mark.svg'} alt="" aria-hidden="true" />
       <span className="wm-text" aria-hidden="true"><b>notes</b><i /><span>markets</span></span>
     </span>
   );
@@ -143,7 +143,7 @@ export default function Landing() {
 
       <footer className="foot">
         <div className="wrap foot-inner">
-          <Wordmark />
+          <Wordmark dark />
           <div className="foot-links">
             <a href={APP_URL}>App</a>
             <a href={REPO_URL} target="_blank" rel="noopener">GitHub</a>

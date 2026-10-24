@@ -24,8 +24,10 @@ import { ENDING_SPLIT, STORY_END } from './beats';
 // Light theme: white ground and fog, navy and blue line work, tinted glass sheets, a navy collateral block,
 // green USDG coins. Every colour is dark enough to read on white.
 const C = {
-  bg: 0xffffff, line: 0xdce3ee, lineStrong: 0xb3c1d6, text: 0x0a1628, soft: 0x3a4b66, muted: 0x5f6e85,
-  blue: 0x1f5fd6, blueHi: 0x1f5fd6, green: 0x15805a, red: 0xc9363b, amber: 0x9a6200, panel: 0x0a1628,
+  // Brand (docs/brand/logo-guide.pdf): Ink line work, Signal for the live path, coins and CRE marks, Slate guides.
+  bg: 0xffffff, line: 0xe3e5ea, lineStrong: 0xc3c8d1, text: 0x0e1116, soft: 0x4a5060, muted: 0x6b7280,
+  blue: 0x0b7a52, blueHi: 0x12a971, green: 0x12a971, red: 0xc9363b, amber: 0x9a6200, panel: 0x0e1116,
+  ink: 0x0e1116, signal: 0x12a971, signalInk: 0x0b7a52,
 };
 
 
@@ -67,7 +69,7 @@ function label(text: string, color: string, height = 0.9, weight = 500) {
   const pad = 18, fontPx = 64;
   const cv = document.createElement('canvas');
   const ctx = cv.getContext('2d')!;
-  const font = `${weight} ${fontPx}px "IBM Plex Mono", ui-monospace, Menlo, monospace`;
+  const font = `${weight} ${fontPx}px "Geist Mono", ui-monospace, Menlo, monospace`;
   ctx.font = font;
   const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
   cv.width = w; cv.height = fontPx + pad * 2;
@@ -98,7 +100,7 @@ function usdgFace() {
   ctx.lineWidth = 6;
   ctx.beginPath(); ctx.arc(64, 64, 52, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = '#ffffff';
-  ctx.font = '600 34px "IBM Plex Mono", ui-monospace, Menlo, monospace';
+  ctx.font = '600 34px "Geist Mono", ui-monospace, Menlo, monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('USDG', 64, 66);
   const tex = new CanvasTexture(cv);
@@ -198,9 +200,9 @@ export class NoteScene {
 
     // Barrier sheets: horizontal glass at each level, with a crisp front edge and a label.
     const sheets: Array<[number, number, string, number]> = [
-      [LEVEL(1.0), C.blue, 'EARLY REPAYMENT 100%', 0.07],
-      [LEVEL(0.7), C.soft, 'COUPON FLOOR 70%', 0.04],
-      [LEVEL(0.6), C.amber, 'KNOCK-IN 60%', 0.06],
+      [LEVEL(1.0), C.ink, 'EARLY REPAYMENT 100%', 0.05],
+      [LEVEL(0.7), C.amber, 'COUPON FLOOR 70%', 0.04],
+      [LEVEL(0.6), C.red, 'KNOCK-IN 60%', 0.05],
     ];
     for (const [y, color, text, op] of sheets) {
       const plane = new Mesh(new PlaneGeometry(X1 - X0 + 8, 12), new MeshBasicMaterial({ color, transparent: true, opacity: op, side: DoubleSide, depthWrite: false }));
@@ -235,7 +237,7 @@ export class NoteScene {
     this.head = new Mesh(new SphereGeometry(0.26, 16, 12), new MeshBasicMaterial({ color: C.text }));
     s.add(this.head);
     // The opening shot shows the whole path; it steps back to a ghost when the story starts, then redraws.
-    this.preview = new Mesh(new TubeGeometry(this.curve, this.pathSegs, 0.06, this.pathRadial, false), new MeshBasicMaterial({ color: C.blueHi, transparent: true, depthWrite: false }));
+    this.preview = new Mesh(new TubeGeometry(this.curve, this.pathSegs, 0.06, this.pathRadial, false), new MeshBasicMaterial({ color: C.soft, transparent: true, depthWrite: false }));
     s.add(this.preview);
 
     // Strike date.
@@ -262,9 +264,9 @@ export class NoteScene {
       const stem = new Line(new BufferGeometry().setFromPoints([new Vector3(x, FLOOR_Y, 0), new Vector3(x, y, 0)]), new LineBasicMaterial({ color: C.lineStrong, transparent: true, opacity: 0.9 }));
       const ring = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.text, transparent: true, side: DoubleSide, depthWrite: false }));
       ring.position.set(x, y, 0);
-      const pulse = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.blue, transparent: true, side: DoubleSide, depthWrite: false }));
+      const pulse = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }));
       pulse.position.copy(ring.position);
-      const hexMark = new LineLoop(new BufferGeometry().setFromPoints(hexPts), new LineBasicMaterial({ color: C.blue, transparent: true }));
+      const hexMark = new LineLoop(new BufferGeometry().setFromPoints(hexPts), new LineBasicMaterial({ color: C.signal, transparent: true }));
       hexMark.position.set(x, y + 2.1, 0);
       const l = label(k === OBS_X.length - 1 ? 'MATURITY' : `OBSERVATION ${k + 1}`, hex(C.muted), 0.5);
       l.position.set(x - 1.6, FLOOR_Y - 0.9, 0.6);
@@ -279,7 +281,7 @@ export class NoteScene {
     {
       const rail = new BufferGeometry().setFromPoints([new Vector3(X0 - 4, FLOOR_Y + 0.01, HOLDERS_Z), new Vector3(X1 + 4, FLOOR_Y + 0.01, HOLDERS_Z)]);
       s.add(new Line(rail, new LineBasicMaterial({ color: C.green, transparent: true, opacity: 0.5 })));
-      this.holdersLabel = label('HOLDERS · COUPONS IN USDG', hex(C.green), 0.6);
+      this.holdersLabel = label('HOLDERS · COUPONS IN USDG', hex(C.signalInk), 0.6);
       this.holdersLabel.position.set(X1 + 4.6, FLOOR_Y + 0.2, HOLDERS_Z);
       s.add(this.holdersLabel);
     }
@@ -298,7 +300,7 @@ export class NoteScene {
         this.coinAt.push(this.obs[k].at + j * 0.004);
         ci++;
       }
-      const tag = label('COUPON PAID IN USDG', hex(C.green), 0.5, 600);
+      const tag = label('COUPON PAID IN USDG', hex(C.signalInk), 0.5, 600);
       tag.position.set(x - 2.6, FLOOR_Y + 2.2, HOLDERS_Z + 0.6);
       (tag.material as SpriteMaterial).opacity = 0;
       this.couponTags.push({ s: tag, at: this.obs[k].at });
@@ -312,18 +314,18 @@ export class NoteScene {
     {
       const box = new BoxGeometry(5.6, 3.2, 4.2);
       const body = new Mesh(box, new MeshBasicMaterial({ color: C.panel, transparent: true, opacity: 0.9 }));
-      this.collEdges = new LineSegments(new EdgesGeometry(box), new LineBasicMaterial({ color: C.blue }));
+      this.collEdges = new LineSegments(new EdgesGeometry(box), new LineBasicMaterial({ color: C.ink }));
       this.collateral.add(body, this.collEdges);
       for (const dy of [-0.7, 0.7]) {
-        const band = new Mesh(new BoxGeometry(5.9, 0.16, 4.5), new MeshBasicMaterial({ color: C.blue }));
+        const band = new Mesh(new BoxGeometry(5.9, 0.16, 4.5), new MeshBasicMaterial({ color: C.signal }));
         band.position.y = dy;
         this.bands.push(band);
         this.collateral.add(band);
       }
       this.collateral.position.set(ISSUER.x, FLOOR_Y + 1.6, ISSUER.z);
-      this.collLabel = label('COLLATERAL · LOCKED', hex(C.blueHi), 0.6);
+      this.collLabel = label('COLLATERAL · LOCKED', hex(C.text), 0.6);
       this.collLabel.position.set(ISSUER.x - 2.8, FLOOR_Y + 4.1, ISSUER.z + 2.2);
-      this.collLabelReleased = label('CRE · COLLATERAL RELEASED', hex(C.green), 0.6);
+      this.collLabelReleased = label('CRE · COLLATERAL RELEASED', hex(C.signalInk), 0.6);
       this.collLabelReleased.position.copy(this.collLabel.position);
       const issuerLbl = label('ISSUER', hex(C.muted), 0.55);
       issuerLbl.position.set(ISSUER.x - 2.8, FLOOR_Y - 0.9, ISSUER.z + 2.3);
@@ -356,7 +358,7 @@ export class NoteScene {
     {
       const mid = new Vector3().lerpVectors(INVESTORS, ISSUER, 0.5);
       this.swapMark = new Group();
-      const ring = new Mesh(new RingGeometry(1.25, 1.4, 48), new MeshBasicMaterial({ color: C.blue, transparent: true, side: DoubleSide, depthWrite: false }));
+      const ring = new Mesh(new RingGeometry(1.25, 1.4, 48), new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }));
       ring.rotation.y = Math.PI / 2;
       this.swapMark.add(ring);
       this.swapMark.position.set(mid.x, FLOOR_Y + 1.6, mid.z);
@@ -375,7 +377,7 @@ export class NoteScene {
       }
       this.principal.count = n;
       s.add(this.principal);
-      this.principalTag = label('PRINCIPAL BACK · USDG', hex(C.green), 0.62, 600);
+      this.principalTag = label('PRINCIPAL BACK · USDG', hex(C.signalInk), 0.62, 600);
       this.principalTag.position.set(12.4, FLOOR_Y + 3.1, HOLDERS_Z + 0.6);
       (this.principalTag.material as SpriteMaterial).opacity = 0;
       s.add(this.principalTag);
@@ -403,7 +405,7 @@ export class NoteScene {
       const g2 = cv.getContext('2d')!;
       g2.fillStyle = hex(C.text); g2.fillRect(0, 0, 128, 128);
       g2.strokeStyle = 'rgba(255,255,255,.6)'; g2.lineWidth = 6; g2.strokeRect(8, 8, 112, 112);
-      g2.fillStyle = '#ffffff'; g2.font = '700 38px "IBM Plex Mono", ui-monospace, Menlo, monospace';
+      g2.fillStyle = '#ffffff'; g2.font = '700 38px "Geist Mono", ui-monospace, Menlo, monospace';
       g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('TSLA', 64, 66);
       const tex = new CanvasTexture(cv); tex.colorSpace = SRGBColorSpace;
       this.tsla = new InstancedMesh(new BoxGeometry(0.95, 0.95, 0.95), new MeshBasicMaterial({ map: tex }), n);
@@ -431,7 +433,7 @@ export class NoteScene {
       }
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(this.dustBase.slice(), 3));
-      this.dust = new Points(g, new PointsMaterial({ color: C.blue, size: 0.06, transparent: true, opacity: 0.3, depthWrite: false }));
+      this.dust = new Points(g, new PointsMaterial({ color: C.soft, size: 0.06, transparent: true, opacity: 0.3, depthWrite: false }));
       s.add(this.dust);
     }
   }
@@ -512,7 +514,7 @@ export class NoteScene {
       b.visible = lock * (1 - release) > 0.01;
     });
     this.collateral.position.y = FLOOR_Y + 1.6 + release * 1.4;
-    (this.collEdges.material as LineBasicMaterial).color.setHex(release > 0.5 ? C.green : C.blue);
+    (this.collEdges.material as LineBasicMaterial).color.setHex(release > 0.5 ? C.signal : C.ink);
     (this.collLabel.material as SpriteMaterial).opacity = 1 - release;
     (this.collLabelReleased.material as SpriteMaterial).opacity = release;
 
@@ -570,7 +572,7 @@ export class NoteScene {
       const hit = since >= 0;
       const lit = hit || pv > 0.5;
       const ringMat = o.ring.material as MeshBasicMaterial;
-      ringMat.color.setHex(lit ? C.blueHi : C.muted);
+      ringMat.color.setHex(lit ? C.signal : C.muted);
       ringMat.opacity = lit ? 1 : 0.55;
       o.ring.quaternion.copy(this.camera.quaternion);
       // pulse: one expanding ring right after the date passes
