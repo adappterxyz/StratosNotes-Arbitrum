@@ -54,7 +54,7 @@ export interface Listing {
 export const PAYOUT_TEXT = {
   claim: {
     text: 'Claim any time from your portfolio',
-    detail: 'Claim your coupons and redemption any time from your portfolio: they accrue until you do. One claim at maturity collects everything, with a receipt per claim.',
+    detail: 'Your coupons and redemption build up until you claim them from your portfolio. One claim at maturity collects everything, with a receipt per claim.',
   },
   push: {
     text: 'Paid to your wallet automatically (issuer covers gas)',
