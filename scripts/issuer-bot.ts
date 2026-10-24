@@ -3,6 +3,11 @@
  * fixed what a period owes) and the escrow does not hold it yet, fund the shortfall through that period's
  * "Fund Payment" window; fund deliveries for physical settlement; optionally top up collateral in a margin
  * call. Leave chosen payments unfunded (MISS) to show a default: the note then pays the holders from escrow.
+ * After every payout (a coupon, the redemption, a delivery, a default's distribution) it pushes the money to the
+ * holders' wallets in batches (FlowEngine v4 pushPayouts; anyone may, the caller pays gas): PUSH=0 turns that
+ * off, PUSH_BATCH sets the holders per transaction (default 100), PUSH_ASSETS limits it to some assets (e.g. 1:
+ * the stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS), funding nothing: any funded
+ * account will do, since pushing is permissionless.
  *
  *   RPC=... CHAIN_ID=421614 ENGINE=0x... LENS=0x... ISSUER_KEY_FILE=path [FROM_BLOCK=n] \
  *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
@@ -16,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { dec, toBase } from '@sn/core';
-import { CHAINS, engineAbi, EvmAdapter, issuerActions, noteId, noteView, type ChainInfo } from '@sn/sdk';
+import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, type ChainInfo } from '@sn/sdk';
 
 const env = (k: string, d?: string) => { const v = process.env[k] ?? d; if (v === undefined) throw new Error(`set ${k}`); return v; };
 const keyHex = (): Hex => {
@@ -33,11 +38,64 @@ const account = privateKeyToAccount(keyHex());
 const wallet = createWalletClient({ chain, account, transport: http(rpc) });
 const info: ChainInfo = Object.values(CHAINS).find(c => c.chainId === chainId) ?? { ...CHAINS.local, chainId };
 const engine = env('ENGINE') as Address;
-const adapter = new EvmAdapter(info, client as never, { engine, lens: env('LENS') as Address, fromBlock: BigInt(env('FROM_BLOCK', '0')) });
+const lens = env('LENS') as Address;
+const adapter = new EvmAdapter(info, client as never, { engine, lens, fromBlock: BigInt(env('FROM_BLOCK', '0')) });
 const miss = new Set((process.env.MISS ?? '').split(',').map(s => s.trim()).filter(Boolean));
 const only = process.env.PIDS ? new Set(process.env.PIDS.split(',').map(s => s.trim())) : null;
 const mintAbi = parseAbi(['function mint(address to, uint256 amount)']);
 const log = (s: string) => console.log(`[issuer-bot] ${s}`);
+const pushOn = process.env.PUSH !== '0';
+const pushOnly = process.env.PUSH_ONLY === '1';
+const pushAssets = process.env.PUSH_ASSETS ? new Set(process.env.PUSH_ASSETS.split(',').map(s => s.trim())) : null;
+const pushBatch = BigInt(process.env.PUSH_BATCH ?? '100');
+const MAX = 2n ** 256n - 1n;
+/** Push rounds not settled yet: `${pid}:${asset}` -> period, from DistributionRecorded / DistributionSettled. */
+const openRounds = new Map<string, bigint>();
+let pushFrom = BigInt(env('FROM_BLOCK', '0'));
+
+/** Push every open payout round of the notes this bot looks after, to the end of each holder set. */
+async function pushPayouts(mine: Set<string>) {
+  const head = await client.getBlockNumber();
+  if (head >= pushFrom) {
+    const [rec, settled] = await Promise.all([
+      client.getContractEvents({ address: engine, abi: engineAbi, eventName: 'DistributionRecorded', fromBlock: pushFrom, toBlock: head }),
+      client.getContractEvents({ address: engine, abi: engineAbi, eventName: 'DistributionSettled', fromBlock: pushFrom, toBlock: head }),
+    ]);
+    const all = [...rec.map(l => ({ l, open: true })), ...settled.map(l => ({ l, open: false }))]
+      .sort((a, b) => Number(a.l.blockNumber - b.l.blockNumber) || a.l.logIndex - b.l.logIndex);
+    for (const { l, open } of all) {
+      const a = l.args as { pid: bigint; asset: number; period: bigint };
+      const key = `${a.pid}:${a.asset}`;
+      if (open) openRounds.set(key, a.period);
+      else if (openRounds.get(key) === a.period) openRounds.delete(key);
+    }
+    pushFrom = head + 1n;
+  }
+  for (const [key] of [...openRounds]) {
+    const [pid, asset] = key.split(':');
+    if (!mine.has(pid) || (pushAssets && !pushAssets.has(asset))) continue;
+    let left = 1n;
+    for (let n = 0; left > 0n && n < 50; n++) {
+      const { result } = await client.simulateContract({ address: engine, abi: engineAbi, functionName: 'pushPayouts', args: [BigInt(pid), Number(asset), MAX, pushBatch], account });
+      const hash = await wallet.writeContract({ address: engine, abi: engineAbi, functionName: 'pushPayouts', args: [BigInt(pid), Number(asset), MAX, pushBatch], chain, account });
+      const r = await client.waitForTransactionReceipt({ hash });
+      left = result;
+      log(`${noteId(info.key, engine, BigInt(pid))}: pushed payouts of asset ${asset} (${r.gasUsed} gas, ${left} holders left)`);
+    }
+    if (left > 0n) continue;
+    openRounds.delete(key);
+    // The holder set can reorder mid-round (a holder selling out swaps the last one into its slot), and a
+    // payment can be deferred: sweep once with pushTo for every holder still owed at least one base unit.
+    const [who] = await client.readContract({ address: lens, abi: lensAbi, functionName: 'holders', args: [BigInt(pid), 0n, 0n, 1000n] });
+    if (!who.length) continue;
+    const owed = await client.readContract({ address: lens, abi: lensAbi, functionName: 'claimable', args: [BigInt(pid), BigInt(asset), who] });
+    const late = who.filter((_, i) => owed[i] >= 10_000n);
+    if (!late.length) continue;
+    const hash = await wallet.writeContract({ address: engine, abi: engineAbi, functionName: 'pushTo', args: [BigInt(pid), Number(asset), late], chain, account });
+    await client.waitForTransactionReceipt({ hash });
+    log(`${noteId(info.key, engine, BigInt(pid))}: swept ${late.length} holder(s) still owed on asset ${asset}`);
+  }
+}
 
 /** Make sure the wallet holds `base` of `token` (minting test tokens if allowed). */
 async function ensure(token: Address, base: bigint) {
@@ -53,15 +111,22 @@ const ceil6 = (x: number) => Math.ceil(x * 1e6 - 1e-6) / 1e6;
 
 async function tick() {
   const count = await client.readContract({ address: engine, abi: engineAbi, functionName: 'processCount' });
+  const mine = new Set<string>();
+  if (pushOnly) {
+    for (let pid = 1n; pid <= count; pid++) if (!only || only.has(pid.toString())) mine.add(pid.toString());
+    return pushPayouts(mine);
+  }
   for (let pid = 1n; pid <= count; pid++) {
     if (only && !only.has(pid.toString())) continue;
     const id = noteId(info.key, engine, pid);
     const s = await adapter.getNote(id);
-    if (!s || s.status !== 0) continue;
+    if (!s) continue;
     const def = await adapter.getDefinition(s.definition);
     if (!def) continue;
     const issuerRole = def.roles.indexOf('Issuer');
     if (issuerRole < 0 || s.roles[issuerRole] !== account.address.toLowerCase()) continue;
+    mine.add(pid.toString()); // a completed note may still have its redemption to push
+    if (s.status !== 0) continue;
     const now = Number((await client.getBlock()).timestamp);
     const v = noteView(def, s, now);
     const e = v.economics;
@@ -88,7 +153,8 @@ async function tick() {
     if (period?.deliver && !miss.has(`${pid}:${period.k}`)) {
       const d = actions.delivery.find(x => x.symbol === period.deliver!.symbol);
       // Our test token (tTSLA…) or, for notes on Robinhood Chain's own stock tokens, the bare symbol (TSLA).
-      const asset = def.assets.findIndex(a => a.name === `t${period.deliver.symbol}` || a.name === period.deliver.symbol);
+      const sym = period.deliver.symbol;
+      const asset = def.assets.findIndex(a => a.name === `t${sym}` || a.name === sym);
       const assetName = asset >= 0 ? def.assets[asset].name : `t${period.deliver.symbol}`;
       const escrowRole = def.roleFlags.findIndex(f => (f & 1) === 1);
       const held = Number(BigInt(s.holdings.find(h => h.asset === asset && h.owner === s.roles[escrowRole])?.balance ?? '0')) / 1e10;
@@ -102,6 +168,7 @@ async function tick() {
       if (t && need > 0) await run(t.step, `topUp_${c.symbol}`, Math.ceil(need * 1.01 * 1e6) / 1e6, c.symbol === 'USD' ? 'Collateral tUSD' : `Collateral t${c.symbol}`, `topped up ${c.symbol} collateral:`);
     }
   }
+  if (pushOn) await pushPayouts(mine);
 }
 
 const once = process.argv.includes('--once');

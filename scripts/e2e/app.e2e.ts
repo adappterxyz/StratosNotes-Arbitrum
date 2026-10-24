@@ -3,18 +3,21 @@
  *
  *   1. connect the dev test wallet as the issuer, get test USDC, open the phoenix from Issue, set a short schedule
  *      (100% USDC collateral, pledged from the form) and publish TWO notes: the book opens on each;
- *   2. switch to two investors in turn and subscribe to both notes from their pages;
+ *   2. switch to two investors in turn and subscribe to both notes from their pages; Investor B adds note 2's
+ *      token to the wallet, is refused a transfer to an unverified wallet, and moves 50 units to Investor A;
  *   3. as the issuer, withdraw the subscriptions raised (they are the issuer's at once), then fund note 1's
  *      payments from its page as each falls due ("Payment due" -> Fund) and leave note 2's unfunded;
  *   4. let the keeper (fallback or CRE simulator) run both: note 1 reaches Redeemed, note 2 Defaulted, live;
- *   5. check note 1 against the reference payoff along the prices the reports carried (page, chain, portfolio,
- *      collateral released to the issuer) and note 2's default (each holder holds its pro-rata share of the
- *      collateral and withdraws it), and that every report came from the expected reporter.
+ *   5. check note 1 against the reference payoff along the prices the reports carried: every payout reached the
+ *      investors' wallets (pushed by the payout keeper), each PayoutPaid receipt and round hash recomputes from
+ *      the logs, nothing is left to withdraw, and the portfolio lists the payouts with their receipt ids; note 2's
+ *      default (each holder holds its pro-rata share of the collateral, after the transfer, and withdraws it); and
+ *      that every report came from the expected reporter.
  */
 import { chromium, type Page } from 'playwright';
 import { createPublicClient, erc20Abi, http, type Address } from 'viem';
 import { decodeEvmDef, dec, SCALE, simulateNote, simulateWorstOf, totalPerUnit, type ProductParams } from '@sn/core';
-import { CHAINS, EvmAdapter, flowEngineAbi, hexToBytes, parseNoteId, type NoteState } from '@sn/sdk';
+import { CHAINS, EvmAdapter, flowEngineAbi, hexToBytes, noteTokenAbi, parseNoteId, verifyPayouts, type EngineEvent, type NoteState } from '@sn/sdk';
 import { acct } from './lib';
 
 const env = (k: string) => { const v = process.env[k]; if (!v) throw new Error(`set ${k}`); return v; };
@@ -23,6 +26,8 @@ const ENGINE = env('ENGINE') as Address, LENS = env('LENS') as Address;
 const EXPECT_REPORTER = env('EXPECT_REPORTER').toLowerCase();
 const PAID = [{ role: 'Investor A', i: 3, units: 600 }, { role: 'Investor B', i: 4, units: 400 }];
 const DEFAULTS = [{ role: 'Investor A', i: 3, units: 300 }, { role: 'Investor B', i: 4, units: 700 }];
+/** Investor B moves this many of note 2's units to Investor A after subscribing (both verified). */
+const MOVED = 50;
 const lines: string[] = [];
 let ok = true;
 const check = (good: boolean, what: string) => { lines.push(`${good ? 'ok  ' : 'FAIL'} ${what}`); if (!good) ok = false; console.log(lines[lines.length - 1]); };
@@ -146,6 +151,35 @@ try {
     await subscribe(page, defaultId, DEFAULTS[k].units, email);
     log(`${inv.role} subscribed ${inv.units} and ${DEFAULTS[k].units}`);
   }
+  // Investor B (the role still selected): the units are an ERC-20; add it to the wallet, then transfer some.
+  {
+    await page.goto(`${APP}/note/${encodeURIComponent(defaultId)}`);
+    await page.locator('[data-note-token]').waitFor({ timeout: 60_000 });
+    await page.locator('[data-note-token]').getByRole('button', { name: 'Add to wallet' }).click();
+    await page.getByText('Added the note token to your wallet.').waitFor({ timeout: 30_000 });
+    const watched = await page.evaluate(() => (window as unknown as { __watchedAssets?: Array<{ options?: { address: string; decimals: number } }> }).__watchedAssets ?? []);
+    const token = (await adapter.noteToken(defaultId))!;
+    check(watched.some(w => w.options?.address?.toLowerCase() === token.toLowerCase() && w.options.decimals === 6), `Add to wallet: wallet_watchAsset for the note token ${token} (6 decimals)`);
+    // To an unverified wallet: refused in the app, and by the engine itself.
+    await page.locator('#x-to').fill(acct(5).address);
+    await page.locator('#x-units').fill('10');
+    await page.getByRole('button', { name: 'Transfer', exact: true }).click();
+    const refused = await page.getByText(/no verified email/).waitFor({ timeout: 30_000 }).then(() => true).catch(() => false);
+    check(refused, 'a transfer to an unverified wallet is refused in the app');
+    // The engine's error bubbles up through the token: decode it with the engine's errors.
+    const abi = [...noteTokenAbi, ...flowEngineAbi.filter(x => x.type === 'error')];
+    const err = await client.simulateContract({ account: acct(4).address, address: token, abi, functionName: 'transfer', args: [acct(5).address, 10_000_000n] })
+      .then(() => 'no revert', (e: Error) => e.message);
+    check(/RecipientEmailNotVerified/.test(err), 'the note token refuses it on-chain too (RecipientEmailNotVerified)');
+    await page.locator('#x-to').fill(acct(3).address);
+    await page.locator('#x-units').fill(String(MOVED));
+    await page.getByRole('button', { name: 'Transfer', exact: true }).click();
+    await page.getByText(`Transferred ${MOVED} units.`).waitFor({ timeout: 120_000 });
+    const [a, b] = await Promise.all([3, 4].map(i => client.readContract({ address: token, abi: noteTokenAbi, functionName: 'balanceOf', args: [acct(i).address] })));
+    check(a === BigInt(DEFAULTS[0].units + MOVED) * 1_000_000n && b === BigInt(DEFAULTS[1].units - MOVED) * 1_000_000n, `note 2 token balances after the transfer: A ${Number(a) / 1e6}, B ${Number(b) / 1e6}`);
+    DEFAULTS[0].units += MOVED;
+    DEFAULTS[1].units -= MOVED;
+  }
   await page.goto(`${APP}/note/${encodeURIComponent(paidId)}`);
   await page.locator('[data-sold]').filter({ hasText: '1,000' }).waitFor({ timeout: 60_000 });
   check(true, 'subscriptions show on the note page (1,000 sold), via the indexer');
@@ -205,11 +239,23 @@ try {
   const agent = await page.locator('[data-agent]').getAttribute('data-agent');
   check(agent === (process.env.KEEPER === 'cre' ? 'cre' : 'fallback'), `note page shows the agent: ${agent}`);
   const chainNote = (await adapter.getNote(paidId))!;
-  for (const inv of PAID) {
+  // Payouts were pushed to the wallets: wait for the keeper to push the redemption, then nothing is left.
+  const left = async () => Promise.all(PAID.map(inv => adapter.claimable(paidId, acct(inv.i).address, 1)));
+  for (let i = 0; i < 60 && (await left()).some(c => c >= 10_000n); i++) await new Promise(r => setTimeout(r, 2000));
+  const history = async (id: string) => ((await (await fetch(`${API}/api/notes/${encodeURIComponent(id)}/history?limit=500`)).json()) as { events: Array<{ name: string; tx: string; data: Record<string, unknown> }> }).events.slice().reverse();
+  let events1 = await history(paidId);
+  for (let i = 0; i < 30 && !events1.some(e => e.name === 'DistributionSettled'); i++) { await new Promise(r => setTimeout(r, 2000)); events1 = await history(paidId); }
+  for (const [k, inv] of PAID.entries()) {
     const addr = acct(inv.i).address.toLowerCase();
-    const cash = Number(BigInt(chainNote.holdings.find(h => h.owner === addr && h.asset === 1)?.balance ?? '0')) / Number(SCALE);
-    check(Math.abs(cash - inv.units * perUnit) <= inv.units * 5e-7, `note 1 ${inv.role} ${inv.units} units: on-chain ${cash} USDC, reference ${inv.units * perUnit}`);
+    const paid = events1.filter(e => e.name === 'PayoutPaid' && e.data.holder === addr);
+    const pushed = paid.reduce((a, e) => a + Number(BigInt(String(e.data.amount))), 0) / 1e6;
+    check(Math.abs(pushed - inv.units * perUnit) <= inv.units * 5e-7 + paid.length * 1e-6, `note 1 ${inv.role} ${inv.units} units: ${paid.length} payouts pushed to the wallet, ${pushed} USDC, reference ${inv.units * perUnit}`);
+    const rest = (await left())[k];
+    check(rest < 10_000n, `note 1 ${inv.role}: nothing left to withdraw (${Number(rest) / 1e10})`);
   }
+  // Every receipt recomputes from the logs: payoutId per payment, the rolling hash and totals per round.
+  const rounds = verifyPayouts({ chainId: 421614, engine: ENGINE }, events1.map(e => e.data as unknown as EngineEvent));
+  check(rounds.length > 0 && rounds.every(r => r.ok), `note 1: ${rounds.length} payout round(s); every payoutId and rolling hash recomputed from the logs${rounds.flatMap(r => r.problems).map(p => `; ${p}`).join('')}`);
 
   // 5. Note 2: defaulted; holders hold the collateral pro rata and withdraw it.
   await page.goto(`${APP}/note/${encodeURIComponent(defaultId)}`);
@@ -245,23 +291,23 @@ try {
   await colRow.getByRole('button').click();
   await page.getByText('Withdrawn to your wallet.').waitFor({ timeout: 120_000 });
   let after = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
-  check(Math.abs(Number(after - before) / 1e6 - 300 * out2.perUnit.collateral.USD) < 0.01, `Investor A withdrew ${Number(after - before) / 1e6} USDC of collateral to the wallet`);
+  check(Math.abs(Number(after - before) / 1e6 - DEFAULTS[0].units * out2.perUnit.collateral.USD) < 0.01, `Investor A withdrew ${Number(after - before) / 1e6} USDC of collateral to the wallet`);
   await page.screenshot({ path: 'deployments/local/dev/e2e-default.png', fullPage: true });
 
-  // Portfolio: Investor A sees note 1's cash and withdraws it.
+  // Portfolio: Investor A sees note 1's payouts paid to the wallet, each with its receipt, and nothing to withdraw.
   await page.goto(`${APP}/portfolio`);
-  await page.getByRole('tab', { name: /To withdraw/ }).click();
-  const row = page.locator(`tr[data-note="${paidId}"]`);
-  await row.waitFor({ timeout: 30_000 });
+  await page.getByRole('tab', { name: /Paid to your wallet/ }).click();
+  const paidRows = page.locator(`[data-paid] tr[data-payout]`);
+  await paidRows.first().waitFor({ timeout: 60_000 });
+  const mine = events1.filter(e => e.name === 'PayoutPaid' && e.data.holder === acct(3).address.toLowerCase());
+  let shownIds = 0;
+  for (const e of mine) if (await page.locator(`tr[data-payout="${String(e.data.payoutId)}"]`).count()) shownIds++;
+  check(shownIds === mine.length && mine.length > 0, `portfolio "Paid to your wallet" lists note 1's ${mine.length} payouts by payout id`);
   const want = money(600 * perUnit);
-  const cell = (await row.locator('[data-cash] .num').first().textContent())?.trim();
-  check(cell === want, `portfolio shows ${cell} USDC to withdraw (want ${want})`);
-  before = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
-  await row.getByRole('button', { name: /^Withdraw / }).click();
-  await page.getByText(/^Withdrew /).waitFor({ timeout: 120_000 });
-  after = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
-  const got = Number(after - before) / 1e6;
-  check(Math.abs(got - 600 * perUnit) < 0.01, `withdrew ${got} USDC to the wallet`);
+  check(Math.abs(mine.reduce((a, e) => a + Number(BigInt(String(e.data.amount))), 0) / 1e6 - 600 * perUnit) < 0.01, `note 1 paid Investor A ${want} USDC in all`);
+  await page.getByRole('tab', { name: /To withdraw/ }).click();
+  await page.waitForTimeout(3000); // the claimable amounts are read from the chain
+  check(!(await page.locator(`tr[data-note="${paidId}"]`).count()), 'portfolio "To withdraw": nothing left for note 1 (all pushed)');
   await page.screenshot({ path: 'deployments/local/dev/e2e-portfolio.png' });
   await page.goto(`${APP}/note/${encodeURIComponent(paidId)}`);
   await page.locator('[data-economics]').waitFor();

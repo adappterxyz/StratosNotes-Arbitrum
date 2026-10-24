@@ -28,14 +28,14 @@ cleanup() {
   for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -TERM -- "-$p" 2>/dev/null || true; done
   sleep 1
   for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill -KILL -- "-$p" 2>/dev/null || true; done
-  rm -f "$WORK/fallback.key" "$ROOT/cre/local-fork.env" "$WORK/wrangler.json" "$WORK/.dev.vars"
+  rm -f "$WORK/fallback.key" "$WORK/pusher.key" "$ROOT/cre/local-fork.env" "$WORK/wrangler.json" "$WORK/.dev.vars"
 }
 trap cleanup EXIT INT TERM
 
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
 wait_http() { for _ in $(seq 1 180); do curl -sf "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "timed out waiting for $1" >&2; return 1; }
 APP_PORT="${APP_PORT:-$(free_port)}"
-read -r KEY0 KEY8 KEY9 ADDR0 ADDR9 KEY7 ADDR7 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(8), keyOf(9), acct(0).address, acct(9).address, keyOf(7), acct(7).address)")
+read -r KEY0 KEY8 KEY9 ADDR0 ADDR9 KEY7 ADDR7 KEY6 < <(npx tsx -e "import { keyOf, acct } from '$ROOT/scripts/e2e/lib'; console.log(keyOf(0), keyOf(8), keyOf(9), acct(0).address, acct(9).address, keyOf(7), acct(7).address, keyOf(6))")
 
 echo "== anvil: fork of Arbitrum Sepolia"
 ANVIL_PORT="$(free_port)"
@@ -116,6 +116,14 @@ else
 JSON
   KEEPER_CONFIG="$WORK/keeper.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts > "$WORK/keeper.log" 2>&1 & PIDS+=($!)
 fi
+
+# Payouts go straight to holders' wallets (FlowEngine v4): a keeper pushes each one in batches after it is made
+# (the issuer bot in PUSH_ONLY mode, anvil account 6; pushing is permissionless). Only the stablecoin: delivered
+# tokens and a default's collateral stay to be withdrawn from the note page, which the e2e checks.
+echo "== payout pusher"
+echo "$KEY6" > "$WORK/pusher.key"; chmod 600 "$WORK/pusher.key"
+RPC="$RPC" CHAIN_ID=421614 ENGINE="$ENGINE" LENS="$LENS" FROM_BLOCK="$BLOCK" ISSUER_KEY_FILE="$WORK/pusher.key" PUSH_ONLY=1 PUSH_ASSETS=1 INTERVAL=4 \
+  npx tsx scripts/issuer-bot.ts > "$WORK/pusher.log" 2>&1 & PIDS+=($!)
 
 cat <<EOF
 

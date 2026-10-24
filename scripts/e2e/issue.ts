@@ -49,7 +49,7 @@ roles[roleIdx('Paying Agent')] = pa; // the Investor role stays open: anyone may
 const assetTokens: Address[] = c.def.assets.map(a => (a.kind === 1 ? usdc : zeroAddress)); // cash and USDC collateral
 const startReceipt = await send(1, {
   address: dep.engine, abi: engineAbi, functionName: 'startProcess',
-  args: [definition, 1n, roles, assetTokens, c.stepIndex.Start_Issuer, []],
+  args: [definition, 1n, roles, assetTokens, c.stepIndex.Start_Issuer, [], 'notes.markets ETH Phoenix e2e', 'nmETH1'],
 });
 const pid = (await client.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' }));
 

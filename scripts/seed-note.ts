@@ -108,7 +108,7 @@ const roles: Address[] = c.def.roles.map(() => zeroAddress);
 roles[roleIdx('Issuer')] = deployer.address;
 roles[roleIdx('Paying Agent')] = deployer.address; // the Investor role stays open
 const assetTokens: Address[] = c.def.assets.map(a => (a.kind === 1 ? tusd : zeroAddress)); // cash and tUSD collateral
-const start = await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'startProcess', args: [definition, BigInt(Date.now()), roles, assetTokens, c.stepIndex.Start_Issuer, []] });
+const start = await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'startProcess', args: [definition, BigInt(Date.now()), roles, assetTokens, c.stepIndex.Start_Issuer, [], `notes.markets ${product.name}`.slice(0, 64), 'nmDEMO'] });
 const pid = await client.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' });
 
 const now = Number((await client.getBlock()).timestamp);
