@@ -132,6 +132,8 @@ export default function Workspace() {
     const t = setTimeout(() => {
       if (linked.current || modeler.current !== m) return;
       linked.current = true;
+      if (search.get('ai')) setAiOpen(true);
+      if (window.location.hash === '#templates') setTimeout(() => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' }), 100);
       const tpl = search.get('template');
       const p = search.get('product') as ProductType | 'worst-of' | null;
       if (tpl) openTemplate({ definition: tpl, name: '', description: '', author: '', createdAt: 0, kind: 'custom', label: '' }).then(() => {});

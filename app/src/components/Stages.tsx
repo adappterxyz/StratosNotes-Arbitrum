@@ -235,27 +235,33 @@ export function TemplatePanel({ doc, build, onSaved }: { doc: DocInfo; build: ()
 const toLocalInput = (t: number) => { const d = new Date(t * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 const KIND_NAME: Record<number, string> = Object.fromEntries(Object.entries(FKIND).map(([k, v]) => [v, k]));
 
-export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }) {
+/** What the guided issue flow (pages/IssueWizard.tsx) has already asked; with `compact` those sections are hidden. */
+export interface IssuePreset {
+  chainKey?: string; size?: number; strikeIn?: number; every?: { n: number; unit: 'minutes' | 'days' | 'months' };
+  ratioPct?: number; haircuts?: Record<string, number>; timing?: { lag: number; grace: number } | null;
+}
+
+export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocInfo; built: Built | null; preset?: IssuePreset; compact?: boolean }) {
   const nav = useNavigate();
   const me = useAddress();
   const { config, byKey } = useChains();
   const signer = useSigner();
   const plan = useMemo(() => { try { return built ? planIssuance(built.ir, built.c) : null; } catch (e) { return e instanceof Error ? e.message : String(e); } }, [built]);
-  const [chainKey, setChainKey] = useState(config.chains[0]?.key ?? '');
+  const [chainKey, setChainKey] = useState(preset?.chainKey ?? config.chains[0]?.key ?? '');
   const emailGate = useVerifiedEmail(); // a verified email before issuing
   const [values, setValues] = useState<Record<string, string>>({});
-  const [size, setSize] = useState(doc.hint?.size ?? 10_000);
-  const [strikeIn, setStrikeIn] = useState(5);
-  const [every, setEvery] = useState({ n: 3, unit: 'minutes' as 'minutes' | 'days' | 'months' });
+  const [size, setSize] = useState(preset?.size ?? doc.hint?.size ?? 10_000);
+  const [strikeIn, setStrikeIn] = useState(preset?.strikeIn ?? 5);
+  const [every, setEvery] = useState(preset?.every ?? { n: 3, unit: 'minutes' as 'minutes' | 'days' | 'months' });
   const [progress, setProgress] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [isin] = useState(() => 'XS' + String(Date.now()).slice(-10));
   const ecoDefaults = economicsOf(doc.basis ?? { productType: 'fcn', name: '', issuePricePct: 100, underlyings: [], observations: 1 });
-  const [ratioPct, setRatioPct] = useState(ecoDefaults.collateralRatioPct);
-  const [haircuts, setHaircuts] = useState<Record<string, number>>(() => Object.fromEntries(ecoDefaults.collateral.map(c => [c.symbol, c.haircutPct])));
+  const [ratioPct, setRatioPct] = useState(preset?.ratioPct ?? ecoDefaults.collateralRatioPct);
+  const [haircuts, setHaircuts] = useState<Record<string, number>>(() => preset?.haircuts ?? Object.fromEntries(ecoDefaults.collateral.map(c => [c.symbol, c.haircutPct])));
   const [pledges, setPledges] = useState<Record<string, string>>({});
-  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(null);
+  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(preset?.timing ?? null);
   const chain = byKey[chainKey];
   // Collateral locked on Robinhood Chain: the note pledges the CCIP receipts (TSLA.rh…), not the token itself.
   const remote = doc.basis?.collateralChain === 'robinhood';
@@ -340,10 +346,10 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const deposits = plan.steps.filter(s => s.deposits.length);
   return (
     <>
-      <Head title="Issue this note" sub="Four steps. Publishing opens the book: investors subscribe until the strike date and their USDG is yours. Chainlink CRE then checks prices on each date, and you fund each payment before it falls due." />
+      {!compact && <Head title="Issue this note" sub="Four steps. Publishing opens the book: investors subscribe until the strike date and their USDG is yours. Chainlink CRE then checks prices on each date, and you fund each payment before it falls due." />}
       <div className="section">
-        <div className="step-h"><span className="n">1</span><h3>Network and size</h3></div>
-        {config.chains.length > 1 && (
+        {!compact && <div className="step-h"><span className="n">1</span><h3>Network and size</h3></div>}
+        {config.chains.length > 1 && !compact && (
           <div className="field">
             <label htmlFor="is-chain">Network</label>
             <select id="is-chain" value={chainKey} onChange={e => setChainKey(e.target.value)}>
@@ -351,7 +357,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
             </select>
           </div>
         )}
-        <div className="form-grid">
+        <div className="form-grid" hidden={compact}>
           {inputs.some(f => f.name === 'notional') && (
             <div className="field"><label htmlFor="is-size">{FIELD_LABEL.notional.replace('USDC', sym)}</label><input id="is-size" type="number" min={1} value={size} onChange={e => setSize(Number(e.target.value))} /></div>
           )}
@@ -360,7 +366,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
           )}
         </div>
       </div>
-      {hasSchedule && (
+      {hasSchedule && !compact && (
         <div className="section">
           <div className="step-h"><span className="n">2</span><h3>Dates</h3></div>
           <div className="form-grid">
@@ -380,10 +386,10 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       )}
       {names.has('collateralRatio') && (
         <div className="section" data-collateral>
-          <div className="step-h"><span className="n">3</span><h3>Collateral you lock</h3></div>
+          <div className="step-h">{compact ? <h3>Collateral to lock</h3> : <><span className="n">3</span><h3>Collateral you lock</h3></>}</div>
           <p className="xs muted">Locked in the note until every payment is made. If you miss one, holders take what they're owed from it.</p>
           <div className="form-grid">
-            <div className="field">
+            <div className="field" hidden={compact}>
               <label htmlFor="is-ratio">Collateral ratio, % of the notional</label>
               <input id="is-ratio" type="number" min={0} max={1000} value={ratioPct} onChange={e => setRatioPct(Number(e.target.value))} />
               <span className="hint">Required: {fmtMoney(required)} {sym} of collateral value, checked at the strike and every observation.</span>
@@ -392,7 +398,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
               const tok = tokOf(c);
               return (
                 <div key={c} className="field">
-                  <label htmlFor={`is-pledge-${c}`}>{tok} pledged · haircut <input aria-label={`${tok} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</label>
+                  <label htmlFor={`is-pledge-${c}`}>{tok} pledged{compact ? ` · ${haircuts[c] ?? 100}% counted` : <> · haircut <input aria-label={`${tok} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</>}</label>
                   <input id={`is-pledge-${c}`} inputMode="decimal" value={pledgeOf(c)} onChange={e => setPledges(x => ({ ...x, [c]: e.target.value }))} placeholder={`${tok} amount`} />
                   {c !== 'USD' && <span className="hint">Valued by Chainlink at the strike; with {collateralSyms.length > 1 ? 'the other assets' : 'nothing else'} it must cover {fmtMoney(required)} {sym}.</span>}
                 </div>
@@ -404,7 +410,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
           {collateralSyms.every(c => c === 'USD') && <p className={`xs ${usdCoverage + 1e-9 >= required ? 'muted' : 'err'}`}>Coverage at the strike: {fmtMoney(usdCoverage)} {sym} of {fmtMoney(required)} required{usdCoverage + 1e-9 >= required ? '.' : ': top it up, or the note goes into a margin call at the strike.'}</p>}
         </div>
       )}
-      {names.has('grace') && (
+      {names.has('grace') && !compact && (
         <div className="section" data-timing>
           <div className="step-h"><span className="n">4</span><h3>Paying holders</h3></div>
           <div className="form-grid">

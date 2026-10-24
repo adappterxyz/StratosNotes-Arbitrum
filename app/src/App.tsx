@@ -5,6 +5,7 @@ import { Briefcase, LayoutGrid, Mail, Menu, Moon, PenTool, Sun, X } from 'lucide
 import Marketplace from './pages/Marketplace';
 import OfferingPage from './pages/Offering';
 import Portfolio from './pages/Portfolio';
+import IssueWizard from './pages/IssueWizard';
 import Workspace from './pages/Workspace';
 import AlertsPage, { AlertsConfirm, AlertsUnsubscribe } from './pages/Alerts';
 import FaucetButton from './components/FaucetButton';
@@ -100,7 +101,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Marketplace />} />
         <Route path="/note/:id" element={<OfferingPage />} />
-        <Route path="/issue" element={<Workspace />} />
+        <Route path="/issue" element={<IssueWizard />} />
+        <Route path="/issue/advanced" element={<Workspace />} />
         <Route path="/studio" element={<Navigate to="/issue" replace />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/alerts" element={<AlertsPage />} />

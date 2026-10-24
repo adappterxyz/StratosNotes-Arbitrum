@@ -66,18 +66,23 @@ async function verifyIfAsked(page: Page, email: string) {
   return true;
 }
 async function issueOne(page: Page): Promise<string> {
+  // The guided issue flow: pick the product, then Product -> Terms -> Schedule -> Collateral -> Review & issue.
   await page.goto(`${APP}/issue`);
-  await page.getByRole('button', { name: /12M Phoenix \(memory\) on ETH/ }).click();
-  await page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /^Issue$/ }).click();
+  await page.locator('[data-product="phoenix"]').click();
+  const next = () => page.getByRole('button', { name: /^Continue: / }).click();
+  await next(); // Product (ETH, cash settlement: the defaults)
+  await next(); // Terms
   await page.locator('#is-size').fill('1000');
   await page.locator('#is-strike').fill('4');
   await page.locator('#is-every').fill('2');
-  // The form proposes a pledge that exactly covers 100% of the notional.
-  await page.locator('[data-collateral]').waitFor();
-  check((await page.locator('#is-pledge-USD').inputValue()) === '1000', 'the issue form proposes 1,000 USDC of collateral for 100%');
+  await next(); // Schedule
   // Payment 40 s after each observation, 60 s of grace: room for the keeper's report and the issuer's click.
   await page.locator('#is-lag').fill('40');
   await page.locator('#is-grace').fill('60');
+  await next(); // Collateral
+  // The review proposes a pledge that exactly covers 100% of the notional.
+  await page.locator('[data-collateral]').waitFor();
+  check((await page.locator('#is-pledge-USD').inputValue()) === '1000', 'the issue form proposes 1,000 USDC of collateral for 100%');
   await page.getByRole('button', { name: 'Publish and open the book' }).click();
   await verifyIfAsked(page, 'issuer@e2e.test');
   await page.waitForURL(/\/note\//, { timeout: 180_000 });
