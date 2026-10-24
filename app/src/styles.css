@@ -98,8 +98,11 @@ svg.i { width: 14px; height: 14px; flex: none; }
 .menu-btn { width: 40px; height: 40px; padding: 0; }
 @media (max-width: 1000px) {
   .appbar-row { padding: 8px 12px 0; gap: 8px; }
-  .appbar-row .main-nav { order: 3; width: 100%; margin: 0 -12px; padding: 4px 8px; border: 0; border-top: 1px solid hsl(var(--border)); border-radius: 0; background: none; justify-content: space-around; }
-  .appbar-row .main-nav a { flex: 1 1 0; min-width: 0; justify-content: center; min-height: 40px; font-size: 13px; padding: 4px 6px; }
+  /* Full-bleed row under the brand: it spans the bar's own 12px gutters (so the top border runs edge to edge) and
+     puts 12px back inside, so the first and last items never touch or clip at the screen edge. */
+  .appbar-row .main-nav { order: 3; width: calc(100% + 24px); margin: 0 -12px; padding: 4px 12px; border: 0; border-top: 1px solid hsl(var(--border)); border-radius: 0; background: none; justify-content: space-between; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  .appbar-row .main-nav::-webkit-scrollbar { display: none; }
+  .appbar-row .main-nav a { flex: 1 0 auto; justify-content: center; min-height: 40px; font-size: 13px; padding: 4px 6px; white-space: nowrap; }
 }
 @media (max-width: 360px) {
   .appbar-row .main-nav a svg { display: none; }
