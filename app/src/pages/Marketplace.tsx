@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { PRODUCT_LABELS, type ProductType } from '@sn/core';
 import { headline, PHASE_LABEL, PHASES, type Phase } from '@sn/sdk';
-import { useChains } from '../lib/chains';
+import { useChains, PREFERRED_CHAIN, STOCK_CHAIN } from '../lib/chains';
 import { agentLabel, fmtMoney, fmtPct, nextEvent } from '../lib/format';
 import { useNotes } from '../lib/live';
 
@@ -22,7 +22,12 @@ export default function Marketplace() {
   const finished = [...phases].filter(p => p === 'redeemed' || p === 'defaulted').length;
   const status = finished ? (finished === phases.size ? 'redeemed' : 'all') : 'active';
   const { notes, error } = useNotes({ status, product: type || undefined, underlying: und || undefined, chain: chain || undefined, q: q.trim() || undefined });
-  const shown = useMemo(() => (notes ?? []).filter(n => phases.has(n.view.phase)), [notes, phases]);
+  // Arbitrum first (where notes run), otherwise in the API's order.
+  const shown = useMemo(() => {
+    const list = (notes ?? []).filter(n => phases.has(n.view.phase));
+    const rank = (k: string) => (k === PREFERRED_CHAIN ? 0 : 1);
+    return list.map((n, i) => ({ n, i })).sort((a, b) => rank(a.n.chain) - rank(b.n.chain) || a.i - b.i).map(x => x.n);
+  }, [notes, phases]);
   const counts = useMemo(() => Object.fromEntries(PHASES.map(p => [p, (notes ?? []).filter(n => n.view.phase === p).length])) as Record<Phase, number>, [notes]);
   const chainName = (k: string) => config.chains.find(c => c.key === k)?.name ?? k;
   const toggle = (p: Phase) => setPhases(s => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n.size ? n : s; });
@@ -32,7 +37,7 @@ export default function Marketplace() {
       <div className="page-head">
         <div>
           <h1>Marketplace</h1>
-          <p>Notes on {config.chains.map(c => c.name).join(' and ')}. Buy units with {config.chains[0]?.stablecoin.symbol ?? 'USDC'} while a book is open. Chainlink then records the prices on each date, and every coupon and repayment is paid on-chain. Need test tokens? Connect a wallet and claim them with the faucet button.</p>
+          <p>Notes run on Arbitrum{config.chains.some(c => c.key === STOCK_CHAIN) ? '; Robinhood Chain is where the stock tokens live' : ''}. Buy units with {config.chains[0]?.stablecoin.symbol ?? 'USDC'} while a book is open. Chainlink then records the prices on each date, and every coupon and repayment is paid on-chain. Need test tokens? Connect a wallet and claim them with the faucet button.</p>
         </div>
         <Link to="/issue" className="btn primary lg"><Plus className="i" />Issue a note</Link>
       </div>

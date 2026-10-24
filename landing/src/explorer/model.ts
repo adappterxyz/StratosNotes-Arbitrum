@@ -5,7 +5,7 @@
  */
 import { simulatePerf, simulateWorstOf, totalPerUnit, type PayoffResult } from '../../../packages/core/src/products/payoff';
 import {
-  DELIVERABLE, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, PRODUCT_LABELS, productUses,
+  DELIVERABLE, EXAMPLE_PRODUCTS, ROBINHOOD_STOCK_TOKENS, EXAMPLE_WORST_OF, FEEDS, PRODUCT_LABELS, productUses,
   type ProductParams, type ProductType,
 } from '../../../packages/core/src/products/params';
 
@@ -15,7 +15,10 @@ export type { ProductType, PayoffResult };
 export type Role = 'investor' | 'issuer';
 export type Sym = keyof typeof FEEDS;
 export const CRYPTO: Sym[] = ['ETH', 'BTC', 'SOL'];
-export const STOCKS: Sym[] = ['TSLA', 'NVDA', 'AAPL', 'SPY'];
+export const STOCKS: Sym[] = ['TSLA', 'AMZN', 'NVDA', 'AAPL', 'SPY'];
+
+/** What a physically settled note delivers: Robinhood Chain's own token where it publishes one, else our test token. */
+export const deliveredToken = (sym: string) => (ROBINHOOD_STOCK_TOKENS[sym] ? `Robinhood Chain ${sym}` : DELIVERABLE[sym]?.token ?? sym);
 export const PRODUCTS: ProductType[] = ['fcn', 'reverse-convertible', 'phoenix', 'snowball', 'ppn'];
 
 /** Quarterly over 12 months: four observations, the last one is maturity. */
@@ -192,7 +195,7 @@ export function explain(t: Terms, o: Outcome): string {
     parts.push(`Not called before maturity; at maturity ${u} was at ${lv(N)}, so the snowball pays par plus all four coupons.`);
   } else if (o.knockedIn) {
     parts.push(t.physical
-      ? `At maturity ${u} was at ${lv(N)}, below the ${t.knockIn}% knock-in: instead of cash you receive ${u === t.syms[0] && t.syms.length === 1 ? DELIVERABLE[t.syms[0]].token : `the worst performer's token`} (1 ÷ strike per unit), worth ${lv(N)} of face today.`
+      ? `At maturity ${u} was at ${lv(N)}, below the ${t.knockIn}% knock-in: instead of cash you receive ${u === t.syms[0] && t.syms.length === 1 ? deliveredToken(t.syms[0]) : `the worst performer's token`} (1 ÷ strike per unit), worth ${lv(N)} of face today.`
       : `At maturity ${u} was at ${lv(N)}, below the ${t.knockIn}% knock-in: you are repaid ${lv(N)} of face in cash and take the loss.`);
   } else {
     parts.push(`Held to maturity; ${u} ended at ${lv(N)}, above the ${t.knockIn}% knock-in, so you get par back.`);
@@ -205,7 +208,8 @@ export const COLLATERAL: Collateral[] = [
   { id: 'tUSD', label: 'Stablecoin (tUSD)', haircut: 100 },
   { id: 'ETH', label: 'ETH', haircut: 70 },
   { id: 'BTC', label: 'BTC', haircut: 70 },
-  { id: 'TSLA', label: 'Tokenized TSLA', haircut: 60 },
+  { id: 'TSLA', label: 'Robinhood Chain TSLA', haircut: 60 },
+  { id: 'AMZN', label: 'Robinhood Chain AMZN', haircut: 60 },
   { id: 'NVDA', label: 'Tokenized NVDA', haircut: 60 },
   { id: 'SPY', label: 'Tokenized SPY', haircut: 60 },
 ];

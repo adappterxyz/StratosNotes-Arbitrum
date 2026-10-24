@@ -36,7 +36,7 @@ import { buildWorkflow, chain, field, type BuildSpec, type BuiltWorkflow, type S
 import { productNotifications } from '../notify';
 import type { AssetDefinition, AssetOperation, NodeProps, TemplateField } from '../types';
 import {
-  CASH_TOKEN, collateralToken, DELIVERABLE, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
+  CASH_TOKEN, collateralTokenOf, deliverableToken, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
   validateProductParams, type CollateralSymbol, type ProductParams, type Underlying,
 } from './params';
 
@@ -85,9 +85,9 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     { id: 'note', name: 'Note', kind: 'issued' },
     { id: 'cash', name: 'USDC', kind: 'cash', decimals: CASH_TOKEN.decimals, token: CASH_TOKEN.token },
     // Physical delivery: each underlying's token, delivered below the knock-in barrier.
-    ...(physical ? unds.map(u => ({ id: deliverAsset(u.symbol), name: DELIVERABLE[u.symbol].token, kind: 'cash' as const, decimals: DELIVERABLE[u.symbol].decimals, token: DELIVERABLE[u.symbol].token })) : []),
+    ...(physical ? unds.map(u => { const d = deliverableToken(p, u.symbol)!; return { id: deliverAsset(u.symbol), name: d.token, kind: 'cash' as const, decimals: d.decimals, token: d.token }; }) : []),
     // Collateral: its own asset per token (even the stablecoin), so pledged collateral never mixes with payments.
-    ...col.map(c => ({ id: colAsset(c.symbol), name: `Collateral ${collateralToken(c.symbol).token}`, kind: 'cash' as const, decimals: collateralToken(c.symbol).decimals, token: collateralToken(c.symbol).token })),
+    ...col.map(c => { const t = collateralTokenOf(p, c.symbol)!; return { id: colAsset(c.symbol), name: `Collateral ${t.token}`, kind: 'cash' as const, decimals: t.decimals, token: t.token }; }),
   ];
   const escrowAssets = assets.filter(a => a.kind === 'cash').map(a => a.id);
 
@@ -396,13 +396,13 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
       },
     })),
     ...col.map((c, i): SpecNode => ({
-      id: `Task_TopUp_${c.symbol}`, type: 'userTask', name: `Top Up Collateral ${collateralToken(c.symbol).token}`, col: 5, row: n + i, props: {
+      id: `Task_TopUp_${c.symbol}`, type: 'userTask', name: `Top Up Collateral ${collateralTokenOf(p, c.symbol)!.token}`, col: 5, row: n + i, props: {
         until: { dateField: 'closedAt' }, milestone: 'collateral-pledged',
         templateFields: [field(topUpField(c.symbol), 'Decimal')], assetOperations: intoEscrow(colAsset(c.symbol), topUpField(c.symbol)),
       },
     })),
     ...(physical ? unds.map((u, i): SpecNode => ({
-      id: `Task_FundDelivery_${u.symbol}`, type: 'userTask', name: `Fund Delivery ${DELIVERABLE[u.symbol].token}`, col: 5, row: n + col.length + i, props: {
+      id: `Task_FundDelivery_${u.symbol}`, type: 'userTask', name: `Fund Delivery ${deliverableToken(p, u.symbol)!.token}`, col: 5, row: n + col.length + i, props: {
         until: { dateField: fundUntil(n) }, milestone: 'funding-deposited',
         templateFields: [field(`fundDelivery_${u.symbol}`, 'Decimal')], assetOperations: intoEscrow(deliverAsset(u.symbol), `fundDelivery_${u.symbol}`),
       },
@@ -470,6 +470,6 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     id: `product-${p.productType}`,
     name: p.name,
     params: p,
-    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDC until the strike date and the issuer receives the funds; the issuer pledges ${col.map(c => collateralToken(c.symbol).token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map(u => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
+    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDC until the strike date and the issuer receives the funds; the issuer pledges ${col.map(c => collateralTokenOf(p, c.symbol)!.token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map(u => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
   };
 }

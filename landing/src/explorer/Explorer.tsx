@@ -4,7 +4,7 @@ import './explorer.css';
 import { DEFAULT_START, type ExplorerStart } from './start';
 import {
   BLURB, calls, COLLATERAL, CRYPTO, defaultTerms, explain, GOALS, MONTHS, N, outcome, PRESETS, presetPaths, PRODUCT_LABELS,
-  PRODUCTS, productUses, SHORT, STOCKS, DELIVERABLE,
+  PRODUCTS, productUses, SHORT, STOCKS, deliveredToken,
   type Preset, type Role, type Sym, type Terms,
 } from './model';
 
@@ -105,7 +105,7 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
   const recoveryPerUnit = Math.min(pledge / notional, owedPerUnit);
   const excessBack = Math.max(0, pledge - recoveryPerUnit * notional);
 
-  const physicalToken = basket ? `the worst performer's token` : DELIVERABLE[terms.syms[0]]?.token ?? terms.syms[0];
+  const physicalToken = basket ? `the worst performer's token` : deliveredToken(terms.syms[0]);
   const ret = o.total - 1;
 
   return (

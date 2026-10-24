@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import './styles.css';
 import App from './App';
 import { api, type AppConfig } from './lib/api';
-import { ChainsProvider } from './lib/chains';
+import { ChainsProvider, prepareConfig } from './lib/chains';
 import { setTestWallet } from './components/RoleSwitch';
 
 const root = createRoot(document.getElementById('root')!);
@@ -12,7 +12,7 @@ const root = createRoot(document.getElementById('root')!);
 async function boot() {
   let config: AppConfig;
   try {
-    config = await api.config();
+    config = prepareConfig(await api.config());
   } catch (e) {
     root.render(<main className="page"><div className="empty"><strong>Cannot reach the notes.markets API.</strong><span className="small">{e instanceof Error ? e.message : String(e)}</span></div></main>);
     return;

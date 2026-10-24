@@ -296,13 +296,6 @@ header.nav.scrolled, header.nav.open { background: rgba(10, 22, 40, 0.95); borde
 .run-contract { font-size: 12.5px; text-decoration: none; justify-self: start; }
 
 /* ---- Origin: three steps in one line each ---- */
-.origin { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.origin li { display: grid; gap: 4px; border-top: 2px solid var(--border-strong); padding-top: 14px; }
-.origin li:last-child { border-top-color: var(--blue); }
-.origin b { font-size: 18px; font-family: var(--font-display); }
-.origin span { color: var(--text-soft); font-size: 15px; }
-.origin a { font-size: 14px; text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
-@media (max-width: 760px) { .origin { grid-template-columns: 1fr; } }
 
 /* ---- CTA and footer ---- */
 .cta-final { border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-1); padding: clamp(28px, 5vw, 56px); display: grid; gap: 16px; justify-items: start; }

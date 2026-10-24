@@ -8,7 +8,8 @@ import { isAddress, zeroAddress } from 'viem';
 import { signMessage } from 'wagmi/actions';
 import { AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import {
-  dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, simulateNote, simulatePerf, templateMessage, totalPerUnit, underlyingLabel,
+  dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, ROBINHOOD_STOCK_TOKENS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
+  templateMessage, totalPerUnit, underlyingLabel,
   type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
 import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
@@ -301,7 +302,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
     const step = (s: string) => setProgress(x => [...x, s]);
     try {
       if (hasSchedule && strikeAt < Date.now() / 1000 + 60) throw new Error('The strike date must be at least a minute away.');
-      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.`);
+      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.${unsupported.some(t => ROBINHOOD_STOCK_TOKENS[t]?.token === t) ? ' This note uses Robinhood Chain\'s own stock tokens: until the cross-chain vaults are live, issue it on Robinhood Chain testnet.' : ''}`);
       if (timingBad) throw new Error(timingBad);
       const value = (f: { name: string; kind: number }): InputValue => {
         const raw = valueOf(f.name).trim();
@@ -334,7 +335,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
           <div className="field">
             <label htmlFor="is-chain">Network</label>
             <select id="is-chain" value={chainKey} onChange={e => setChainKey(e.target.value)}>
-              {config.chains.map(c => <option key={c.key} value={c.key}>{c.name}{c.cre ? '' : ' (fallback keeper)'}</option>)}
+              {config.chains.map(c => <option key={c.key} value={c.key}>{c.name}{c.key === 'robinhood-testnet' ? ' (asset chain: stock tokens)' : ''}{c.cre ? '' : ' (fallback keeper)'}</option>)}
             </select>
           </div>
         )}
@@ -418,7 +419,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
         </div>
       )}
       <div className="section">
-        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar.</p>}
+        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar{built.ir.assets.some(a => a.token && ROBINHOOD_STOCK_TOKENS[a.token]?.token === a.token) ? <>; Robinhood Chain's own TSLA and AMZN come from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a></> : ''}.</p>}
         {unsupported.length > 0 && <div className="notice warn">This note needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
         <button className="btn primary lg" disabled={!me || busy || !chain} onClick={() => void emailGate.require(chainKey, issue)}>
           {me ? (busy ? 'Issuing…' : 'Publish and open the book') : 'Connect a wallet to issue'}

@@ -1,10 +1,12 @@
 /**
  * Test tokens. On a testnet with a TokenFaucet the connected wallet claims them itself (tUSD to subscribe, and
  * tETH, tBTC, tTSLA… for a physically settled note's delivery reserve): one claim per token per hour, gas paid
- * by the wallet. On a local dev chain the API mints its mock stablecoin instead.
+ * by the wallet. On a local dev chain the API mints its mock stablecoin instead. A chain's own tokens (Robinhood
+ * Chain's TSLA, AMZN, NFLX) are not ours to hand out: the button links to that chain's faucet for them.
  */
 import { useState } from 'react';
-import { Droplet } from 'lucide-react';
+import { Droplet, ExternalLink } from 'lucide-react';
+import { EXTERNAL_TOKENS, STOCK_TOKEN_FAUCETS } from '@sn/core';
 import { parseAbi } from 'viem';
 import { useAccount } from 'wagmi';
 import { api } from '../lib/api';
@@ -49,7 +51,9 @@ export default function FaucetButton() {
   }
 
   const ch = onChain!;
-  const symbols = Object.keys(ch.tokens);
+  const external = new Set(Object.keys(EXTERNAL_TOKENS[ch.key] ?? {}));
+  const symbols = [...Object.keys(ch.tokens).filter(s => !external.has(s)), ...external];
+  const outside = external.has(token) ? STOCK_TOKEN_FAUCETS[ch.key] : undefined;
   const claim = async () => {
     const addr = ch.tokens[token];
     if (!addr || !ch.tokenFaucet) return;
@@ -69,9 +73,11 @@ export default function FaucetButton() {
     <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
       {status}
       <select aria-label="Test token" value={token} onChange={e => setToken(e.target.value)} disabled={state.busy}>
-        {symbols.map(s => <option key={s} value={s}>{s}</option>)}
+        {symbols.map(s => <option key={s} value={s}>{external.has(s) ? `${s} (${ch.name})` : s}</option>)}
       </select>
-      <button className="btn" onClick={claim} disabled={state.busy} title={`Claim test ${token} on ${ch.name} (once an hour); gas is paid in testnet ETH`}><Droplet className="i" />Get {token}</button>
+      {outside
+        ? <a className="btn" href={outside} target="_blank" rel="noreferrer" title={`${ch.name}'s own ${token}: claimed from its faucet, not ours`}><ExternalLink className="i" />Get test {token} from Robinhood's faucet</a>
+        : <button className="btn" onClick={claim} disabled={state.busy} title={`Claim test ${token} on ${ch.name} (once an hour); gas is paid in testnet ETH`}><Droplet className="i" />Get {token}</button>}
     </span>
   );
 }

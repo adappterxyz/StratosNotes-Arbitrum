@@ -12,8 +12,28 @@ import { createPublicClient, defineChain, http, type Chain, type PublicClient, t
 import { createConfig, WagmiProvider, useAccount } from 'wagmi';
 import { getAccount, getWalletClient, switchChain } from 'wagmi/actions';
 import { EvmAdapter } from '@sn/sdk';
+import { EXTERNAL_TOKENS } from '@sn/core';
 import type { AppConfig, ChainConfig } from './api';
 import '@rainbow-me/rainbowkit/styles.css';
+
+/**
+ * The network the app leads with: Arbitrum (Sepolia), where a note's lifecycle runs. Robinhood Chain is the asset
+ * chain, where the stock tokens live (STOCK_CHAIN); its notes stay selectable until the cross-chain vaults exist.
+ */
+export const PREFERRED_CHAIN = 'arbitrum-sepolia';
+export const STOCK_CHAIN = 'robinhood-testnet';
+
+/**
+ * The deployment's config as the app uses it: Arbitrum first (so it is the default everywhere a network is picked),
+ * and each chain's own tokens (Robinhood Chain's TSLA, AMZN, NFLX) added to the ones the deployment records.
+ */
+export function prepareConfig(config: AppConfig): AppConfig {
+  const rank = (k: string) => (k === PREFERRED_CHAIN ? 0 : 1);
+  const chains = [...config.chains]
+    .sort((a, b) => rank(a.key) - rank(b.key))
+    .map(c => ({ ...c, tokens: { ...(EXTERNAL_TOKENS[c.key] ?? {}), ...c.tokens } }));
+  return { ...config, chains };
+}
 
 /** Native gas tokens that are not ETH (every chain here pays gas in ETH today). */
 const NATIVE: Record<string, { name: string; symbol: string }> = {};

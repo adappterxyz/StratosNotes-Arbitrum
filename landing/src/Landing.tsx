@@ -125,23 +125,24 @@ export default function Landing() {
           <div className="wrap">
             <div className="section-head" data-reveal>
               <span className="eyebrow">Why Arbitrum</span>
-              <h2>The stocks and their prices, on one chain.</h2>
+              <h2>Notes run on Arbitrum. The stocks stay on Robinhood Chain.</h2>
+              <p>Stock collateral and delivery stay on Robinhood Chain, where the stocks live, coordinated by Chainlink CCIP and CRE. That cross-chain link is coming next.</p>
             </div>
             <div className="cards3">
               <div className="card" data-reveal>
-                <div className="card-logo"><img src="/logos/robinhood-chain.svg" alt="" height={24} />Robinhood Chain</div>
-                <span className="tag">Testnet 46630</span>
-                <p>Tokenized stocks. Our stock notes run here.</p>
+                <div className="card-logo"><img src="/logos/arbitrum.svg" alt="" height={26} />Arbitrum Sepolia</div>
+                <span className="tag">Where notes run · testnet 421614</span>
+                <p>Issue, subscribe, observe and pay: every note's lifecycle, on stocks or crypto.</p>
               </div>
               <div className="card" data-reveal>
-                <div className="card-logo"><img src="/logos/arbitrum.svg" alt="" height={26} />Arbitrum Sepolia</div>
-                <span className="tag">Testnet 421614</span>
-                <p>Our crypto notes. Ready for Arbitrum One.</p>
+                <div className="card-logo"><img src="/logos/robinhood-chain.svg" alt="" height={24} />Robinhood Chain</div>
+                <span className="tag">Asset chain · testnet 46630</span>
+                <p>Where the stock tokens live: TSLA and AMZN pledged as collateral or delivered at maturity.</p>
               </div>
               <div className="card" data-reveal>
                 <div className="card-logo"><img src="/logos/chainlink.svg" alt="Chainlink" height={20} /></div>
                 <span className="tag">Prices and automation</span>
-                <p>ETH, BTC, SOL, TSLA, NVDA, AAPL and SPY prices, checked on-chain.</p>
+                <p>Prices for ETH, BTC, SOL, TSLA, NVDA, AAPL, AMZN and SPY, checked on-chain. CCIP links the two chains (coming next).</p>
               </div>
             </div>
           </div>
@@ -184,19 +185,6 @@ export default function Landing() {
               })}
             </div>
             {live.length === 0 && <p className="muted">Nothing is deployed yet.</p>}
-          </div>
-        </section>
-
-        <section id="story">
-          <div className="wrap">
-            <div className="section-head" data-reveal>
-              <span className="eyebrow">Where it comes from</span>
-            </div>
-            <ol className="origin" data-reveal>
-              <li><b>StratosFlow</b><span>Workflows compiled to contracts.</span><a href={FLOW_URL} target="_blank" rel="noopener">stratoslab.app</a></li>
-              <li><b>TOKEN2049</b><span>Chainlink CRE track winner.</span><a href={SOLANA_BUILD} target="_blank" rel="noopener">sp.stratoslab.app</a></li>
-              <li><b>notes.markets</b><span>Rebuilt for Arbitrum.</span><a href={REPO_URL} target="_blank" rel="noopener">GitHub</a></li>
-            </ol>
           </div>
         </section>
 
