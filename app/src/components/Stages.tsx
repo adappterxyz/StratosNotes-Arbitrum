@@ -8,15 +8,16 @@ import { isAddress, zeroAddress } from 'viem';
 import { signMessage } from 'wagmi/actions';
 import { AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import {
-  dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, ROBINHOOD_STOCK_TOKENS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
+  collateralTokenOf, dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, ROBINHOOD_STOCK_TOKENS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
   templateMessage, totalPerUnit, underlyingLabel,
-  type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
+  type CollateralSymbol, type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
 import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
 import { useAddress, useChains, useSigner } from '../lib/chains';
 import { useVerifiedEmail } from './VerifiedEmail';
+import { LockOnRobinhood } from './CrossChainCollateral';
 import { errText, fmtMoney, short } from '../lib/format';
 
 export interface DocInfo {
@@ -249,6 +250,9 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const [pledges, setPledges] = useState<Record<string, string>>({});
   const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(null);
   const chain = byKey[chainKey];
+  // Collateral locked on Robinhood Chain: the note pledges the CCIP receipts (TSLA.rh…), not the token itself.
+  const remote = doc.basis?.collateralChain === 'robinhood';
+  const tokOf = (c: string) => collateralTokenOf(doc.basis ?? {}, c as CollateralSymbol)?.token ?? (c === 'USD' ? (chain?.cfg.stablecoin.symbol ?? 'USDG') : `t${c}`);
 
   if (!built) return <><Head title="Issue" /><div className="section"><p className="small muted">Fix the errors in Validate first.</p></div></>;
   if (typeof plan === 'string' || !plan) return <><Head title="Issue" /><div className="section"><div className="notice err">{plan}</div></div></>;
@@ -380,7 +384,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
               <span className="hint">Required: {fmtMoney(required)} {sym} of collateral value, checked at the strike and every observation.</span>
             </div>
             {collateralSyms.map(c => {
-              const tok = c === 'USD' ? sym : `t${c}`;
+              const tok = tokOf(c);
               return (
                 <div key={c} className="field">
                   <label htmlFor={`is-pledge-${c}`}>{tok} pledged · haircut <input aria-label={`${tok} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</label>
@@ -390,6 +394,8 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
               );
             })}
           </div>
+          {remote && <LockOnRobinhood needed={collateralSyms.map(c => ({ receipt: tokOf(c), amount: Number(pledgeOf(c)) || 0 }))} />}
+          {remote && chain?.cfg.crossChain?.role !== 'home' && <p className="xs err">Collateral locked on Robinhood Chain backs notes on Arbitrum Sepolia: pick that network above.</p>}
           {collateralSyms.every(c => c === 'USD') && <p className={`xs ${usdCoverage + 1e-9 >= required ? 'muted' : 'err'}`}>Coverage at the strike: {fmtMoney(usdCoverage)} {sym} of {fmtMoney(required)} required{usdCoverage + 1e-9 >= required ? '.' : ': top it up, or the note goes into a margin call at the strike.'}</p>}
         </div>
       )}

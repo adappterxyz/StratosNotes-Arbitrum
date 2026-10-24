@@ -94,9 +94,22 @@ export interface ProductParams {
    * Token decimals are compiled into the definition, so this is part of the note's design, not just a network choice.
    */
   stockTokens?: StockTokens;
+  /**
+   * Where the collateral is held (docs/CROSS-CHAIN.md). Absent or 'note': the tokens are pledged into the note on
+   * its own chain. 'robinhood': the issuer locks USDG, TSLA or AMZN in the vault on Robinhood Chain and pledges the
+   * receipts (USDG.rh, TSLA.rh, AMZN.rh) that Chainlink CCIP mints on Arbitrum; they are valued with the same
+   * Chainlink feed and haircut as the token itself. Only for notes on Arbitrum Sepolia.
+   */
+  collateralChain?: CollateralChain;
 }
 
 export type StockTokens = 'test' | 'robinhood';
+export type CollateralChain = 'note' | 'robinhood';
+/** Receipts on Arbitrum for collateral locked on Robinhood Chain (deployments/crosschain-testnet.json). NFLX has no
+ * CRE-readable feed, so its receipt exists but is not offered as collateral. */
+export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
+  robinhood: { USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 } },
+};
 
 export type DefaultRule = 'cap-at-owed' | 'all-to-holders';
 export const DEFAULT_RULES: DefaultRule[] = ['cap-at-owed', 'all-to-holders'];
@@ -128,8 +141,10 @@ export function deliverableToken(p: Pick<ProductParams, 'stockTokens'>, symbol: 
 }
 
 /** The token behind a collateral asset (USD: the stablecoin), for this note's stock-token choice. */
-export const collateralTokenOf = (p: Pick<ProductParams, 'stockTokens'>, c: CollateralSymbol) =>
-  (c === 'USD' ? CASH_TOKEN : deliverableToken(p, c));
+export const collateralTokenOf = (p: Pick<ProductParams, 'stockTokens' | 'collateralChain'>, c: CollateralSymbol) =>
+  (p.collateralChain && p.collateralChain !== 'note'
+    ? REMOTE_COLLATERAL[p.collateralChain]?.[c]
+    : (c === 'USD' ? CASH_TOKEN : deliverableToken(p, c)));
 
 /** The token behind a collateral asset with notes.markets' test tokens (kept for callers without a term sheet). */
 export const collateralToken = (c: CollateralSymbol) => collateralTokenOf({}, c);
@@ -208,11 +223,14 @@ export function validateProductParams(p: ProductParams): string[] {
   if (new Set(eco.collateral.map(c => c.symbol)).size !== eco.collateral.length) e.push('Each collateral asset can appear once.');
   for (const c of eco.collateral) {
     if (!COLLATERAL_SYMBOLS.includes(c.symbol)) e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
-    else if (!collateralTokenOf(p, c.symbol)) e.push(`There is no ${c.symbol} token to pledge${p.stockTokens === 'robinhood' ? '' : ' with the test tokens: use Robinhood Chain\'s stock tokens'}.`);
+    else if (!collateralTokenOf(p, c.symbol)) e.push(p.collateralChain === 'robinhood'
+      ? `${c.symbol} can't be locked on Robinhood Chain: pledge USD (USDG), TSLA or AMZN there.`
+      : `There is no ${c.symbol} token to pledge${p.stockTokens === 'robinhood' ? '' : ' with the test tokens: use Robinhood Chain\'s stock tokens'}.`);
     if (!(c.haircutPct >= 0 && c.haircutPct <= 100)) e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
   }
   if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
   if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
+  if (p.collateralChain !== undefined && !['note', 'robinhood'].includes(p.collateralChain)) e.push('Collateral must be held on the note\'s chain or on Robinhood Chain.');
   if (p.stockTokens !== undefined && !STOCK_TOKEN_SETS.includes(p.stockTokens)) e.push(`Stock tokens must be one of ${STOCK_TOKEN_SETS.join(', ')}.`);
   if (!DEFAULT_RULES.includes(eco.defaultRule)) e.push(`The default rule must be one of ${DEFAULT_RULES.join(', ')}.`);
   if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);

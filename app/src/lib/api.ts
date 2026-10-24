@@ -17,6 +17,18 @@ export interface ChainConfig extends ChainInfo {
   tokenFaucet: `0x${string}` | null;
   /** Test tokens by symbol (tUSD, tETH, tTSLA…): what physically settled notes deliver. */
   tokens: Record<string, `0x${string}`>;
+  /** Cross-chain collateral (docs/CROSS-CHAIN.md): home = this chain runs notes and holds receipts; asset = vault. */
+  crossChain?: CrossChainConfig | null;
+}
+export interface CrossChainReceipt { receipt: `0x${string}`; token: `0x${string}`; decimals: number; valuedAs: string | null; note?: string }
+export interface CrossChainConfig {
+  role: 'home' | 'asset';
+  router: `0x${string}`;
+  selector: string;
+  gateway?: `0x${string}`;
+  vault?: `0x${string}`;
+  home?: { chain: string; gateway: `0x${string}`; selector: string };
+  remotes?: Array<{ chain: string; selector: string; vault: `0x${string}`; receipts: Record<string, CrossChainReceipt> }>;
 }
 export interface AppConfig { chains: ChainConfig[]; ai: boolean }
 

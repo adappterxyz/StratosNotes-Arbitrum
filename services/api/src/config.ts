@@ -28,6 +28,19 @@ export const ChainCfg = z.object({
    * symbol (tUSD, tETH, tTSLA…), which physically settled notes deliver. From deployments/<chain>.json. */
   tokenFaucet: addr.optional(),
   tokens: z.record(addr).default({}),
+  /**
+   * Cross-chain collateral (docs/CROSS-CHAIN.md), passed to the app as is: on the home chain the gateway and each
+   * asset chain's vault and receipts; on an asset chain its vault and the home gateway.
+   */
+  crossChain: z.object({
+    role: z.enum(['home', 'asset']), router: addr, selector: z.string().regex(/^\d+$/),
+    gateway: addr.optional(), vault: addr.optional(),
+    home: z.object({ chain: z.string(), gateway: addr, selector: z.string() }).optional(),
+    remotes: z.array(z.object({
+      chain: z.string(), selector: z.string(), vault: addr,
+      receipts: z.record(z.object({ receipt: addr, token: addr, decimals: z.number().int(), valuedAs: z.string().nullable(), note: z.string().optional() })),
+    })).optional(),
+  }).optional(),
 });
 export type ChainCfg = z.infer<typeof ChainCfg>;
 

@@ -4,6 +4,7 @@ import { CASH_ASSET, PHASE_LABEL } from '@sn/sdk';
 import { useAddress, useChains, useSigner } from '../lib/chains';
 import { errText, fmtMoney } from '../lib/format';
 import { usePortfolio } from '../lib/live';
+import { RedeemOnRobinhood } from '../components/CrossChainCollateral';
 
 export default function Portfolio() {
   const address = useAddress();
@@ -29,6 +30,7 @@ export default function Portfolio() {
 
   return (
     <main className="page">
+      <RedeemOnRobinhood />
       <div className="page-head"><div><h1>Portfolio</h1><p>Notes you hold or issued, and the cash each one owes you: coupons and redemptions for holders, the subscriptions raised for issuers.</p></div></div>
       {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text} {msg.tx && msg.explorer && <a href={`${msg.explorer}/tx/${msg.tx}`} target="_blank" rel="noreferrer">View transaction</a>}</div>}
       {positions.length === 0 ? (

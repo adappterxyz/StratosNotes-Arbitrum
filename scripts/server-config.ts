@@ -39,6 +39,19 @@ const REAL_STOCKS: Record<string, Record<string, string>> = {
     NFLX: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',
   },
 };
+/** Cross-chain collateral (deployments/crosschain-testnet.json): receipts are tokens on the home chain; both
+ * sides get the addresses the app needs to lock, follow and redeem. */
+type CrossChain = { home: { chain: string; selector: string; router: string; gateway: string }; remotes: Array<{ chain: string; selector: string; router: string; vault: string; receipts: Record<string, { receipt: string; token: string; decimals: number; valuedAs: string | null }> }> };
+const XC: CrossChain | null = existsSync('deployments/crosschain-testnet.json') ? JSON.parse(readFileSync('deployments/crosschain-testnet.json', 'utf8')) : null;
+const receiptsOn = (key: string) => (XC && XC.home.chain === key
+  ? Object.fromEntries(XC.remotes.flatMap(r => Object.entries(r.receipts).map(([sym, v]) => [sym, v.receipt]))) : {});
+const crossChainOn = (key: string) => {
+  if (!XC) return null;
+  if (XC.home.chain === key) return { role: 'home', gateway: XC.home.gateway, router: XC.home.router, selector: XC.home.selector,
+    remotes: XC.remotes.map(r => ({ chain: r.chain, selector: r.selector, vault: r.vault, receipts: r.receipts })) };
+  const r = XC.remotes.find(x => x.chain === key);
+  return r ? { role: 'asset', vault: r.vault, router: r.router, selector: r.selector, home: { chain: XC.home.chain, gateway: XC.home.gateway, selector: XC.home.selector } } : null;
+};
 const api = {
   allowedOrigins: [SITE],
   trustProxy: true,
@@ -47,7 +60,8 @@ const api = {
     key: c.key, rpc: c.rpc, engine: c.d.engine, lens: c.d.lens, fromBlock: c.d.block,
     // Cash is Paxos's testnet USDG (docs.paxos.com/guides/stablecoin/usdg/testnet); tUSD stays for older notes.
     stablecoin: { symbol: 'USDG', address: USDG[c.key], decimals: 6 },
-    tokenFaucet: c.d.faucet, tokens: { ...c.d.tokens, USDG: USDG[c.key], ...(REAL_STOCKS[c.key] ?? {}) },
+    tokenFaucet: c.d.faucet, tokens: { ...c.d.tokens, USDG: USDG[c.key], ...(REAL_STOCKS[c.key] ?? {}), ...receiptsOn(c.key) },
+    ...(crossChainOn(c.key) ? { crossChain: crossChainOn(c.key) } : {}),
   })),
 };
 mkdirSync('deployments/server', { recursive: true });

@@ -53,7 +53,8 @@ export default function FaucetButton() {
 
   const ch = onChain!;
   const external = new Set(Object.keys(EXTERNAL_TOKENS[ch.key] ?? {}));
-  const ours = Object.keys(ch.tokens).filter(s => !external.has(s) && s !== TEST_CASH_TOKEN.token && s !== CASH_TOKEN.token);
+  // Receipts (TSLA.rh…) are minted by CCIP for collateral locked on another chain: never from the faucet.
+  const ours = Object.keys(ch.tokens).filter(s => !external.has(s) && !s.endsWith('.rh') && s !== TEST_CASH_TOKEN.token && s !== CASH_TOKEN.token);
   const symbols = [CASH_TOKEN.token, ...ours, ...external];
   // Where a token comes from when it is not ours to hand out.
   const outside = token === CASH_TOKEN.token ? { url: CASH_FAUCET, who: 'Paxos' }

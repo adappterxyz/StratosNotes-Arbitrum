@@ -13,7 +13,15 @@ import { errText, fmtDate, fmtMoney, fmtPct } from '../lib/format';
 const STATUS: Record<PeriodStatus, string> = {
   'upcoming': 'Upcoming', 'nothing-due': 'Nothing due', 'due': 'Due', 'paid': 'Paid', 'grace': 'In grace', 'missed': 'Missed: default', 'cancelled': '—',
 };
-const tokenName = (symbol: string) => (symbol === 'USD' ? 'USDG' : `t${symbol}`);
+const fallbackName = (symbol: string) => (symbol === 'USD' ? 'USDG' : `t${symbol}`);
+/** The token this note actually pledges for a collateral symbol, from its asset names ("Collateral TSLA.rh"). */
+function collateralTokenNames(def: WorkflowDef): (symbol: string) => string {
+  const tokens = def.assets.map(a => /^Collateral (.+)$/.exec(a.name)?.[1]).filter((t): t is string => !!t);
+  const base = (t: string) => t.replace(/\.rh$/, '').replace(/^t(?=[A-Z])/, '').replace(/^USDG$|^USD$/, 'USD');
+  return symbol => tokens.find(t => base(t) === symbol) ?? fallbackName(symbol);
+}
+/** Receipts (TSLA.rh) stand for tokens locked on Robinhood Chain. */
+const remoteNote = (token: string) => (token.endsWith('.rh') ? `${token.slice(0, -3)}, locked on Robinhood Chain` : token);
 const countdown = (t: number, now: number) => {
   const s = Math.round(t - now);
   if (s <= 0) return 'now';
@@ -27,6 +35,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
   e: NoteEconomics; state: NoteState; def: WorkflowDef; issuer: string; sym: string; now: number; onDone: () => void;
 }) {
   const me = useAddress();
+  const tokenName = collateralTokenNames(def);
   const { byKey } = useChains();
   const signer = useSigner();
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -89,7 +98,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
             <tbody>
               {e.collateral.map(c => (
                 <tr key={c.symbol}>
-                  <td>{tokenName(c.symbol)}</td>
+                  <td>{remoteNote(tokenName(c.symbol))}</td>
                   <td className="r num">{fmtMoney(c.amount, c.symbol === 'USD' ? 2 : 6)}</td>
                   <td className="r num">{c.price === null ? '—' : fmtMoney(c.price)}</td>
                   <td className="r num">{fmtPct(1 - c.haircut)} off</td>

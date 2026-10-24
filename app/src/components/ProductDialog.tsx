@@ -25,10 +25,10 @@ function NumField({ id, label, value, onChange, hint, step = 'any' }: { id: stri
 
 export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial<ProductParams>) => void }) {
   const use = productUses(p.productType);
-  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, stockTokens: p.stockTokens });
+  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, stockTokens: p.stockTokens, collateralChain: p.collateralChain });
   const robinhood = p.stockTokens === 'robinhood';
   /** The token a collateral chip pledges, or null when this note's token set has none. */
-  const colToken = (c: CollateralSymbol) => (c === 'USD' ? 'USDG' : collateralTokenOf(p, c)?.token ?? null);
+  const colToken = (c: CollateralSymbol) => (c === 'USD' && p.collateralChain !== 'robinhood' ? 'USDG' : collateralTokenOf(p, c)?.token ?? null);
   const delivered = p.underlyings.map(u => deliverableToken(p, u.symbol)?.token ?? `no ${u.symbol} token`).join('/');
   const eco = economicsOf(p);
   const colSyms = eco.collateral.map(c => c.symbol);
@@ -100,6 +100,20 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
         <span className="hint">{robinhood
           ? <>What a physically settled note delivers and stock collateral pledges: the real testnet TSLA and AMZN, which live on Robinhood Chain. Cross-chain vaults that keep them there while the note runs on Arbitrum are coming next; until then such a note issues on Robinhood Chain. Get the tokens from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a>. Other stocks use test tokens.</>
           : 'Our own test tokens, available from the faucet on every network here.'}</span>
+      </div>
+      <div className="field wide">
+        <label htmlFor="pd-colchain">Collateral held on</label>
+        <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
+          const v = e.target.value as 'note' | 'robinhood';
+          // Robinhood Chain holds USDG, TSLA and AMZN: keep only collateral that can be locked there.
+          set({ collateralChain: v, ...(v === 'robinhood' ? { collateral: (p.collateral ?? []).filter(c => ['USD', 'TSLA', 'AMZN'].includes(c.symbol)) } : {}) });
+        }}>
+          <option value="note">The note's own chain (pledged into the note)</option>
+          <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>
+        </select>
+        <span className="hint">{p.collateralChain === 'robinhood'
+          ? 'The note runs on Arbitrum Sepolia; you lock USDG, TSLA or AMZN in the vault on Robinhood Chain and pledge the receipts Chainlink CCIP credits to you (about 15–25 minutes per message). The tokens never leave Robinhood Chain; on a default holders redeem their share there.'
+          : 'Pledged straight into the note on the network you issue on.'}</span>
       </div>
       {use.protection && <NumField id="pd-prot" label="Protection %" value={p.protectionPct} onChange={v => set({ protectionPct: v })} />}
       {use.protection && <NumField id="pd-part" label="Participation %" value={p.participationPct} onChange={v => set({ participationPct: v })} />}

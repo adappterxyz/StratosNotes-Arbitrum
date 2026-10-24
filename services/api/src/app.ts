@@ -139,7 +139,7 @@ export function createApp(deps: AppDeps) {
     chains: config.chains.map(ch => ({
       ...(CHAINS[ch.key] ?? { key: ch.key, family: 'evm', name: ch.key, testnet: true, cre: false }),
       rpc: ch.rpc, engine: ch.engine.toLowerCase(), lens: ch.lens.toLowerCase(), fromBlock: ch.fromBlock,
-      stablecoin: ch.stablecoin, faucet: !!ch.faucet, tokenFaucet: ch.tokenFaucet ?? null, tokens: ch.tokens,
+      stablecoin: ch.stablecoin, faucet: !!ch.faucet, tokenFaucet: ch.tokenFaucet ?? null, tokens: ch.tokens, crossChain: ch.crossChain ?? null,
     })),
     ai: !!deps.ai,
   }));

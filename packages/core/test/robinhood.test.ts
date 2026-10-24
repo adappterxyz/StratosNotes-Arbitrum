@@ -57,3 +57,24 @@ describe("Robinhood Chain's own stock tokens", () => {
     }
   });
 });
+
+describe('collateral locked on Robinhood Chain (cross-chain receipts)', () => {
+  const phoenix: ProductParams = {
+    ...EXAMPLE_PRODUCTS.phoenix, name: 'Phoenix on TSLA, collateral on Robinhood', underlyings: [FEEDS.TSLA],
+    collateralChain: 'robinhood', collateral: [{ symbol: 'TSLA', haircutPct: 60 }, { symbol: 'USD', haircutPct: 100 }],
+  };
+  it('pledges the receipts minted on Arbitrum, valued like the token itself', () => {
+    expect(collateralTokenOf(phoenix, 'TSLA')).toEqual({ token: 'TSLA.rh', decimals: 18 });
+    expect(collateralTokenOf(phoenix, 'USD')).toEqual({ token: 'USDG.rh', decimals: 6 });
+    expect(validateProductParams(phoenix)).toEqual([]);
+    const tokens = instantiateProduct(phoenix).assets.map(a => a.token);
+    expect(tokens).toContain('TSLA.rh');
+    expect(tokens).toContain('USDG.rh');
+  });
+  it('refuses collateral that cannot be locked or priced there', () => {
+    expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'ETH', haircutPct: 70 }] }).join(' ')).toMatch(/can't be locked on Robinhood/);
+  });
+  it('leaves notes without the option (and their template ids) unchanged', () => {
+    expect(collateralTokenOf({}, 'USD')).toEqual(collateralTokenOf({ collateralChain: 'note' }, 'USD'));
+  });
+});
