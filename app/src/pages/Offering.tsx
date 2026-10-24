@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { isAddress } from 'viem';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Info, Radio, ShieldCheck } from 'lucide-react';
 import { dec, defToBpmn, instantiateProduct, SCALE } from '@sn/core';
-import { CASH_ASSET, headline, NOTE_ASSET, noteView, PHASE_LABEL, positionOf } from '@sn/sdk';
+import { CASH_ASSET, NOTE_ASSET, noteView, PHASE_LABEL, positionOf } from '@sn/sdk';
 import TasksPanel from '../components/TasksPanel';
 import EconomicsPanel from '../components/EconomicsPanel';
 import HoldersPanel from '../components/HoldersPanel';
@@ -15,6 +15,10 @@ import { plainTerms } from '../lib/plain';
 import { useAddress, useChains, useSigner, cashSymbol } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
+import { CurrentState } from '../components/NoteState';
+import { AssetIcon, AssetStack } from '../components/AssetIcon';
+import { FullTerms, Specs, YieldBlock } from '../components/Listing';
+import { listingOf } from '../lib/listing';
 
 export default function OfferingPage() {
   const { id: rawId } = useParams();
@@ -109,9 +113,8 @@ export default function OfferingPage() {
       <Link to="/" className="small row" style={{ gap: 4 }}><ArrowLeft className="i" />Marketplace</Link>
       <div className="page-head">
         <div className="stack" style={{ gap: 6 }}>
-          <span className="label">{o.label} · {o.underlyingText}{o.isin ? ` · ${o.isin}` : ''} · {chain?.cfg.name ?? s.chain}</span>
+          <span className="label row" style={{ gap: 8 }}><AssetStack syms={o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol)} size={18} label={false} />{listingOf(o.params, {}, sym).assets} · {chain?.cfg.name ?? s.chain}</span>
           <div className="row"><h1>{o.name}</h1><span className={`pill ${o.phase}`} data-phase={o.phase}><span className="dot" />{PHASE_LABEL[o.phase]}</span></div>
-          {o.hasTerms && <p className="small muted">{headline(o.params)}</p>}
         </div>
         <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
           <span className="pill plain" title="This page updates when the indexer sees anything happen to the note: a report, a subscription, a transfer.">
@@ -120,6 +123,16 @@ export default function OfferingPage() {
           {agent && <span className="pill plain" data-agent={o.reports.last ?? ''} title="Who submitted this note's price reports: Chainlink CRE through its forwarder, or the fallback keeper where CRE cannot write"><ShieldCheck className="i" style={{ width: 12, height: 12 }} />{agent}</span>}
         </div>
       </div>
+
+      {o.hasTerms && (
+        <section className="card plain-sum" aria-label="In short">
+          <YieldBlock o={o} cash={sym} big />
+          <Specs o={o} cash={sym} now={now} />
+        </section>
+      )}
+      {o.hasTerms && <FullTerms o={o} cash={sym} />}
+
+      <CurrentState o={o} now={now} sym={sym} units={mine && mine.units > 0 ? mine.units : null} />
 
       <div className="two note-layout">
         <div className="stack">
@@ -141,7 +154,7 @@ export default function OfferingPage() {
                       const last = u.observed[u.observed.length - 1];
                       return (
                         <tr key={u.symbol}>
-                          <td>{u.symbol}/USD <span className="xs dim" title={`Chainlink feed on ${u.feedChain}: ${u.feed}`}>Chainlink</span></td>
+                          <td><span className="row" style={{ gap: 6, display: 'inline-flex' }}><AssetIcon sym={u.symbol} size={18} />{u.symbol}/USD</span> <span className="xs dim" title={`Chainlink feed on ${u.feedChain}: ${u.feed}`}>Chainlink</span></td>
                           <td className="r num">{u.strike === null ? '—' : fmtPrice(u.strike)}</td>
                           <td className="r num">{last === undefined ? '—' : fmtPrice(last)}</td>
                           <td className="r num">{last === undefined || u.strike === null ? '—' : fmtPct(last / u.strike)}</td>
