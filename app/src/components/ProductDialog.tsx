@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
-  COLLATERAL_SYMBOLS, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, STOCK_TOKEN_FAUCETS, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses,
+  COLLATERAL_SYMBOLS, REMOTE_COLLATERAL, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, STOCK_TOKEN_FAUCETS, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses,
   simulatePerf, totalPerUnit, validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from './PayoffChart';
@@ -106,7 +106,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
         <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
           const v = e.target.value as 'note' | 'robinhood';
           // Robinhood Chain holds USDG, TSLA and AMZN: keep only collateral that can be locked there.
-          set({ collateralChain: v, ...(v === 'robinhood' ? { collateral: (p.collateral ?? []).filter(c => ['USD', 'TSLA', 'AMZN'].includes(c.symbol)) } : {}) });
+          set({ collateralChain: v, ...(v === 'robinhood' ? { collateral: (p.collateral ?? []).filter(c => !!REMOTE_COLLATERAL.robinhood[c.symbol]) } : {}) });
         }}>
           <option value="note">The note's own chain (pledged into the note)</option>
           <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>

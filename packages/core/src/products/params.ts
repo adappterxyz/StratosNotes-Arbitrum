@@ -97,7 +97,7 @@ export interface ProductParams {
   /**
    * Where the collateral is held (docs/CROSS-CHAIN.md). Absent or 'note': the tokens are pledged into the note on
    * its own chain. 'robinhood': the issuer locks USDG, TSLA or AMZN in the vault on Robinhood Chain and pledges the
-   * receipts (USDG.rh, TSLA.rh, AMZN.rh) that Chainlink CCIP mints on Arbitrum; they are valued with the same
+   * receipts (USDG.rh, TSLA.rh, AMZN.rh, and tETH.rh… for the test tokens) that Chainlink CCIP mints on Arbitrum; they are valued with the same
    * Chainlink feed and haircut as the token itself. Only for notes on Arbitrum Sepolia.
    */
   collateralChain?: CollateralChain;
@@ -124,7 +124,12 @@ export type CollateralChain = 'note' | 'robinhood';
 /** Receipts on Arbitrum for collateral locked on Robinhood Chain (deployments/crosschain-testnet.json). NFLX has no
  * CRE-readable feed, so its receipt exists but is not offered as collateral. */
 export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
-  robinhood: { USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 } },
+  robinhood: {
+    USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 },
+    // notes.markets test tokens on Robinhood Chain testnet (no native token there yet), vaulted the same way.
+    ETH: { token: 'tETH.rh', decimals: 9 }, BTC: { token: 'tBTC.rh', decimals: 8 }, SOL: { token: 'tSOL.rh', decimals: 9 },
+    NVDA: { token: 'tNVDA.rh', decimals: 9 }, AAPL: { token: 'tAAPL.rh', decimals: 9 }, SPY: { token: 'tSPY.rh', decimals: 9 },
+  },
 };
 
 export type DefaultRule = 'cap-at-owed' | 'all-to-holders';

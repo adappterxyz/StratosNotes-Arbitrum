@@ -71,8 +71,9 @@ describe('collateral locked on Robinhood Chain (cross-chain receipts)', () => {
     expect(tokens).toContain('TSLA.rh');
     expect(tokens).toContain('USDG.rh');
   });
-  it('refuses collateral that cannot be locked or priced there', () => {
-    expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'ETH', haircutPct: 70 }] }).join(' ')).toMatch(/can't be locked on Robinhood/);
+  it('locks the test tokens there too (tETH.rh…), valued by their Chainlink feeds', () => {
+    expect(validateProductParams({ ...phoenix, collateral: [{ symbol: 'ETH', haircutPct: 70 }] })).toEqual([]);
+    expect(collateralTokenOf({ collateralChain: 'robinhood' }, 'ETH')).toEqual({ token: 'tETH.rh', decimals: 9 });
   });
   it('leaves notes without the option (and their template ids) unchanged', () => {
     expect(collateralTokenOf({}, 'USD')).toEqual(collateralTokenOf({ collateralChain: 'note' }, 'USD'));

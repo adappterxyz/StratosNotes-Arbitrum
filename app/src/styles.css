@@ -136,6 +136,13 @@ textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: hsl(var(--accent-text)); box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .form-grid .wide { grid-column: 1 / -1; }
+/* Line fields up across a row: label, control and hint each share one row track, so a label that wraps to two lines
+   keeps every input in that row on the same line (labels sit just above their inputs). */
+.form-grid { align-items: start; }
+@supports (grid-template-rows: subgrid) {
+  .form-grid > .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: 4px; }
+  .form-grid > .field > label, .form-grid > .field > .lbl { align-self: end; }
+}
 
 /* ---- Surfaces ---------------------------------------------------------- */
 .card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; align-content: start; box-shadow: var(--shadow-card); }

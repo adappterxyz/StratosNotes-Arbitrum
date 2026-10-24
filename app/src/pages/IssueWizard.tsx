@@ -11,7 +11,7 @@ import {
   ArrowLeft, ArrowLeftRight, ArrowRight, Check, Flame, Layers, Repeat, ShieldCheck, Snowflake, Workflow,
 } from 'lucide-react';
 import {
-  check, COLLATERAL_SYMBOLS, collateralTokenOf, compileTemplate, DEFAULT_HAIRCUT, economicsOf, EXAMPLE_PRODUCTS, FEEDS,
+  check, COLLATERAL_SYMBOLS, REMOTE_COLLATERAL, collateralTokenOf, compileTemplate, DEFAULT_HAIRCUT, economicsOf, EXAMPLE_PRODUCTS, FEEDS,
   instantiateProduct, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, parseBpmn, PRODUCT_LABELS, productUses, validateProductParams,
   type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
 } from '@sn/core';
@@ -345,7 +345,7 @@ export default function IssueWizard() {
                 <span className="lbl">Held on</span>
                 <div className="seg" role="radiogroup" aria-label="Collateral held on">
                   <button role="radio" aria-checked={!remote} className={!remote ? 'active' : ''} onClick={() => set({ collateralChain: 'note' })}>The note's chain</button>
-                  <button role="radio" aria-checked={remote} className={remote ? 'active' : ''} onClick={() => set({ collateralChain: 'robinhood', collateral: (p.collateral ?? eco.collateral).filter(c => ['USD', 'TSLA', 'AMZN'].includes(c.symbol)) })}>
+                  <button role="radio" aria-checked={remote} className={remote ? 'active' : ''} onClick={() => set({ collateralChain: 'robinhood', collateral: (p.collateral ?? eco.collateral).filter(c => !!REMOTE_COLLATERAL.robinhood[c.symbol]) })}>
                     <img src={`${import.meta.env.BASE_URL}assets/robinhood-feather.svg`} alt="" width={14} height={14} />Robinhood Chain
                   </button>
                 </div>

@@ -49,6 +49,48 @@
           "decimals": 9,
           "valuedAs": "TSLA",
           "note": "our test token; used for the live CCIP proof"
+        },
+        "tETH.rh": {
+          "receipt": "0x23F5b683FE8B864BCD3ad5a759aca66664d6558e",
+          "token": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787",
+          "decimals": 9,
+          "valuedAs": "ETH",
+          "note": "notes.markets test token on Robinhood Chain testnet"
+        },
+        "tBTC.rh": {
+          "receipt": "0x14E46B0478F8F6C878812cfD816705305C3dAFec",
+          "token": "0xC6a42d2E0EB1Df749916Caebf64b231695D5eD1d",
+          "decimals": 8,
+          "valuedAs": "BTC",
+          "note": "notes.markets test token on Robinhood Chain testnet"
+        },
+        "tSOL.rh": {
+          "receipt": "0x852068FD481C2341b18DF76542E9A29778695bb9",
+          "token": "0xFC0Ae02839ec2736c9799985CF270e4B111D314a",
+          "decimals": 9,
+          "valuedAs": "SOL",
+          "note": "notes.markets test token on Robinhood Chain testnet"
+        },
+        "tNVDA.rh": {
+          "receipt": "0x9425E6b7Df28b6dde9005636A41aA879c4DC96cE",
+          "token": "0xbd162AeFA4Cd5763c41257636084d93F36DECFf5",
+          "decimals": 9,
+          "valuedAs": "NVDA",
+          "note": "notes.markets test token on Robinhood Chain testnet"
+        },
+        "tAAPL.rh": {
+          "receipt": "0x9b8f323a3FD7f031491031A2c734e686Bd7DE6F2",
+          "token": "0x40153C9fA6BEB2aa4E4A8B40385CDa896008F2b2",
+          "decimals": 9,
+          "valuedAs": "AAPL",
+          "note": "notes.markets test token on Robinhood Chain testnet"
+        },
+        "tSPY.rh": {
+          "receipt": "0xD236EC642bAF8DAc4Ae28E98540B3BA36BBaF3Cc",
+          "token": "0xBD16a9DD8EEb9948b64A15b334D16e1f65a8C582",
+          "decimals": 9,
+          "valuedAs": "SPY",
+          "note": "notes.markets test token on Robinhood Chain testnet"
         }
       }
     }
