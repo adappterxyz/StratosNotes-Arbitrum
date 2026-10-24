@@ -48,7 +48,7 @@ export function workerSource(c: ChainConfig): ChainSource {
 }
 
 export interface CronReport {
-  chains: Array<{ chain: string; steps: StepResult[]; error?: string; rpcCalls: number }>;
+  chains: Array<{ chain: string; engine: string; steps: StepResult[]; error?: string; rpcCalls: number }>;
   queries: number;
   sent: number;
   /** The notifier pass (null when it did not run: out of budget, or disabled). */
@@ -98,7 +98,7 @@ export async function runCron(opts: {
       rpc += x.src.calls - before;
     }
   }
-  for (const x of ingestors) report.chains.push({ chain: x.c.key, steps: x.steps, error: x.error, rpcCalls: x.src.calls });
+  for (const x of ingestors) report.chains.push({ chain: x.c.indexKey ?? x.c.key, engine: x.c.engine.toLowerCase(), steps: x.steps, error: x.error, rpcCalls: x.src.calls });
 
   // Housekeeping: live-update rows older than a day, expired rate-limit windows.
   const now = Math.floor((opts.now?.() ?? Date.now()) / 1000);

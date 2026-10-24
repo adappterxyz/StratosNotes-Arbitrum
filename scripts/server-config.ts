@@ -1,5 +1,7 @@
 /**
- * Write the server configs from deployments/<chain>.json:
+ * Write the server configs from deployments/<chain>.json (the current engines) and deployments/archive/v<N>/ (earlier
+ * engines whose notes stay on them, e.g. FlowEngine v3 next to v4: indexed and served as each chain's
+ * `legacyEngines`, with their own cross-chain pair from archive/v<N>/crosschain-testnet.json):
  *   deployments/server/indexer.json   services/indexer (INDEXER_CONFIG)
  *   deployments/server/api.json       services/api (API_CONFIG)
  *
@@ -7,23 +9,33 @@
  *
  * No secrets: DATABASE_URL, SN_PROXY_SECRET and the rest come from the environment (docs/DEPLOY.md).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const SITE = process.env.SITE ?? 'https://notes.markets';
 const CHAINS = [
   { key: 'arbitrum-sepolia', chainId: 421614, rpc: process.env.RPC_ARBITRUM_SEPOLIA ?? 'https://sepolia-rollup.arbitrum.io/rpc' },
   { key: 'robinhood-testnet', chainId: 46630, rpc: process.env.RPC_ROBINHOOD_TESTNET ?? 'https://rpc.testnet.chain.robinhood.com' },
 ];
-const deployed = CHAINS.filter(c => existsSync(`deployments/${c.key}.json`)).map(c => ({
-  ...c, d: JSON.parse(readFileSync(`deployments/${c.key}.json`, 'utf8')) as { engine: string; lens: string; block: number; faucet: string; tokens: Record<string, string> },
-}));
+type Deployment = { engine: string; lens: string; block: number; faucet: string; tokens: Record<string, string> };
+const read = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
+const deployed = CHAINS.filter(c => existsSync(`deployments/${c.key}.json`)).map(c => ({ ...c, d: read<Deployment>(`deployments/${c.key}.json`) }));
 if (!deployed.length) throw new Error('no deployments/<chain>.json yet: run scripts/deploy-testnets.sh');
+
+/** Earlier engines: deployments/archive/v<N>/<chain>.json, oldest first (the flat v1/v2 files predate the read model). */
+const ARCHIVE = 'deployments/archive';
+const versions = (existsSync(ARCHIVE) ? readdirSync(ARCHIVE) : [])
+  .map(d => /^v(\d+)$/.exec(d)).filter((m): m is RegExpExecArray => !!m).map(m => Number(m[1])).sort((a, b) => a - b);
+const legacyOf = (key: string, current: string) => versions
+  .filter(v => existsSync(`${ARCHIVE}/v${v}/${key}.json`))
+  .map(v => ({ version: v, d: read<Deployment>(`${ARCHIVE}/v${v}/${key}.json`), xc: existsSync(`${ARCHIVE}/v${v}/crosschain-testnet.json`) ? read<CrossChain>(`${ARCHIVE}/v${v}/crosschain-testnet.json`) : null }))
+  .filter(l => l.d.engine.toLowerCase() !== current.toLowerCase());
 
 const indexer = {
   chains: deployed.map(c => ({
     key: c.key, family: 'evm', chainId: c.chainId, rpc: c.rpc, engine: c.d.engine, startBlock: c.d.block,
     // Arbitrum chains: read 'finalized' would lag ~L1 finality; a few confirmations is the demo-friendly depth.
     confirmations: 3, maxRange: 2000, pollMs: 2000,
+    legacyEngines: legacyOf(c.key, c.d.engine).map(l => ({ engine: l.d.engine, startBlock: l.d.block, version: l.version })),
   })),
 };
 /** Paxos testnet USDG (6 decimals), verified on-chain 2026-10-24. */
@@ -42,10 +54,10 @@ const REAL_STOCKS: Record<string, Record<string, string>> = {
 /** Cross-chain collateral (deployments/crosschain-testnet.json): receipts are tokens on the home chain; both
  * sides get the addresses the app needs to lock, follow and redeem. */
 type CrossChain = { home: { chain: string; selector: string; router: string; gateway: string }; remotes: Array<{ chain: string; selector: string; router: string; vault: string; receipts: Record<string, { receipt: string; token: string; decimals: number; valuedAs: string | null }> }> };
-const XC: CrossChain | null = existsSync('deployments/crosschain-testnet.json') ? JSON.parse(readFileSync('deployments/crosschain-testnet.json', 'utf8')) : null;
-const receiptsOn = (key: string) => (XC && XC.home.chain === key
-  ? Object.fromEntries(XC.remotes.flatMap(r => Object.entries(r.receipts).map(([sym, v]) => [sym, v.receipt]))) : {});
-const crossChainOn = (key: string) => {
+const XC_CURRENT: CrossChain | null = existsSync('deployments/crosschain-testnet.json') ? read<CrossChain>('deployments/crosschain-testnet.json') : null;
+const receiptsOn = (key: string, xc = XC_CURRENT) => (xc && xc.home.chain === key
+  ? Object.fromEntries(xc.remotes.flatMap(r => Object.entries(r.receipts).map(([sym, v]) => [sym, v.receipt]))) : {});
+const crossChainOn = (key: string, XC: CrossChain | null = XC_CURRENT) => {
   if (!XC) return null;
   if (XC.home.chain === key) return { role: 'home', gateway: XC.home.gateway, router: XC.home.router, selector: XC.home.selector,
     remotes: XC.remotes.map(r => ({ chain: r.chain, selector: r.selector, vault: r.vault, receipts: r.receipts })) };
@@ -62,6 +74,13 @@ const api = {
     stablecoin: { symbol: 'USDG', address: USDG[c.key], decimals: 6 },
     tokenFaucet: c.d.faucet, tokens: { ...c.d.tokens, USDG: USDG[c.key], ...(REAL_STOCKS[c.key] ?? {}), ...receiptsOn(c.key) },
     ...(crossChainOn(c.key) ? { crossChain: crossChainOn(c.key) } : {}),
+    // Earlier engines: their notes render and their holders withdraw and settle with the engine's own address,
+    // lens and ABI; their cross-chain receipts (symbols shared with the current pair) and gateway–vault pair.
+    legacyEngines: legacyOf(c.key, c.d.engine).map(l => ({
+      engine: l.d.engine, lens: l.d.lens, fromBlock: l.d.block, version: l.version,
+      tokens: receiptsOn(c.key, l.xc),
+      ...(crossChainOn(c.key, l.xc) ? { crossChain: crossChainOn(c.key, l.xc) } : {}),
+    })),
   })),
 };
 mkdirSync('deployments/server', { recursive: true });

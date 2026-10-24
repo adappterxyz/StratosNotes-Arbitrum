@@ -123,8 +123,9 @@ export function createEdgeApp(deps: EdgeAppDeps) {
   });
 
   app.get('/api/health', async c => {
-    const rows = await deps.store().all<{ chain: string; cursor: number; head: number | null; updated_at: string }>('SELECT chain, cursor, head, updated_at FROM chains ORDER BY chain');
-    return c.json({ ok: true, chains: rows.map(r => ({ chain: r.chain, cursor: Number(r.cursor), head: r.head === null ? null : Number(r.head), updatedAt: r.updated_at })) });
+    // One row per indexed (chain, engine): `chain` is the indexer's key (e.g. arbitrum-sepolia-v3 for an earlier engine).
+    const rows = await deps.store().all<{ chain: string; engine: string; cursor: number; head: number | null; updated_at: string }>('SELECT chain, engine, cursor, head, updated_at FROM chains ORDER BY chain');
+    return c.json({ ok: true, chains: rows.map(r => ({ chain: r.chain, engine: r.engine, cursor: Number(r.cursor), head: r.head === null ? null : Number(r.head), updatedAt: r.updated_at })) });
   });
 
   app.get('/api/config', c => c.json({
@@ -132,6 +133,9 @@ export function createEdgeApp(deps: EdgeAppDeps) {
       ...(CHAINS[ch.key] ?? { key: ch.key, family: 'evm', name: ch.key, testnet: true, cre: false }),
       rpc: ch.rpc, engine: ch.engine.toLowerCase(), lens: ch.lens.toLowerCase(), fromBlock: ch.fromBlock,
       stablecoin: ch.stablecoin, faucet: !!ch.faucet, tokenFaucet: ch.tokenFaucet ?? null, tokens: ch.tokens, crossChain: ch.crossChain ?? null,
+      legacyEngines: ch.legacyEngines.map(l => ({
+        engine: l.engine.toLowerCase(), lens: l.lens.toLowerCase(), fromBlock: l.fromBlock, version: l.version, tokens: l.tokens, crossChain: l.crossChain ?? null,
+      })),
     })),
     ai: deps.ai,
   }));

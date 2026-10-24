@@ -205,8 +205,9 @@ each holder's storage cold, as it is in a real batch.)
     note token).
   - `NotesLens.snapshot` / `running`. The lens adds `position`, `claimable` and `holders`.
 - **v3 notes stay on the v3 engine.** Engines aren't upgradeable, and nothing migrates. The indexer keys notes by
-  engine address, so v3 notes keep their history and pages, read-only once the app moves to v4. New issuance goes
-  to v4.
+  engine address, so v3 notes keep their history and pages. Once the app moves to v4 they take no new
+  subscriptions, but holders still withdraw, transfer (the v3 ledger `transferUnits`) and settle them on the v3
+  engine. New issuance goes to v4.
 - **Old read-model rows are unaffected.** A v3 note never emits the new events.
 
 ## 9. v4 redeploy plan (testnets; needs approval, nothing deployed yet)
@@ -232,8 +233,16 @@ top up from https://faucet.testnet.chain.robinhood.com first.
    Arbitrum Sepolia (`ENGINE` = v4) and a RemoteVault on Robinhood Chain testnet. The cost is about 2M gas more per
    chain. The v3 gateway–vault pair stays as it is, so collateral locked for v3 notes is still released through its
    own gateway.
-4. **Read model.** Add the new engines to the D1 indexer as new chain rows (the indexer refuses a changed engine
-   under an existing key). Apply `web/migrations/0003_payouts.sql`. Keep the v3 rows so old notes stay visible.
+4. **Read model.** Each chain lists its earlier engines (`legacyEngines`, from `deployments/archive/v<N>/`, written
+   by `scripts/server-config.ts` into `deployments/server/{indexer,api}.json`). The D1 indexer keeps one `chains`
+   row per (chain, engine): the current engine under the chain key, v3 under `<chain>-v3`. On its first cron the
+   Worker moves the v3 row (indexed under the chain key until now) to `<chain>-v3` with its cursor and block
+   hashes, so nothing is re-indexed and v3 note ids (`<chain>:<v3 engine>:<pid>`) stay the same; then v4 indexes
+   from its deployment block under the chain key. Apply `web/migrations/0003_payouts.sql` and
+   `0004_engines.sql` (events get their engine, so a reorg on one engine never undoes the other's) first.
+   The app serves v3 notes with the v3 engine, lens and cross-chain pair (`packages/sdk/src/evm/abi-v3.ts` for
+   the ledger transfer): they show as "Earlier engine", take no new subscriptions, and holders withdraw and
+   settle there.
 5. **Workers and bots.** Deploy the Worker (`npm run deploy`, from a clean worktree of origin/main). Restart the CRE
    keeper config. Restart `sn-arb-issuer-<chain>` with push on (the default), and add a `PUSH_ONLY=1` payout keeper
    if the issuer bot isn't running for every note.

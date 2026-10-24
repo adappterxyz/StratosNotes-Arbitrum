@@ -7,9 +7,10 @@ import { applyMigrations, type D1Database } from '../src/d1';
 const DIR = join(__dirname, '../../../web/migrations');
 export const MIGRATIONS = readdirSync(DIR).filter(f => f.endsWith('.sql')).sort().map(name => ({ name, sql: readFileSync(join(DIR, name), 'utf8') }));
 
-export async function localD1(): Promise<{ db: D1Database; dispose: () => Promise<void> }> {
+/** `migrations`: the ones to apply (default all), e.g. to test a migration against data written before it. */
+export async function localD1(migrations = MIGRATIONS): Promise<{ db: D1Database; dispose: () => Promise<void> }> {
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("") } }', d1Databases: ['DB'] });
   const db = (await mf.getD1Database('DB')) as unknown as D1Database;
-  await applyMigrations(db, MIGRATIONS);
+  await applyMigrations(db, migrations);
   return { db, dispose: () => mf.dispose() };
 }
