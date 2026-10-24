@@ -7,7 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { connectorsForWallets, darkTheme, lightTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { injectedWallet } from '@rainbow-me/rainbowkit/wallets';
+import { injectedWallet, metaMaskWallet, rainbowWallet, trustWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, defineChain, http, type Chain, type PublicClient, type WalletClient } from 'viem';
 import { createConfig, deserialize, WagmiProvider, useAccount, type State } from 'wagmi';
@@ -106,6 +106,9 @@ interface Chains {
   wagmi: ReturnType<typeof createConfig>;
 }
 
+/** WalletConnect (Reown) project id: public, built into the page; its allowlist names notes.markets. */
+const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID ?? 'ca733b9845b6e338bba0d7bed1a4bb3c';
+
 const Ctx = createContext<Chains | null>(null);
 
 export function ChainsProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
@@ -130,10 +133,16 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     // connector. The generic "Browser Wallet" connector is only a fallback for a wallet that does not announce
     // itself: next to an announced MetaMask it is a second connector on the same provider, so one wallet showed
     // twice in the modal and its session (recent connector, disconnect flags) was split between the two ids.
-    // WalletConnect needs a project id; add it with VITE_WC_PROJECT_ID when mobile wallets are wanted.
-    const connectors = announcedWallets() > 0 ? [] : connectorsForWallets([{ groupName: 'Browser wallets', wallets: [injectedWallet] }], {
-      appName: 'notes.markets', projectId: import.meta.env.VITE_WC_PROJECT_ID ?? 'injected-only',
-    });
+    // WalletConnect (Reown project, public id; notes.markets is on its domain allowlist) adds mobile wallets: on a
+    // desktop with a browser wallet, one "WalletConnect" entry (a QR code for a phone wallet); on a phone browser
+    // with no wallet inside it, MetaMask, Rainbow and Trust by name (each opens its app to approve) plus WalletConnect.
+    const announced = announcedWallets();
+    const mobile = announced === 0 && typeof window !== 'undefined' && !(window as unknown as { ethereum?: unknown }).ethereum;
+    const groups = [
+      ...(announced === 0 && !mobile ? [{ groupName: 'Browser wallets', wallets: [injectedWallet] }] : []),
+      { groupName: mobile ? 'Wallet apps' : 'Phone wallets', wallets: mobile ? [metaMaskWallet, rainbowWallet, trustWallet, walletConnectWallet] : [walletConnectWallet] },
+    ];
+    const connectors = connectorsForWallets(groups, { appName: 'notes.markets', appUrl: 'https://notes.markets', projectId: WC_PROJECT_ID });
     const wagmi = createConfig({
       chains: chains as [Chain, ...Chain[]],
       connectors,
