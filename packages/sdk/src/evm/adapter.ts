@@ -13,6 +13,7 @@ import { depositAmounts, type InputValue, type PlanStep } from '../issue';
 import { NOTE_ASSET } from '../model';
 import { isBookStep, noteId, parseNoteId, type ChainInfo, type FieldValue, type NoteId, type NoteState } from '../model';
 import { decodeEngineLog, fieldValue } from './decode';
+import { ENGINE_V3, ENGINE_V4, flowEngineV3Abi, type EngineVersion } from './abi-v3';
 import { flowEngineAbi, noteTokenAbi, notesLensAbi } from './generated';
 import { bytesToHex, hexToBytes, tagOf } from './state';
 
@@ -24,6 +25,11 @@ export interface EvmDeployment {
   lens: Address;
   /** Block the engine was deployed at: where event scans start. */
   fromBlock?: bigint;
+  /**
+   * The engine's version (default 4). A v3 engine (an earlier deployment whose notes stay where they are) keeps
+   * units in its ledger, has no note tokens or pushed payouts, and takes no new issuance here.
+   */
+  version?: EngineVersion;
 }
 
 export function toEvmInput(v: InputValue): EvmInput {
@@ -36,6 +42,15 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
   private defs = new Map<string, Promise<WorkflowDef | null>>();
 
   constructor(readonly chain: ChainInfo, readonly client: PublicClient, readonly dep: EvmDeployment) {}
+
+  get version(): EngineVersion { return this.dep.version ?? ENGINE_V4; }
+  /** True for an earlier engine (v3): its notes are served, but new issuance goes to the current engine. */
+  get legacy(): boolean { return this.version < ENGINE_V4; }
+  /** Whether this adapter runs the note `id` (same chain and engine). */
+  runs(id: NoteId): boolean {
+    const p = parseNoteId(id);
+    return !!p && p.chain === this.chain.key && p.engine === this.dep.engine.toLowerCase();
+  }
 
   private pidOf(id: NoteId): bigint {
     const p = parseNoteId(id);
@@ -199,6 +214,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
   }
 
   async issue(w: WalletClient, req: IssueRequest, onProgress?: Progress) {
+    if (this.legacy) throw new Error(`New notes are issued on the current engine, not on v${this.version} (${this.dep.engine}).`);
     const issuer = w.account?.address;
     if (!issuer) throw new Error('Connect a wallet to issue.');
     const tx: string[] = [];
@@ -277,6 +293,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
 
   /** The ERC-20 of the note's units (FlowEngine v4); null for an issued asset without one. */
   async noteToken(id: NoteId): Promise<Address | null> {
+    if (this.version === ENGINE_V3) { this.pidOf(id); return null; } // units in the engine's ledger
     const t = await this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'assetTokenOf', args: [this.pidOf(id), BigInt(NOTE_ASSET)] });
     return t === zeroAddress ? null : t;
   }
@@ -301,6 +318,7 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
 
   /** A transfer of the note token: whole token base units (1 = 1e4 engine fixed point). */
   async transferUnits(w: WalletClient, id: NoteId, to: string, units: bigint, onProgress?: Progress): Promise<Submitted> {
+    if (this.version === ENGINE_V3) return this.transferUnitsV3(w, id, to, units, onProgress);
     if (units <= 0n || units % 10_000n !== 0n) throw new Error('Units move in steps of 0.000001.');
     const token = await this.noteToken(id);
     if (!token) throw new Error('This note has no unit token (it runs on an older engine).');
@@ -309,12 +327,23 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     return { tx: [r.transactionHash] };
   }
 
+  /** v3: units move inside the engine's ledger (fixed point), to a verified recipient when the engine requires one. */
+  private async transferUnitsV3(w: WalletClient, id: NoteId, to: string, units: bigint, onProgress?: Progress): Promise<Submitted> {
+    const pid = this.pidOf(id);
+    if (units <= 0n) throw new Error('Enter the units to transfer.');
+    if (!(await this.canReceive(to))) throw new Error('The recipient has no verified email: only verified addresses can receive units.');
+    const r = await this.send(w, { address: this.dep.engine, abi: flowEngineV3Abi, functionName: 'transferUnits', args: [pid, NOTE_ASSET, to as Address, units] }, 'Transfer units', onProgress);
+    return { tx: [r.transactionHash] };
+  }
+
+  /** What `owner` can withdraw of `asset` now. On v3 the engine's ledger balance is all there is (claims, no pushes). */
   async claimable(id: NoteId, owner: string, asset: number): Promise<bigint> {
     return this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'balanceOf', args: [this.pidOf(id), owner as Address, BigInt(asset)] });
   }
 
   async pushPayouts(w: WalletClient, id: NoteId, asset: number, count: number, onProgress?: Progress): Promise<Submitted & { left: number }> {
     const pid = this.pidOf(id);
+    if (this.version === ENGINE_V3) throw new Error('Notes on the v3 engine have no pushed payouts: holders withdraw them.');
     const args = [pid, asset, 2n ** 256n - 1n, BigInt(count)] as const;
     const { result } = await this.client.simulateContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'pushPayouts', args, account: w.account! });
     const r = await this.send(w, { address: this.dep.engine, abi: flowEngineAbi, functionName: 'pushPayouts', args: [...args] }, 'Push payouts', onProgress);

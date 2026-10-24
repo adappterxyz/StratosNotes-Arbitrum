@@ -1,4 +1,5 @@
 export * from './evm/abi';
+export * from './evm/abi-v3';
 export * from './evm/state';
 export * from './evm/reader';
 export * from './evm/generated';
