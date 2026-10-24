@@ -62,6 +62,7 @@ export default function App() {
   const { pathname } = useLocation();
   const { config } = useChains();
   const narrow = useNarrow();
+  const walletless = useWalletless();
   const [menu, setMenu] = useState(false);
   useEffect(() => { setMenu(false); }, [pathname, narrow]);
   useEffect(() => watchTables(), []);
@@ -88,7 +89,11 @@ export default function App() {
           </nav>
           <div className="right">
             {!narrow && extras}
-            <ConnectButton chainStatus="icon" accountStatus={narrow ? 'avatar' : 'address'} showBalance={false} />
+            {walletless ? (
+              <a className="btn primary" href={metaMaskLink()} title="Opens notes.markets inside the MetaMask app, where your wallet connects">Open in MetaMask</a>
+            ) : (
+              <ConnectButton chainStatus="icon" accountStatus={narrow ? 'avatar' : 'address'} showBalance={false} />
+            )}
             {narrow && (
               <button className="btn menu-btn" aria-label={menu ? 'Close menu' : 'Open menu'} aria-expanded={menu} aria-controls="appbar-sheet" onClick={() => setMenu(m => !m)}>
                 {menu ? <X className="i" /> : <Menu className="i" />}
@@ -118,4 +123,19 @@ export default function App() {
       )}
     </>
   );
+}
+
+/** A phone browser with no wallet inside it (Safari, Chrome on a phone): there is nothing to connect to, so the app
+ * offers to open itself in the MetaMask app's browser, where MetaMask connects like the extension does. */
+function useWalletless() {
+  const [v] = useState(() => typeof window !== 'undefined'
+    && !(window as unknown as { ethereum?: unknown }).ethereum
+    && window.matchMedia('(pointer: coarse)').matches);
+  return v;
+}
+
+/** MetaMask's universal link: on a phone it opens this page in the MetaMask app (or the app store if it is missing). */
+function metaMaskLink() {
+  const { host, pathname, search, hash } = window.location;
+  return `https://metamask.app.link/dapp/${host}${pathname}${search}${hash}`;
 }

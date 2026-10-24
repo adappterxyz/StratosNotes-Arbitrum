@@ -226,12 +226,7 @@ export function Faq() {
           <h2>Straight answers</h2>
         </div>
         <div className="faq" data-reveal>
-          {qa.map(([q, a], i) => (
-            <details key={q} open={i === 0}>
-              <summary>{q}</summary>
-              <p>{a}</p>
-            </details>
-          ))}
+          {qa.map(([q, a], i) => <FaqItem key={q} q={q} a={a} id={`faq-${i}`} first={i === 0} />)}
         </div>
       </div>
     </section>
@@ -239,3 +234,21 @@ export function Faq() {
 }
 
 export { APP_URL, ISSUE_URL };
+
+/** One FAQ answer that opens and closes with a height animation (grid rows 0fr to 1fr), the first one open. */
+function FaqItem({ q, a, id, first }: { q: string; a: string; id: string; first: boolean }) {
+  const [open, setOpen] = useState(first);
+  return (
+    <div className={`faq-item${open ? ' open' : ''}`}>
+      <h3 className="faq-q">
+        <button type="button" aria-expanded={open} aria-controls={`${id}-a`} id={`${id}-q`} onClick={() => setOpen(o => !o)}>
+          <span>{q}</span>
+          <span className="faq-icon" aria-hidden="true" />
+        </button>
+      </h3>
+      <div className="faq-a" id={`${id}-a`} role="region" aria-labelledby={`${id}-q`} aria-hidden={!open}>
+        <div className="faq-a-inner"><p>{a}</p></div>
+      </div>
+    </div>
+  );
+}
