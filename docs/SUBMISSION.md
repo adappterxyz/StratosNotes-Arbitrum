@@ -91,6 +91,19 @@ notes.markets = one Cloudflare Worker: landing, app, AI, email (Cloudflare Email
 | Robinhood Chain testnet | `0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D` | `0x0969cCc3e714A3Ac5a49b1cD8e07989B8C7CaA41` | `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10` | MockKeystoneForwarder `0x0b93082D9b3C7C97fAcd250082899BAcf3af3885` |
 | Arbitrum Sepolia | `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10` | `0x7544378876D780E69968CD67c3FEf9a294C23A0B` | `0x02BA09FB3409d310C1C8d145144c84e5bC5D09EE` | MockKeystoneForwarder `0xD41263567DdfeAd91504199b8c6c87371e83ca5d` |
 
+**Cross-chain collateral (live on testnet).** A note runs on Arbitrum Sepolia while its collateral stays locked on
+Robinhood Chain: HomeGateway `0xcdee38dEbC2eE59Ae486c0829ff6a0028a5eFaEC` (Arbitrum Sepolia), RemoteVault
+`0xfB8b030FF7C059665daB3aF2D77F72445E341300` (Robinhood testnet), receipts USDG.rh / TSLA.rh / AMZN.rh pledged as
+collateral. Chainlink CCIP carried a lock Robinhood → Arbitrum in **21 min 32 s**
+([`0x8111a057…`](https://ccip.chain.link/msg/0x8111a05781382b60b8ac56118a77c4a23e0536b8ed34978abe8cb7b97b8f3248))
+and the release back in **17 min 27 s** ([`0x48755825…`](https://ccip.chain.link/msg/0x487558251499ae682ba78305d4355a6bd42fcae05277e4a17e0974be96fa7cd3)), both executed automatically by the CCIP network. CRE checks every run that the vault still backs the receipts. Details:
+[CROSS-CHAIN.md](CROSS-CHAIN.md).
+
+**A note settled in real USDG.** `arbitrum-sepolia:0xaf84…7e10:2`: ETH/BTC worst-of phoenix, 100 units at 1 USDG,
+60 sold to two demo investors, 50 USDG collateral (ratio 50%), Paxos testnet USDG
+`0xFFC95faa3d63Cde504a05B567C600B78C0b41892`; strike 26 Oct 2026 12:00 UTC. Its issuer is the deployer key, as a
+temporary demo issuer.
+
 Earlier engines are archived in `deployments/archive/` (v1: the two completed CRE runs below; v2: before the
 security fixes).
 
@@ -168,14 +181,17 @@ verify email and attest on-chain, then issue, subscribe, fund and get paid throu
 
 ## Honest limits
 
-- **Not audited.** The engine is at 24,351 of 24,576 bytes; new features go into libraries.
+- **Not audited.** The engine is at 23,384 of 24,576 bytes; new features go into libraries or separate contracts.
+- **Cross-chain timing.** A CCIP message waits for the source chain's finality: about 21 minutes measured per message
+  between Robinhood testnet and Arbitrum Sepolia. Collateral must be locked well before a strike, and notes with
+  remote collateral need a grace period of hours, not minutes.
 - **CRE in the simulator.** CRE runs in Chainlink's simulator with `--broadcast`, writing real testnet transactions
   through the MockKeystoneForwarder, until we have DON deploy access. On public testnet RPCs the keeper reads note
   state at the latest block; the engine re-checks every step on-chain.
 - **No CRE on Robinhood mainnet** yet; a fallback keeper (off by default, labelled on every report) covers it until
   CRE supports it.
-- **Test assets.** tUSD, tETH, tTSLA and so on, from an on-chain faucet; real USDC and Robinhood stock tokens are
-  milestones 1–2.
+- **Test assets.** Cash is Paxos testnet USDG; Robinhood's own testnet TSLA and AMZN can be collateral and
+  delivery tokens; tETH, tBTC and the other stock tokens are ours, from an on-chain faucet.
 - **Equity feeds** follow NYSE hours with a 24 h heartbeat; notes accept a 4-day-old round so weekends don't block
   them.
 - **Margin** is checked at each observation, not continuously.

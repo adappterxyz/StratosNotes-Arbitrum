@@ -124,7 +124,7 @@ export default function Landing() {
             <div className="section-head" data-reveal>
               <span className="eyebrow">Why Arbitrum</span>
               <h2>Notes run on Arbitrum. The stocks stay on Robinhood Chain.</h2>
-              <p>Stock collateral and delivery stay on Robinhood Chain, where the stocks live, coordinated by Chainlink CCIP and CRE. That cross-chain link is coming next.</p>
+              <p>Stock collateral and delivery stay on Robinhood Chain, where the stocks live, coordinated by Chainlink CCIP and CRE: live on testnet, with each lock or release delivered in about 20 minutes.</p>
             </div>
             <div className="cards3">
               <div className="card" data-reveal>
@@ -140,7 +140,7 @@ export default function Landing() {
               <div className="card" data-reveal>
                 <div className="card-logo"><img src="/logos/chainlink.svg" alt="Chainlink" height={20} /></div>
                 <span className="tag">Prices and automation</span>
-                <p>Prices for ETH, BTC, SOL, TSLA, NVDA, AAPL, AMZN and SPY, checked on-chain. CCIP links the two chains (coming next).</p>
+                <p>Prices for ETH, BTC, SOL, TSLA, NVDA, AAPL, AMZN and SPY, checked on-chain. CCIP links the two chains (live on testnet).</p>
               </div>
             </div>
           </div>

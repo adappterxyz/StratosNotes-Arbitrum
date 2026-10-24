@@ -33,6 +33,21 @@ For recording the demo video, and for a live pitch. URLs are live on Robinhood C
 | 1:50 | Back to tab 1, "Built on" row | "Why Robinhood Chain: the stocks and their Chainlink prices are on one chain. Next: an audit, stock notes with Robinhood's own stock tokens, first issuers; mainnet once Chainlink CRE production access is in place." |
 | 2:00 | End | |
 
+## Cross-chain variant (collateral on Robinhood Chain)
+
+Do this at least 30 minutes before recording: CCIP delivery takes about 21 minutes per message.
+
+1. Issue → **Structured product** → **Collateral held on: Robinhood Chain**. Pick TSLA (and/or USDG) as collateral.
+2. Issue stage → **Lock collateral on Robinhood Chain testnet**: the wallet switches to Robinhood, approves, and
+   locks with the CCIP fee. The panel links the CCIP message.
+3. About 21 minutes later the TSLA.rh receipts show as credited; pledge them at Approve Terms on Arbitrum Sepolia.
+4. On camera: the note page lists "TSLA, locked on Robinhood Chain" under In escrow; open the CCIP explorer link.
+5. After the note ends, Portfolio → **Collateral receipts** → **Redeem on Robinhood Chain testnet** returns the real
+   tokens there (another ~21 minutes).
+
+Line: "The note runs on Arbitrum; the TSLA never leaves Robinhood Chain. Chainlink CCIP carries the lock and the
+release, and CRE checks every run that the vault still holds it."
+
 ## Fallbacks
 
 - **Wallet or faucet is slow:** skip the live issue and subscribe. Show tab 4 (the open note: collateral, funding

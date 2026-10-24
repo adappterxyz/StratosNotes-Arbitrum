@@ -6,8 +6,9 @@ stocks (TSLA, AMZN, NFLX) and Paxos USDG are locked in place in a vault on Robin
 carries the two value commands between the chains, and Chainlink **CRE** checks every run that each vault still
 backs what the note counts. Nothing is bridged and no wrapped token can be traded.
 
-Status: built and tested locally (Chainlink Local, mock routers) and on forks of both testnets with the real CCIP
-routers. **Not deployed to any testnet yet**; the deploy plan is at the end.
+Status: **live on testnet** (2026-10-24): HomeGateway on Arbitrum Sepolia, RemoteVault on Robinhood Chain testnet,
+wired and verified on-chain, with one lock and one release delivered by Chainlink CCIP (below). Built and tested
+locally (Chainlink Local, mock routers) and on forks of both testnets with the real routers first.
 
 ## How it works
 
@@ -133,7 +134,33 @@ through its CCIP router; the vault accepts RELEASE only from the home chain sele
   there, with the engine as the ledger of who is owed what.
 - Shortfall enforcement: CRE writes the vault backing into the note, so a seized vault opens a margin call.
 
-## Testnet deploy plan (for approval)
+## Testnet deployment (live)
+
+| Contract | Network | Address |
+|---|---|---|
+| HomeGateway | Arbitrum Sepolia | `0xcdee38dEbC2eE59Ae486c0829ff6a0028a5eFaEC` (deploy tx `0x7540437a…899e59c`, block 322236840) |
+| RemoteVault | Robinhood Chain testnet | `0xfB8b030FF7C059665daB3aF2D77F72445E341300` |
+| USDG.rh / TSLA.rh / AMZN.rh / NFLX.rh | Arbitrum Sepolia | `0x62f28cF2…1B67` / `0xcDb6f71F…AAc2` / `0x67c475C9…FDD9` / `0xD07f12Fa…48e9` |
+| tTSLA.rh (our test token, for the live proof) | Arbitrum Sepolia | `0x4A201075…de9B` |
+
+Full record: `deployments/crosschain-testnet.json`. Checked on-chain: code present (gateway 10,678 B, vault 6,734 B),
+owner is the deployer, the vault's home selector and gateway and the gateway's remote vault (gas limit 300k) match,
+the five tokens are allowed in the vault, and each receipt has the right decimals, gateway and remote token. Routers
+match Chainlink's CCIP API (`/api/ccip/v1/chains`).
+
+### Live CCIP proof
+
+The deployer acted as a temporary demo issuer and used our own test token (tTSLA, 9 decimals) on Robinhood, since
+the faucet-only tokens need a browser.
+
+| Leg | Source tx | CCIP message | Delivered | Time |
+|---|---|---|---|---|
+| LOCK 10 tTSLA, Robinhood → Arbitrum | `0x9d40acc3bc4e1707db95d6b48535e19e7a7f84ff824bb471dc037e9e08fd2d37` (block 141642720) | [`0x8111a057…3248`](https://ccip.chain.link/msg/0x8111a05781382b60b8ac56118a77c4a23e0536b8ed34978abe8cb7b97b8f3248) | `0xa960b6c3128d9879a62e69580cf9dee75a3c8680dbcbadcf04fb762ac882b8bc`: 10 tTSLA.rh minted | **1,292 s (21 min 32 s)**, executed automatically by the CCIP network |
+| RELEASE 10 tTSLA.rh, Arbitrum → Robinhood | `0x1506ac86d61d3e5639b34e14cdeef8cb7eb682cbc67ad19a79ff228cf643efc5` (block 322242530) | [`0x48755825…a7cd3`](https://ccip.chain.link/msg/0x487558251499ae682ba78305d4355a6bd42fcae05277e4a17e0974be96fa7cd3) | `0x488a6fe75a57936c7123abc49d13025c1a1efecdbaa00cedd8d2d378a64ba39a`: vault released 10 tTSLA to the sender | **1,047 s (17 min 27 s)**, executed automatically |
+
+Times are source-block to destination-block timestamps. Neither message needed manual execution. Fees paid in native ETH: lock 0.0000674 ETH (Robinhood), release 0.0000504 ETH (Arbitrum Sepolia).
+
+## Testnet deploy plan (as approved and run)
 
 Order (script: `packages/evm-engine/script/DeployCrossChain.s.sol`):
 

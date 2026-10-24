@@ -167,5 +167,39 @@
         }
       ]
     }
-  ]
+  ],
+  "crossChain": {
+    "network": {
+      "home": "arbitrum-sepolia",
+      "asset": "robinhood-testnet"
+    },
+    "contracts": {
+      "gateway": "0xcdee38dEbC2eE59Ae486c0829ff6a0028a5eFaEC",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300"
+    },
+    "messages": [
+      {
+        "leg": "lock",
+        "token": "tTSLA",
+        "amount": "10",
+        "sourceTx": "0x9d40acc3bc4e1707db95d6b48535e19e7a7f84ff824bb471dc037e9e08fd2d37",
+        "messageId": "0x8111a05781382b60b8ac56118a77c4a23e0536b8ed34978abe8cb7b97b8f3248",
+        "destTx": "0xa960b6c3128d9879a62e69580cf9dee75a3c8680dbcbadcf04fb762ac882b8bc",
+        "seconds": 1292,
+        "feeWei": "67434920869490",
+        "manualExecution": false
+      },
+      {
+        "leg": "release",
+        "token": "tTSLA.rh",
+        "amount": "10",
+        "sourceTx": "0x1506ac86d61d3e5639b34e14cdeef8cb7eb682cbc67ad19a79ff228cf643efc5",
+        "messageId": "0x487558251499ae682ba78305d4355a6bd42fcae05277e4a17e0974be96fa7cd3",
+        "destTx": "0x488a6fe75a57936c7123abc49d13025c1a1efecdbaa00cedd8d2d378a64ba39a",
+        "seconds": 1047,
+        "feeWei": "50444812129237",
+        "manualExecution": false
+      }
+    ]
+  }
 }
