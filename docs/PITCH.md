@@ -1,90 +1,148 @@
-# notes.markets: 3-minute pitch
+# notes.markets: 1:50 pitch video
 
-## Narrative
+Structured notes on Arbitrum, backed by collateral that stays on its own chain. Everything in this script is live on
+testnet today (2026-10-24). Nothing is on mainnet and nothing is audited yet.
 
-**Problem (0:00–0:30).** A structured note is a promise about dates and prices: "every quarter, if Tesla and NVIDIA
-both hold 70% of today's price, you get 3%; if both are up, you get your money back early." Investors use notes for
-income, protection, exposure and hedging. But only banks can issue them. Each one takes weeks of structuring, a
-calculation agent you have to trust and a paying agent, and you can only buy where the bank sells.
+Delivered Loom-style: the speaker talks over seven background slides. During slide 4 the demo screen recording is
+cut in (or the slide stays as the backdrop). Demo takes come from [DEMO-SCRIPT.md](DEMO-SCRIPT.md).
 
-**Why it matters (0:30–0:50).** Issuers with a balance sheet and a view (treasuries, market makers, funds) have no
-simple way to raise money this way. Investors on-chain get vaults with variable yields, not a term sheet with a
-schedule and an independent price check. Robinhood Chain puts tokenized stocks and their prices on-chain, so the
-missing piece is the note itself.
+Judging criteria, and the slide that serves each:
 
-**Solution (0:50–1:20).** notes.markets turns a note into a workflow the contract runs:
-- The issuer pledges collateral, locked in the note, and raises stablecoins from investors.
-- Chainlink CRE fixes the strike, observes every date and checks the collateral still covers the note.
-- The issuer funds each coupon by the payment date, plus a grace period of up to seven days. If they don't, the note
-  defaults and holders take the collateral, up to what they're owed.
-- Anyone can issue from a template, a term sheet, a sentence to the AI, or by drawing the workflow on a BPMN canvas.
+| Criterion | Slide |
+|---|---|
+| Real problem solving | 1 Problem, 2 Why it matters |
+| Innovation and creativity | 3 Solution, 4 Demo |
+| Smart contract quality | 5 Smart contracts (and the demo's on-chain receipts) |
+| Product-market fit | 2 Why it matters, 6 Product and GTM canvas |
+| Product and GTM canvas | 6 Product and GTM canvas |
+| Pitch quality | The whole script: problem, why it matters, solution, demo, in order |
 
-**Demo (1:20–2:10).** Follow [DEMO-SCRIPT.md](DEMO-SCRIPT.md) 0:25–1:50 in short form:
-1. The explorer, investor then issuer view.
-2. Issue from the TSLA/NVDA template with email verification.
-3. Subscribe.
-4. The completed note on Robinhood Chain testnet that paid exactly the reference payoff.
+## Script
 
-**Business (2:10–2:30).** Revenue options are an issuance fee in basis points, a per-period servicing fee (already a
-template step), and a template marketplace. The first customers are crypto-native issuers selling to crypto-native
-investors; retail comes later through a licensed distribution partner. `[[PRICING]]`
+| Time | Slide | Criterion | Backdrop | Say |
+|---|---|---|---|---|
+| 0:00–0:15 | 1 Problem | Real problem | A bank term sheet | "A structured note is a promise about dates and prices: 'if Tesla stays above 70%, you get 3% a quarter.' Today only banks can issue one. It takes weeks, a calculation agent you have to trust, and you buy where the bank sells." |
+| 0:15–0:25 | 2 Why it matters | Real problem, PMF | TSLA on Robinhood Chain; a DeFi vault | "Tokenized stocks are now on-chain, on Robinhood Chain. Their holders can't raise money against them without selling. And on-chain investors get vaults with variable yield, not a fixed term sheet." |
+| 0:25–0:40 | 3 Solution | Innovation | Diagram: Robinhood vault, CCIP, Arbitrum engine, CRE | "notes.markets lets anyone issue a note. The note runs on Arbitrum. The collateral stays on its own chain: real TSLA locked in a vault on Robinhood Chain, credited over Chainlink CCIP. Chainlink CRE fixes every price. At maturity the TSLA goes home automatically." |
+| 0:40–0:50 | 4 Demo | Innovation | Cut: marketplace, then Issue with TSLA collateral | "An issuer picks a template and pledges TSLA locked on Robinhood Chain." |
+| 0:50–1:00 | 4 Demo | PMF | Cut: phone wallet via WalletConnect subscribes | "An investor subscribes from a phone wallet. Units are an ERC-20. Only verified wallets can hold them." |
+| 1:00–1:08 | 4 Demo | Innovation | Cut: CRE strike transaction | "Chainlink CRE fixes the strike from Robinhood Chain's own Chainlink TSLA feed: 372.07." |
+| 1:08–1:15 | 4 Demo | Contract quality | Cut: Claim with receipt id; TSLA back on Robinhood with the CCIP link | "Investors claim with a receipt for every payment. The note redeemed, and the 3 TSLA arrived back on Robinhood Chain one hour after they were locked." |
+| 1:15–1:25 | 5 Smart contracts | Contract quality | Contract facts; `forge test` green | "One engine runs every note from a workflow definition. Every product is tested against a reference payoff. A coupon costs about 393k gas whether there are 10 holders or 1,000. 344 automated tests. Not audited yet: that is the first use of funds." |
+| 1:25–1:40 | 6 Product and GTM canvas | GTM canvas, PMF | One-page canvas | "We start with crypto-native issuers: treasuries, market makers, funds, and tokenized-stock holders who want to raise against their holdings. Investors are crypto-native yield seekers; retail comes later through a licensed partner. We charge 50 bps to issue and 25 bps a year to service, every fee on the term sheet, versus roughly 1–3% embedded in a bank note. We seed supply by issuing the first notes ourselves." |
+| 1:40–1:50 | 7 Team and raise | Team and ask | Founder photo, logos | "I'm Kwang, solo founder. I was involved in the MAS Project Guardian structured note pilot at Marketnode. Best Use of Chainlink CRE at TOKEN2049. Canton validators, for the institutional path. Raising USD 500k pre-seed: audit and in-house issuance." |
 
-**Why us (2:30–2:45).**
-- We built StratosFlow, a BPMN workflow builder, and narrowed it to structured notes at TOKEN2049, where we won
-  Chainlink's CRE track.
-- In the weeks since, we rebuilt it on Arbitrum with collateral, funding calls, default handling and email
-  verification on-chain.
-- `[[TEAM: names, roles, relevant background]]`
+Total: 1:50. Slide 7 is tight at 10 seconds; the slide text carries the detail. Record the demo takes first, then
+the voice-over.
 
-**Milestones and ask (2:45–3:00).**
-- **Milestones:** audit and hardening; stock notes on Robinhood Chain testnet with its own stock tokens; first
-  issuers; a compliance layer and distribution partners. Mainnet follows once Chainlink CRE production access and
-  the audit are in place ([MILESTONES.md](MILESTONES.md)).
-- **Ask:** `[[ASK: prize/grant amount and what it funds]]`, plus introductions to the Robinhood Chain team and to
-  issuers.
+### Slide text
+
+**1 Problem.** Bank-only issuance. Weeks to structure. A calculation agent you must trust. Sold only where the bank
+sells.
+
+**2 Why it matters.** Tokenized stocks are on-chain, but holders can't raise against them without selling.
+On-chain investors get variable-yield vaults, not term sheets.
+
+**3 Solution.** Notes on Arbitrum. Collateral stays on its own chain (Chainlink CCIP). Chainlink CRE fixes every
+price and automates every step. Released home automatically.
+
+**4 Demo.** Backdrop if the recording isn't cut in: the live proof timeline (lock 14:56, strike 372.07, redeemed,
+TSLA home 15:56).
+
+**5 Smart contracts.**
+- One engine (`FlowEngine` v4) runs every note from a content-addressed workflow definition.
+- Note units are ERC-20 tokens. Transfers only to wallets with a verified email, bound on-chain as a salted hash.
+- Payouts: one accumulator per note. Claim by default with a hash receipt per claim. The issuer can opt in to push.
+- Coupon report gas: 393,001 for 10 holders, 393,344 for 1,000.
+- Every product checked against a reference payoff. 344 automated tests (252 unit, 92 contract), all passing.
+- Custom errors, reentrancy guards, SafeERC20, two-step ownership, reports only from the Chainlink forwarder,
+  every oracle value bounds-checked.
+- Not audited yet.
+
+**6 Product and GTM canvas.** The one-page table at the top of [GTM-CANVAS.md](GTM-CANVAS.md). Pricing line:
+"50 bps to issue, 25 bps a year to service, every fee on the term sheet, versus roughly 1–3% embedded in a bank
+note." The 1–3% is an approximate industry range, not a sourced figure; say "roughly".
+
+**7 Team and raise.**
+- Kwang, solo founder.
+- Involved in the MAS Project Guardian tokenized structured note pilot at Marketnode.
+- Best Use of Chainlink CRE, TOKEN2049.
+- Canton Network validators, from the Canton accelerator: a path to institutional take-up later (the workflow
+  engine already compiles notes to Daml for Canton).
+- Raising USD 500k pre-seed: audit, and in-house issuance to bootstrap liquidity.
 
 ## Likely questions
 
 **Aren't these securities?**
-In most places, yes, when sold to retail. We start with professional and crypto-native participants, and the
-roadmap adds per-note allowlists, a KYC partner and legal review per market before any retail launch. We don't claim
-the testnet product is cleared for retail. `[[LEGAL]]`
+In most places, yes, when sold to retail. We start with professional and crypto-native participants. Retail comes
+through a licensed distribution partner, with per-note allowlists, KYC and legal review per market. The testnet
+product is not cleared for retail. `[[LEGAL]]`
 
-**Why trust the oracle?**
-Prices come from Chainlink feeds, written by a Chainlink CRE workflow through Chainlink's forwarder. The contract only
-accepts reports from the forwarder and bounds-checks every value. Each report on a note shows whether CRE or our
-fallback keeper made it. Today CRE runs in Chainlink's simulator writing real testnet transactions; production needs
-CRE deploy access (milestone 1). CRE doesn't support Robinhood mainnet yet.
+**Why Arbitrum, if the stocks are on Robinhood Chain?**
+Arbitrum is the anchor. Every note lives in one engine there: its schedule, holders, payments and default rule.
+Collateral stays on the chain where it lives. Robinhood's TSLA is locked in a vault on Robinhood Chain and credited
+on Arbitrum over Chainlink CCIP. A note can count collateral from several chains at once. Investors and DeFi
+liquidity are on Arbitrum; the stocks are on Robinhood Chain. We don't make either move.
+
+**Is the collateral bridged? Can the receipt be traded?**
+No. The vault on Robinhood Chain holds the real TSLA. Arbitrum gets a receipt (TSLA.rh) that the note holds as
+collateral. When the note pays collateral out, the receipt is burned in the same transaction and a release is
+queued. CRE flushes the queue over CCIP and the vault pays the real token on Robinhood Chain. Nobody holds a
+receipt after a note ends. In the live run the TSLA was locked at 14:56 and back at 15:56.
+
+**Why trust the price?**
+Prices are Chainlink feeds. Crypto comes from Ethereum mainnet feeds. Stocks come from Robinhood Chain's own
+Chainlink feeds. CRE has no EVM read for Robinhood Chain yet, so it reads those feeds with an HTTP JSON-RPC call:
+every node asks the RPC itself and the DON must agree on the decoded readings. That adds trust in the RPC endpoint,
+which a direct EVM read would not need; we switch when CRE supports the chain. The engine accepts reports only from
+the forwarder and bounds-checks every value. Each report shows whether CRE or our fallback keeper wrote it.
+
+**Is CRE really running?**
+Yes, through Chainlink's simulator with `--broadcast`, writing real testnet transactions (strike, observations,
+collateral checks, release flushes). Production needs CRE deploy access to the DON. That and the audit gate
+mainnet.
 
 **What if the issuer defaults?**
-The collateral is locked in the note and priced by Chainlink at every observation; a shortfall triggers a margin
-call. A missed payment, after the grace period, sends the collateral to holders pro rata, up to what they're owed,
-with the rest returned to the issuer. Holders are only as protected as the collateral ratio, which the issuer sets
-and the app shows prominently.
+The collateral is in the note's escrow and priced at every observation. A shortfall opens a margin call. A missed
+payment, after a grace period of up to seven days, sends the collateral to holders pro rata, up to what they are
+owed; the rest goes back to the issuer. Holders are only as safe as the collateral ratio the issuer sets, and the
+app shows it on every note.
 
-**Why on-chain?**
-The schedule, the collateral and the enforcement are code that anyone can check, instead of promises from a
-calculation agent and a paying agent. Settlement is instant, units are transferable, and a new product is a template,
-not a new legal and operations process.
+**How do investors get paid?**
+They claim. Payments accrue in the note and one claim collects all of them, with a receipt id anyone can recompute
+from the logs. The investor pays their own gas. An issuer can opt a note in to push payments to every wallet and
+pay that gas instead.
+
+**Why ERC-20 units?**
+Wallets show them, explorers index them and DeFi can integrate them. Transfers are verified-only: the receiver
+needs a current email attestation. Payout cost doesn't grow with the number of holders.
+
+**How do you make money?**
+50 bps of notional sold at book close, taken from the subscription proceeds. A servicing fee of 25 bps a year on
+outstanding notional, charged each payment period pro rata, minimum USD 50 per period. A USD 1M 12-month note
+earns USD 7,500. Our own bootstrap issuance pays no platform fee. The servicing fee maps to the servicing-fee step
+the templates already have; the issuance fee step is not built yet.
+
+**Where does the first supply come from?**
+From us. Part of the pre-seed funds in-house issuance, so the marketplace has notes to buy on day one. External
+issuers follow.
 
 **How is this different from options vaults or RWA platforms?**
-- **Options vaults** run rolling strategies with variable outcomes. A note has a fixed term sheet, a schedule and a
-  payoff agreed upfront.
-- **RWA platforms** mostly tokenize existing off-chain assets. Here the note is created and serviced on-chain,
-  with collateral enforcement and Chainlink as calculation agent.
-
-We don't name specific competitors without data.
+Options vaults run rolling strategies with variable outcomes. A note has a fixed term sheet and schedule agreed
+upfront. RWA platforms mostly tokenize existing off-chain assets. Here the note is created and serviced on-chain,
+with collateral enforcement and Chainlink as calculation agent. We don't name competitors without data.
 
 **Is the contract audited?**
-Not yet; that is milestone 1. Today: custom errors, reentrancy guards, safe ERC-20 transfers, two-step ownership,
-every product checked against a reference payoff, and attestation tests (replay, expiry, revocation). The engine is
-near the 24 KB size limit, so new logic goes into libraries.
+Not yet. The audit is the first use of the pre-seed.
 
-**Why Robinhood Chain and not just Arbitrum One?**
-Notes on stocks need the stocks and their prices together. Robinhood Chain has tokenized stocks, and Chainlink
-publishes equity feeds. We fix each stock on Robinhood Chain's own Chainlink feeds (and crypto on Ethereum's). Deploying to Arbitrum One itself, for crypto notes and
-DeFi liquidity, comes with mainnet, after production CRE access and an audit; until then we stay on testnets.
+**Who is the team?**
+Kwang, solo founder. Involved in the MAS Project Guardian tokenized structured note pilot at Marketnode. The
+earlier Solana build of this engine won Best Use of Chainlink CRE at TOKEN2049.
+
+**Why mention Canton?**
+We are Canton Network validators, from the Canton accelerator. Our workflow engine already compiles notes to Daml
+for Canton. That is a later path to institutional take-up, not part of this product today.
 
 ## Placeholders to fill
 
-`[[PRICING]]`, `[[TEAM]]`, `[[ASK]]`, `[[LEGAL]]`.
+`[[LEGAL]]`.

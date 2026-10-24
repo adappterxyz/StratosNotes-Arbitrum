@@ -1,17 +1,27 @@
 # notes.markets: Arbitrum Founder House submission
 
-**One line:** structured notes as secured funding. Anyone issues a note on stocks or crypto, raises stablecoins
-against collateral locked in the note, and funds each payment when it falls due. Chainlink CRE fixes every price and
-the contract enforces every payment; a missed payment hands the collateral to the holders. Live on **Robinhood Chain
-testnet** and **Arbitrum Sepolia**.
+**One line:** structured notes on Arbitrum, backed by collateral that stays on its own chain. Anyone issues a note
+on stocks or crypto and raises stablecoins against collateral: Robinhood's real TSLA, for example, stays locked in a
+vault on Robinhood Chain, credited on Arbitrum over Chainlink CCIP and released home automatically. Chainlink CRE
+fixes every price; the contract enforces every payment. Live on testnet: the notes run on **FlowEngine v4 on
+Arbitrum Sepolia**, with collateral vaults on **Robinhood Chain testnet**.
 
 - **Site:** https://notes.markets · **App:** https://notes.markets/app
 - **Code:** https://github.com/adappterxyz/StratosNotes-Arbitrum
-- **Pitch:** [PITCH.md](PITCH.md) · **Demo script:** [DEMO-SCRIPT.md](DEMO-SCRIPT.md) · **Product and GTM canvas:**
-  [GTM-CANVAS.md](GTM-CANVAS.md) · **Milestones:** [MILESTONES.md](MILESTONES.md)
-- **How the money works:** [NOTE-ECONOMICS.md](NOTE-ECONOMICS.md) · **Alerts and email binding:**
-  [NOTIFICATIONS.md](NOTIFICATIONS.md) · **Runbook:** [DEPLOY.md](DEPLOY.md)
-- **Earlier build:** Solana, TOKEN2049, won Chainlink's CRE track: https://sp.stratoslab.app
+- **Pitch video script:** [PITCH.md](PITCH.md) · **Demo video script:** [DEMO-SCRIPT.md](DEMO-SCRIPT.md) ·
+  **Product and GTM canvas:** [GTM-CANVAS.md](GTM-CANVAS.md) · **Milestones:** [MILESTONES.md](MILESTONES.md)
+- **Live cross-chain proof (2026-10-24):** 3 TSLA locked on Robinhood Chain backed note pid 2 on Arbitrum Sepolia,
+  CRE strike from Robinhood Chain's Chainlink TSLA feed, redeemed, TSLA back on Robinhood one hour after the lock:
+  [CROSS-CHAIN.md](CROSS-CHAIN.md) ("Live v2 proof").
+- **How the money works:** [NOTE-ECONOMICS.md](NOTE-ECONOMICS.md) · **ERC-20 notes and claims:**
+  [ERC20-NOTES.md](ERC20-NOTES.md) · **Alerts and email binding:** [NOTIFICATIONS.md](NOTIFICATIONS.md) ·
+  **Runbook:** [DEPLOY.md](DEPLOY.md)
+- **Team:** Kwang, solo founder; involved in the MAS Project Guardian tokenized structured note pilot at Marketnode.
+  Canton Network validators, from the Canton accelerator (a later path to institutions). Raising a USD 500k pre-seed for audits and in-house issuance.
+- **Earlier build:** Solana, TOKEN2049, won Best Use of Chainlink CRE: https://sp.stratoslab.app
+
+> Sections below the criteria table still describe the earlier v3 deployments and the first CRE runs; the current
+> engine and the cross-chain proof are in [CROSS-CHAIN.md](CROSS-CHAIN.md) and [ERC20-NOTES.md](ERC20-NOTES.md).
 
 ## Tracks targeted
 
@@ -30,12 +40,12 @@ access and an audit.
 
 | Criterion | Where to look |
 |---|---|
-| **Smart contract quality** | `packages/evm-engine`: one engine (`FlowEngine.sol`) runs every note from a content-addressed definition. Linked libraries for definition checks and email attestation. Custom errors, `ReentrancyGuard`, `SafeERC20`, `Ownable2Step`, `Pausable`. Reports accepted only from the forwarder, every oracle value bounds-checked, escrow nobody can withdraw early. 26 Foundry tests, including every product timeline checked against the reference payoff and attestation replay/expiry/revocation. Not audited yet (milestone 1). |
+| **Smart contract quality** | `packages/evm-engine`: one engine (`FlowEngine.sol`, v4) runs every note from a content-addressed definition. Note units are ERC-20s (`NoteToken`, verified-only transfers). Payouts through one accumulator: claim by default with a hash receipt per claim, push opt-in; a coupon report costs about 393k gas for 10 or 1,000 holders. Cross-chain collateral (`HomeGateway`, `RemoteVault`, `RemoteReceipt`) over Chainlink CCIP. Custom errors, `ReentrancyGuard`, `SafeERC20`, `Ownable2Step`, `Pausable`. Reports accepted only from the forwarder, every oracle value bounds-checked. 344 automated tests (252 unit, 92 contract), every product timeline checked against the reference payoff. Not audited yet (milestone 1). |
 | **Product-market fit** | Two sides with a clear job each (see the canvas): issuers raise funding against collateral; investors get defined outcomes on stocks and crypto. Beachhead: crypto-native issuers and investors, then retail on Robinhood Chain through a licensed partner. |
-| **Innovation and creativity** | Notes as BPMN workflows compiled to one on-chain engine; Chainlink CRE as calculation agent; payments enforced by escrow, funding deadlines, grace and default; a verified email bound on-chain as a salted hash; email alerts declared on the workflow's steps. |
+| **Innovation and creativity** | Notes as BPMN workflows compiled to one on-chain engine; collateral that stays on its own chain (Robinhood's TSLA locked on Robinhood Chain backs a note on Arbitrum, released home automatically); Chainlink CRE as calculation agent and automation; payments enforced by escrow, funding deadlines, grace and default; a verified email bound on-chain as a salted hash. |
 | **Real problem solving** | Bank-only issuance, a calculation agent you have to trust, and notes locked to one venue. |
-| **Pitch quality** | [PITCH.md](PITCH.md), [DEMO-SCRIPT.md](DEMO-SCRIPT.md); the explorer on notes.markets shows any note along any price path. |
-| **Product and GTM canvas** | [GTM-CANVAS.md](GTM-CANVAS.md). |
+| **Pitch quality** | [PITCH.md](PITCH.md) (1:50 pitch video, each beat tagged with its criterion), [DEMO-SCRIPT.md](DEMO-SCRIPT.md) (1:50 demo video). |
+| **Product and GTM canvas** | [GTM-CANVAS.md](GTM-CANVAS.md): one-page canvas produced during Founder House, with segments, pricing, channels, risks and milestones tied to the pre-seed. |
 
 ## The problem
 

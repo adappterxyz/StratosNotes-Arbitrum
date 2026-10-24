@@ -1,145 +1,165 @@
 # notes.markets: Product and GTM canvas
 
-A working canvas for Arbitrum Founder House. Everything marked `[[…]]` is for the team to fill in; nothing here is a
-claim about users or revenue we don't have yet.
+Produced during Arbitrum Founder House (October 2026). One page first, details below. Facts are what is live on
+testnet on 2026-10-24. Nothing here claims users or revenue we don't have yet.
 
-## 1. Problem
+## One page
 
-- **Investors** want defined outcomes on stocks and crypto: income while prices stay in a range, their money back with
-  some upside, exposure to a basket on set terms, or a hedge on what they hold. Structured notes do this, but today
-  they are bank products: sold to wealth clients where the bank sells them, with a calculation agent the investor has
-  to trust to decide every payout.
-- **Issuers** (anyone with a balance sheet and a market view) can't easily raise funding this way. Creating a note
-  takes weeks of structuring and legal work, a paying agent and a distribution channel.
-- **On-chain**, yield products are mostly vaults running rolling strategies. Few have a fixed term sheet, a schedule
-  agreed in advance, an independent calculation agent and enforceable collateral.
+| Block | notes.markets |
+|---|---|
+| **Problem** | Structured notes are bank-only: weeks to issue, a calculation agent you must trust, sold only where the bank sells. Holders of tokenized stocks can't raise money against them without selling. On-chain investors get variable-yield vaults, not a fixed term sheet. |
+| **Segments** | Issuers: crypto treasuries, market makers, funds, tokenized-stock holders. Investors: crypto-native yield seekers; retail later via a licensed partner. |
+| **Value: issuer** | Raise stablecoins today against collateral you keep on its own chain. Pay each coupon when due. No structuring desk, paying agent or calculation agent to hire. |
+| **Value: investor** | A payoff agreed before you buy, collateral behind it, Chainlink fixing every price, a receipt for every payment. |
+| **Solution** | One engine on Arbitrum runs every note. Collateral stays on its own chain (CCIP). Chainlink CRE automates strike, observations, collateral checks and releases. Notes are ERC-20s. |
+| **Unfair advantage** | Founder involved in the MAS Project Guardian tokenized structured note pilot at Marketnode. Best Use of Chainlink CRE at TOKEN2049. Cross-chain collateral live on testnet today. Canton Network validators (Canton accelerator): a later path to institutions. |
+| **Channels** | Direct issuer BD; Arbitrum DeFi integrations; Robinhood Chain ecosystem; in-house notes as the showcase. |
+| **Beachhead** | Crypto-native issuers selling to crypto-native investors, notes on Robinhood's tokenized stocks and on ETH/BTC. |
+| **Pricing** | Issuance 50 bps of notional sold. Servicing 25 bps a year on outstanding notional, per period, min USD 50 per period. In-house issuance pays no platform fee. |
+| **Key metrics** | Notional issued, notes issued, repeat issuers, subscribers per note, on-time funding rate, CRE report success. |
+| **Costs** | Audits, engineering, CRE and gas, Cloudflare, compliance. |
+| **Risks** | Regulation, oracle and CRE trust, liquidity. |
+| **Pre-seed** | USD 500k: audits, and in-house issuance to bootstrap liquidity. |
+
+## 1. Problem and jobs to be done
+
+**Problem**
+- A structured note turns a market view into an agreed outcome: income in a range, capital back with upside,
+  exposure on set terms, or a hedge. Only banks issue them today.
+- Issuing takes weeks of structuring, a paying agent, a calculation agent and a distribution channel.
+- Investors must trust the bank's calculation agent for every payout, and buy where the bank sells.
+- Tokenized stocks are now on-chain (Robinhood Chain). Their holders can't raise against them without selling or
+  bridging them away.
+- On-chain yield is mostly vaults with rolling strategies. Few have a fixed term sheet, a schedule, an independent
+  price source and enforced collateral.
+
+**Issuer jobs**
+- Raise stablecoins now against assets I hold, without selling or moving them.
+- Get paid for a market view by taking the other side of a defined payoff.
+- Offer clients a defined-outcome product without building a structuring desk.
+
+**Investor jobs**
+- Earn a known income while a stock or coin stays in a range.
+- Keep my capital with some upside.
+- Know that someone other than the issuer fixes the prices, and that collateral backs the payments.
 
 ## 2. Customer segments
 
 | Segment | Side | Why they'd use it | Reachable now? |
 |---|---|---|---|
-| Protocol treasuries, market makers, crypto funds | Issuer | Raise stablecoins against collateral they already hold, on terms they set, paying per period instead of up front | Yes: on-chain natives, Arbitrum ecosystem |
-| Crypto-native funds and DAOs with idle stablecoins | Investor | Defined-outcome yield or hedges on ETH/BTC and tokenized stocks, with collateral behind every payment | Yes |
-| Fintechs and brokers wanting a note shelf | Issuer / distributor | White-label issuance on a template, with Chainlink as calculation agent | Later: needs BD and compliance |
-| Retail on Robinhood Chain | Investor | Notes on the stocks they already hold or follow (TSLA, NVDA, AAPL, SPY) | Long term: needs the compliance layer (see risks) |
+| Crypto treasuries (protocols, DAOs) | Issuer | Raise stablecoins against tokens they hold, paying per period | Yes |
+| Market makers and crypto funds | Issuer | Monetize a view; fund a book against inventory | Yes |
+| Tokenized-stock holders | Issuer | Raise against TSLA, AMZN, AMD, PLTR on Robinhood Chain without selling; the stock never leaves its chain | Yes, on testnet |
+| Crypto-native yield seekers | Investor | Fixed term sheet, collateral behind every payment, Chainlink pricing | Yes |
+| Retail | Investor | Notes on stocks they follow | Later, through a licensed distribution partner |
 
-**Beachhead:** crypto-native issuers (treasuries, market makers, funds) selling to crypto-native investors, on
-Robinhood Chain and Arbitrum. Reasons:
-- Both sides are already on-chain and hold the collateral and stablecoins the product needs.
-- They can use the product without a retail distribution licence, which retail notes would need (see risks).
-- Notes on tokenized stocks are where Robinhood Chain is different from every other chain, and a crypto-native fund
-  is the most likely first buyer of one.
+## 3. Value proposition
 
-Retail on Robinhood Chain is the larger, longer-term audience, reached through a distribution partner once the
-compliance layer exists. `[[BEACHHEAD: confirm, name 3–5 target issuers]]`
-
-## 3. Jobs to be done
-
-**Issuer**
-- Raise stablecoins now against assets I hold, without selling them.
-- Express a market view I'm confident in and get paid for taking the other side.
-- Offer my clients a defined-outcome product without building a structuring desk.
-
-**Investor**
-- Earn a known income while a stock or coin stays in a range.
-- Keep my capital with some upside.
-- Get exposure to a stock or basket on defined terms.
-- Hedge a position I hold.
-- Know that someone other than the issuer decides the payouts, and that collateral backs them.
-
-## 4. Value proposition
-
-| Investor | Issuer |
+| Issuer | Investor |
 |---|---|
-| A result agreed before you buy, written into the contract | Funding today: subscription money is yours at once |
-| Chainlink CRE fixes every price; the contract pays automatically | No paying agent or calculation agent to hire: the engine and Chainlink do both |
-| Collateral locked in the note, margin-checked at every observation; if the issuer misses a payment, holders take it (up to what they're owed) | Pay as you go: fund each coupon when it falls due, with a 0–7 day grace period you set |
-| Email alerts on every payment and any default | Issue from a template in minutes; design your own on a BPMN canvas or with the AI |
-| Transfer units, withdraw payouts any time | Your terms: collateral assets, haircuts, ratio, settlement lag |
+| Subscription money is yours at once | The payoff is in the contract before you buy |
+| Collateral stays on its own chain: locked in a vault, credited over Chainlink CCIP, released home automatically | Collateral sits in the note's escrow, checked at every observation |
+| Fund each coupon when due, with a 0–7 day grace you set | Miss a payment and holders take the collateral, up to what they're owed |
+| No paying or calculation agent: the engine and Chainlink CRE do both | Chainlink CRE fixes every price from Chainlink feeds |
+| Issue from a template in minutes | Units are ERC-20s; claim payouts any time, with a hash receipt per claim |
+| Every fee on the term sheet | Email alerts at every step; WalletConnect for phone wallets |
+
+## 4. Solution (live on testnet)
+
+- **Anchor:** FlowEngine v4 on Arbitrum Sepolia runs every note: schedule, holders, payments, default rule.
+- **Collateral on its own chain:** Robinhood's TSLA locked in a vault on Robinhood Chain testnet, credited over
+  CCIP, burned and released home automatically when the note pays out. Live run: 3 TSLA locked 14:56, back 15:56.
+- **Chainlink CRE:** strike, observations, collateral checks and release flushes (simulator with `--broadcast`).
+  Stocks from Robinhood Chain's own Chainlink feeds (read over CRE HTTP); crypto from Ethereum mainnet feeds.
+- **ERC-20 notes:** verified-only transfers. Claim by default with a receipt; issuers can opt in to push. Coupon
+  report gas is flat, about 393k for 10 or 1,000 holders.
+- **Real assets only:** Paxos USDG and WETH on both chains; Robinhood's TSLA, AMZN, AMD, PLTR. BTC is synthetic
+  (price only).
+- **Identity:** verified email bound on-chain as a salted hash.
+- **Tests:** 344 automated (252 unit, 92 contract), all passing on 2026-10-24. Not audited yet.
 
 ## 5. Unfair advantage
 
-- **The engine runs any note as a workflow.** Notes are BPMN workflows compiled to one on-chain engine, so a new
-  product is a template, not a new audited contract. The same engine ran the Solana build (TOKEN2049, won Chainlink's
-  CRE track) and now runs on Arbitrum. The workflow tooling comes from StratosFlow, our BPMN workflow builder.
-- **Chainlink CRE is the calculation agent.** It writes every strike and observation through Chainlink's forwarder.
-  Each report is labelled on the note (CRE or fallback keeper).
-- **Payments are enforced, not promised:** escrowed collateral, funding deadlines, grace and default are all steps
-  the contract runs.
-- **Stocks are the differentiator.** We read Robinhood Chain's own Chainlink equity feeds (TSLA, AMZN, AMD, PLTR, NVDA, AAPL,
-  SPY, META, MSFT, GOOGL, COIN), so notes on stocks work today, fixed on the stocks' native chain.
+- **Domain experience.** Kwang was involved in the MAS Project Guardian tokenized structured note pilot at
+  Marketnode. He knows how institutions issue and service notes.
+- **Best Use of Chainlink CRE, TOKEN2049.** Won by the earlier Solana build of this engine.
+- **Canton Network validators, from the Canton accelerator.** The workflow engine already compiles notes to Daml
+  for Canton: a path to institutional take-up later, not part of this product today.
+- **Live cross-chain collateral.** A note on Arbitrum backed only by TSLA on Robinhood Chain ran end to end today.
+- **One engine, many products.** Notes are workflows compiled to one contract. A new product is a template, not a
+  new contract.
 
-## 6. Channels
+## 6. Channels and beachhead
 
-1. **Robinhood Chain ecosystem:** launch-partner programme, builder community, co-marketing for notes on stock
-   tokens.
-2. **Arbitrum DeFi:** list note units and integrate with lending, wallets and portfolio dashboards. Issuers who
-   already hold collateral on Arbitrum.
-3. **Direct issuer BD:** treasuries, market makers and funds; the first notes are issued with us.
-4. **Wallet and fintech partners:** a note shelf inside their apps (later).
-5. **Content:** the note explorer on notes.markets shows what a note does along any price path, for investors and
-   issuers. Public templates and worked examples.
+**Beachhead:** crypto-native issuers selling to crypto-native investors. Both already hold the collateral and
+stablecoins. Neither needs a retail distribution licence. Notes on tokenized stocks are what no other venue offers.
 
-## 7. Revenue model (options; levels to decide)
+| Channel | How |
+|---|---|
+| In-house issuance | We issue the first notes ourselves, so the marketplace has supply on day one and a track record. |
+| Direct issuer BD | Treasuries, market makers, funds, tokenized-stock holders. First external notes issued with us. |
+| Arbitrum DeFi | Note units as ERC-20s in wallets, dashboards, lending. |
+| Robinhood Chain ecosystem | Notes on Robinhood's stock tokens; co-marketing. |
+| Licensed distribution partner | Retail access once the compliance layer exists. |
+| Content | The explorer on notes.markets shows any note along any price path. |
 
-| Option | How | Already supported? |
-|---|---|---|
-| Issuance fee | `[[bps]]` of notional at issue | Needs a fee step at issuance |
-| Servicing fee | Per-period fee paid by the issuer with each coupon | Yes: the servicing-fee template has a paying-agent fee step |
-| Template marketplace | Template authors earn a share of issuance on their templates | Templates are signed by their author today; payment isn't built yet |
-| Distribution share | Revenue share with distribution partners | Commercial terms only |
+## 7. Pricing
 
-`[[PRICING: levels and which option first]]`
+**"50 bps to issue, 25 bps a year to service, every fee on the term sheet, versus roughly 1–3% embedded in a bank
+note."** The 1–3% is an approximate industry range, not a sourced figure.
+
+| Fee | Level | How it's charged | Built? |
+|---|---|---|---|
+| Issuance | 50 bps of notional sold | From subscription proceeds at book close | Not yet: needs a fee step at book close |
+| Servicing | 25 bps a year on outstanding notional | Each payment period, pro rata; minimum USD 50 per period | Maps to the servicing-fee step the templates already have |
+| In-house (bootstrap) issuance | No platform fee | — | — |
+
+**Worked example.** A USD 1M, 12-month note: USD 5,000 issuance plus USD 2,500 servicing = **USD 7,500** revenue.
+On-chain cost is a few dollars: a CRE report is about 393k gas, flat in the number of holders; CCIP is about
+0.00005–0.00007 ETH per lock or release.
 
 ## 8. Key metrics
 
-- Notes issued, and notional issued (per chain).
-- Subscribers per note; repeat subscribers.
-- Repeat issuers (second note within `[[n]]` days).
+- Notional issued and notes issued, per month.
+- Share of notional from external issuers vs in-house.
+- Repeat issuers; subscribers per note; repeat subscribers.
+- On-time funding rate; defaults and recovery per unit.
+- CRE report success rate; share of reports by the fallback keeper.
 - Time from opening the app to issuing a note.
-- Share of payments funded on time; defaults and their recovery per unit.
-- CRE report success rate; share of reports by fallback keeper.
-- `[[TARGETS: per metric, per milestone]]`
 
-## 9. Cost structure
+## 9. Costs
 
-- Engineering and maintenance (the team).
-- Security: audits of the engine and libraries before mainnet, and again after any engine change.
-- Chain gas: deployments, plus CRE report writes (measured 0.3–0.5M gas per report; up to about 5M for a default to 62
-  holders).
-- Chainlink CRE: production workflow costs once deployed to the DON `[[CRE pricing]]`.
-- Cloudflare: Workers Paid (site, API, D1, cron, email).
-- Compliance: KYC/allowlist provider and legal opinions per market `[[budget]]`.
+- Audits of the engine, libraries and cross-chain contracts, before mainnet and after engine changes.
+- Engineering (solo founder today).
+- Capital for in-house issuance (collateral and coupon funding).
+- Chain costs: CRE reports (~393k gas each), CCIP fees per lock and release.
+- Chainlink CRE production costs once on the DON.
+- Cloudflare (site, API, email).
+- Compliance: KYC/allowlist provider, legal opinions per market.
 
-## 10. Risks and regulation (candid)
+## 10. Risks
 
-- **Securities law.** In most jurisdictions structured notes sold to retail are securities. A retail launch needs a
-  licensed distributor, KYC and per-market legal review. Until then we target professional/crypto-native participants
-  and keep a compliance layer (allowlists, KYC partner) on the roadmap. `[[LEGAL: jurisdictions, counsel]]`
-- **Issuer credit risk.** Collateral is capped at what the issuer pledges and the ratio they set. A note with 20%
-  collateral can still lose holders money in a default. The app shows the ratio and coverage prominently; issuer
-  reputation and minimum ratios may be needed.
-- **Oracle and keeper risk.** Prices come from Chainlink feeds, and CRE runs today in Chainlink's simulator, writing
-  real testnet transactions. We stay on testnets until Chainlink grants CRE production (DON) access; mainnet also
-  waits on the audit. CRE doesn't support Robinhood mainnet yet; there, a fallback keeper would cover it, and every
-  report says which acted.
-- **Smart-contract risk.** The engine has not been audited yet; an internal security pass (static analysis,
-  invariant and fuzz tests) is in [SECURITY.md](SECURITY.md), and its fixes are deployed (v3). The engine is at
-  23,384 of 24,576 bytes, so new features need code moved into libraries.
-- **Testnet assets.** Notes use real testnet tokens only: Paxos USDG, each chain's WETH, Robinhood's stock tokens (our
-  own test tokens are retired). BTC is synthetic for now (priced, cash-settled).
+| Risk | What we do |
+|---|---|
+| **Regulation.** Structured notes are securities in most places when sold to retail. | Start with professional and crypto-native participants. Retail only through a licensed partner, with allowlists, KYC and legal review per market. `[[LEGAL]]` |
+| **Oracle and CRE trust.** CRE runs in the simulator today. Robinhood Chain feeds are read over HTTP JSON-RPC, which adds trust in the RPC endpoint. | Reports only from the forwarder; every value bounds-checked; each report labelled CRE or fallback. Mainnet waits for CRE production access; switch to a native EVM read when CRE supports Robinhood Chain. |
+| **Liquidity.** A marketplace with no notes or no buyers. | In-house issuance seeds supply. ERC-20 units for DeFi integration. |
+| **Issuer credit.** Holders are only as safe as the collateral ratio. | Ratio and coverage shown on every note; margin calls; default to holders. |
+| **Smart contracts.** Not audited. | Audit is the first use of funds. |
+| **Cross-chain timing.** About 21 minutes per CCIP lock, 18 per release. | Lock well before the strike; grace periods of hours for remote collateral. |
 
-## 11. Assumptions to test
+## 11. Milestones (pre-seed USD 500k)
 
-1. Crypto-native issuers will pledge collateral to raise funding through notes, rather than borrow on a lending
-   market. `[[test: interviews with n issuers]]`
-2. Investors value a fixed term sheet and enforced collateral over a vault's variable yield.
-3. Notes on tokenized stocks attract Robinhood Chain users more than crypto-only notes.
-4. A 0–7 day grace period and the cap-at-owed default rule feel fair to both sides.
-5. Template-based issuance takes under `[[x]]` minutes for a first-time issuer.
-6. Email alerts (payment due, paid, default) measurably improve on-time funding.
+| # | Milestone | Done when |
+|---|---|---|
+| 1 | Audit | Engine, libraries and cross-chain contracts audited; high and medium findings fixed; report published. |
+| 2 | In-house issuance | We issue the first notes ourselves to bootstrap liquidity; issuance fee step built. |
+| 3 | First external issuers | External issuers (treasuries, market makers, funds, tokenized-stock holders) issue notes and pay fees. |
+| 4 | Licensed distribution partner | A partner offers notes to eligible investors, with allowlists and KYC. |
+| 5 | Mainnet | When CRE production access and the audit are both in place. |
+
+Targets per milestone are in [MILESTONES.md](MILESTONES.md).
 
 ## Placeholders to fill
 
-`[[BEACHHEAD]]`, `[[bps]]`, `[[PRICING]]`, `[[n]]` (repeat window), `[[TARGETS]]`, `[[CRE pricing]]`, `[[budget]]`
-(compliance), `[[LEGAL]]`, `[[test: interviews]]`, `[[x]]` (minutes to issue).
+`[[LEGAL]]`.
