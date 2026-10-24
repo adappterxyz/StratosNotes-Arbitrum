@@ -8,14 +8,15 @@ import { useEffect, useRef, useState } from 'react';
 import { BEATS } from './scene/beats';
 
 const APP_URL = '/app/';
+const ISSUE_URL = '/app/issue';
 
 export const BEAT_COPY: ReadonlyArray<{ k: string; t: string; n?: string }> = [
-  { k: 'Issue', t: 'Collateral is locked in the note.' },
-  { k: 'Subscribe', t: 'Atomic settlement: USDG in, note units out, in one transaction.' },
-  { k: 'Observe', t: 'Chainlink CRE fixes the strike, checks prices and enforces every date.' },
-  { k: 'Pay', t: 'Coupons paid in USDG to every holder.' },
-  { k: 'Ending 1 · price holds', t: 'Full principal back in USDG at redemption, on top of the coupons.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
-  { k: 'Ending 2 · knocked in', t: 'Below the knock-in, holders receive the stock: TSLA tokens on Robinhood Chain.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders.' },
+  { k: 'Issue', t: 'The issuer pledges collateral into the note.' },
+  { k: 'Subscribe', t: 'USDG in, note units out, in one transaction on Arbitrum.' },
+  { k: 'Fix and observe', t: 'Chainlink fixes the strike, then prices every observation date.' },
+  { k: 'Pay', t: 'Coupons paid in USDG to every holder, on the payment date.' },
+  { k: 'Held to maturity', t: 'Every coupon, then full principal back in USDG.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
+  { k: 'Barrier breached', t: 'Below the knock-in, holders receive the stock: TSLA tokens on Robinhood Chain.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders.' },
 ];
 
 function prefersReducedMotion() {
@@ -29,7 +30,7 @@ function lowPowerDevice() {
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 
-export default function Stage({ onTry }: { onTry: () => void }) {
+export default function Stage() {
   const [reduced] = useState(prefersReducedMotion);
   const stageRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -131,16 +132,17 @@ export default function Stage({ onTry }: { onTry: () => void }) {
         <div className="stage-shade" aria-hidden="true" />
         <div ref={heroRef} className="stage-hero">
           <div className="wrap hero-inner">
-            <span className="badge"><i />Live on testnet</span>
-            <h1>Structured<br />notes,<br />on-chain.</h1>
-            <p className="sub">Issued by anyone. Coupons in USDG. Chainlink CRE automates the entire lifecycle.</p>
-            <ul className="outcomes" aria-label="How a note can end">
-              <li><b>Price holds</b> coupons in USDG, full principal back</li>
-              <li className="ki"><b>Price falls through the barrier</b> you receive the stock (TSLA on Robinhood Chain)</li>
+            <span className="badge"><i />Structured notes · Arbitrum · Robinhood Chain</span>
+            <h1>Know the outcome before you invest.</h1>
+            <p className="sub">Fixed-coupon and autocallable notes on stocks and crypto. Terms lock at subscription, collateral is pledged onchain, and Chainlink prices every observation and executes every payment.</p>
+            <ul className="outcomes" aria-label="Why you can trust the terms">
+              <li><b>Prices and payments by Chainlink</b></li>
+              <li><b>Collateral visible onchain</b></li>
+              <li><b>Winner, Chainlink CRE track · TOKEN2049</b></li>
             </ul>
             <div className="hero-cta">
-              <a href={APP_URL} className="btn btn-primary btn-lg">Open the app</a>
-              <button type="button" className="btn btn-ghost btn-lg" onClick={onTry}>Try a note</button>
+              <a href={APP_URL} className="btn btn-primary btn-lg">Browse live notes</a>
+              <a href={ISSUE_URL} className="btn btn-ghost btn-lg">Issue a note</a>
             </div>
             <div className="built-on">
               <span className="built-label">Built on</span>
@@ -168,8 +170,8 @@ export default function Stage({ onTry }: { onTry: () => void }) {
           </>
         )}
       </div>
-      {/* Anchor for "How it works": the first beat. */}
-      <span id="how" className="stage-anchor" />
+      {/* Anchor for the scroll story: the first beat. */}
+      <span id="story" className="stage-anchor" />
       {/* The story in words: visible as a list with reduced motion, for screen readers otherwise. */}
       {(
         <ol className={`beats-list wrap${reduced ? '' : ' sr-only'}`}>

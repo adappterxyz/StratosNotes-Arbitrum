@@ -390,3 +390,132 @@ header.nav.scrolled, header.nav.open { background: rgba(255, 255, 255, 0.94); bo
   @keyframes side-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 }
 @media (max-width: 420px) { .side-tabs button { padding: 0 16px; } }
+
+/* ============================================================
+   ADDED SECTIONS (Sections.tsx, TermSheet.tsx): live term sheet, why onchain, outcomes, shelf, how it works,
+   for issuers, FAQ. Same tokens, lines and type as the sections above.
+   ============================================================ */
+
+/* ---- Live term sheet ---- */
+.ts-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: clamp(28px, 5vw, 72px); align-items: center; }
+.ts-wrap .section-head { margin-bottom: 0; }
+.ts-wrap .badge { justify-self: start; }
+@media (max-width: 900px) { .ts-wrap { grid-template-columns: 1fr; } }
+.ts-card { border: 1px solid var(--border-strong); border-radius: var(--radius); background: #FFFFFF; padding: clamp(18px, 2.4vw, 28px); display: grid; gap: 14px; }
+.ts-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.ts-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--purple); }
+.ts-pill { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); border: 1px solid var(--border-strong); border-radius: 999px; padding: 3px 10px; }
+.ts-pill.open { color: var(--up); border-color: rgba(11, 122, 82, .45); }
+.ts-card h3 { font-size: clamp(19px, 1.8vw, 23px); }
+.ts-rows { display: grid; border-top: 1px solid var(--border); }
+.ts-rows > div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 16px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.ts-rows dt { color: var(--text-soft); font-size: 15px; }
+.ts-rows dd { color: var(--text); font-size: 15px; text-align: right; margin-left: auto; }
+.ts-rows dd.ts-ill { color: var(--muted); font-family: var(--font-mono); font-size: 13.5px; }
+.ts-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.ts-foot a { font-family: var(--font-body); font-size: 15px; font-weight: 600; text-decoration: none; min-height: 40px; display: inline-flex; align-items: center; }
+
+/* ---- Why onchain: the one dark band (Ink, like the footer) ---- */
+.sn-root .why-band { background: var(--ink); color: #C9CED6; }
+.why-band h2 { color: #FFFFFF; }
+.why-band .eyebrow { color: var(--signal); }
+.why-band .section-head p { color: #C9CED6; }
+.why-table { border: 1px solid rgba(255, 255, 255, .16); border-radius: var(--radius); overflow-x: auto; }
+.why-table table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+.why-table th, .why-table td { text-align: left; padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, .12); vertical-align: top; }
+.why-table thead th { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: #A9B0BC; }
+.why-table thead th:last-child { color: var(--signal); }
+.why-table tbody th { color: #FFFFFF; font-weight: 600; white-space: nowrap; }
+.why-table td { color: #A9B0BC; }
+.why-table td:last-child { color: #FFFFFF; }
+.why-table tbody tr:last-child > * { border-bottom: 0; }
+@media (max-width: 640px) {
+  .why-table table, .why-table tbody, .why-table tr, .why-table th, .why-table td { display: block; }
+  .why-table thead { display: none; }
+  .why-table tr { padding: 14px 16px; border-bottom: 1px solid rgba(255, 255, 255, .12); }
+  .why-table tbody tr:last-child { border-bottom: 0; }
+  .why-table th, .why-table td { padding: 2px 0; border: 0; white-space: normal; }
+  .why-table tbody th { margin-bottom: 6px; }
+  .why-table td::before { content: attr(data-h) " · "; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: #A9B0BC; }
+}
+
+/* ---- Outcomes: three pill tabs, one chart each ---- */
+.oc { display: grid; gap: 20px; }
+.oc-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: clamp(20px, 3vw, 40px); align-items: center; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-1); padding: clamp(18px, 3vw, 32px); }
+.oc-text { display: grid; gap: 12px; align-content: start; }
+.oc-text h3 { font-size: clamp(22px, 2.2vw, 30px); line-height: 1.15; }
+.oc-text p { color: var(--text-soft); font-size: clamp(15.5px, 1.25vw, 17px); }
+.tag.risk { color: var(--amber); border-color: rgba(154, 98, 0, .45); }
+.oc-chart { display: grid; gap: 10px; min-width: 0; }
+.oc-plot { position: relative; aspect-ratio: 600 / 260; border-radius: var(--radius-sm); background: #FFFFFF; border: 1px solid var(--border); }
+.oc-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.oc-obs { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.oc-strike { stroke: var(--ink); stroke-opacity: .55; stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+.oc-ki { stroke: var(--down); stroke-width: 1.25; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+.oc-path { fill: none; stroke: var(--signal); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.oc-m.pay { fill: var(--signal); }
+.oc-m.call, .oc-m.end { fill: var(--ink); }
+.oc-m.ki { fill: var(--down); }
+.oc-axis { position: absolute; left: 8px; transform: translateY(-125%); font-family: var(--font-mono); font-size: clamp(10.5px, 1vw, 12.5px); color: var(--text-soft); white-space: nowrap; background: rgba(255, 255, 255, .85); padding: 0 3px; }
+.oc-axis.ki { color: var(--down); }
+.oc-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--font-mono); font-size: 13px; color: var(--text-soft); }
+.oc-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.oc-mk { width: 12px; height: 12px; flex: none; }
+.oc-mk.pay { fill: var(--signal); }
+.oc-mk.call, .oc-mk.end { fill: var(--ink); }
+.oc-mk.ki { fill: var(--down); }
+.oc-foot { color: var(--text-soft); font-size: 15px; }
+@media (max-width: 900px) { .oc-panel { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .oc-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 14px; justify-self: stretch; }
+  .oc-tabs button { padding: 0 6px; border-radius: 10px; white-space: normal; line-height: 1.2; min-height: 52px; font-size: 14.5px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .oc-panel { animation: side-in .45s ease both; }
+}
+
+/* ---- The shelf ---- */
+.shelf-card h3 { font-size: clamp(20px, 1.8vw, 24px); }
+.shelf-card .best { font-family: var(--font-mono); font-size: 13px; color: var(--purple); }
+.underlyings { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 24px; color: var(--text-soft); font-size: 15.5px; }
+
+/* ---- How it works: four steps ---- */
+.steps.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.steps h3 { font-size: 19px; }
+@media (max-width: 1000px) { .steps.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .steps.four { grid-template-columns: 1fr; } }
+
+/* ---- For issuers ---- */
+.cards4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .cards4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .cards4 { grid-template-columns: 1fr; } }
+#issuers .section-head .hero-cta { margin-top: 6px; }
+
+/* ---- FAQ: an accordion, the first item open ---- */
+.faq { max-width: 860px; border-top: 1px solid var(--border-strong); }
+.faq details { border-bottom: 1px solid var(--border-strong); }
+.faq summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 60px; padding: 12px 0; cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: clamp(17px, 1.5vw, 20px); color: var(--text); }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; flex: none; font-family: var(--font-mono); font-weight: 400; font-size: 22px; color: var(--purple); }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { color: var(--text-soft); font-size: clamp(15.5px, 1.25vw, 17px); max-width: 70ch; padding-bottom: 20px; }
+
+.disclaimer { color: #9AA1AD; font-size: 13px; max-width: 80ch; }
+
+/* The hero headline is a sentence now ("Know the outcome before you invest."): four lines at a slightly smaller size
+   keep the copy in the same column and height as the three-line headline before it. */
+.stage-hero h1 { font-size: clamp(40px, 5.6vw, 80px); max-width: 10.5ch; }
+.stage-hero .sub { max-width: 40ch; }
+@media (max-width: 760px) and (max-height: 760px) {
+  .stage-hero h1 { font-size: clamp(28px, 8.4vw, 36px); }
+  .stage-hero .sub { font-size: 15px; }
+}
+@media (max-width: 400px) { .stage-hero .btn-lg { padding: 0 16px; } }
+.oc-legend li.ax { display: none; }
+.oc-sw { display: inline-block; width: 16px; height: 0; border-top: 1.5px solid rgba(14, 17, 22, .55); }
+.oc-sw.ki { border-top: 1.5px dashed var(--down); }
+@media (max-width: 560px) { .oc-axis { display: none; } .oc-legend li.ax { display: inline-flex; } }
+
+/* Five nav links: keep each on one line, and drop the "Try a note" nav button where they would collide. */
+.sn-root .nav-links a { white-space: nowrap; }
+@media (max-width: 1000px) { .nav-cta .hide-sm { display: none; } }

@@ -3,9 +3,12 @@ import './notes.css';
 import Carousel, { type Side } from './Carousel';
 import Stage from './Stage';
 import ExplorerPanel from './ExplorerPanel';
+import TermSheet from './TermSheet';
+import { WhyOnchain, Outcomes, Shelf, HowItWorks, ForIssuers, Faq } from './Sections';
 import { DEFAULT_START, type ExplorerStart } from './explorer/start';
 
 const APP_URL = '/app/';
+const ISSUE_URL = '/app/issue';
 const STRATOS_URL = 'https://stratoslab.xyz';
 const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
 
@@ -60,7 +63,7 @@ export default function Landing() {
     return () => window.removeEventListener('keydown', onKey);
   }, [menu]);
 
-  const links = [['#how', 'How it works'], ['#notes', 'What notes do'], ['#arbitrum', 'Why Arbitrum']];
+  const links = [['#outcomes', 'Outcomes'], ['#notes', 'Notes'], ['#how', 'How it works'], ['#issuers', 'For issuers'], ['#faq', 'FAQ']];
 
   return (
     <div className="sn-root" ref={rootRef}>
@@ -72,7 +75,7 @@ export default function Landing() {
           </nav>
           <div className="nav-cta">
             <button type="button" className="btn btn-ghost hide-sm" onClick={() => openExplorer()}>Try a note</button>
-            <a href={APP_URL} className="btn btn-primary">Open the app</a>
+            <a href={APP_URL} className="btn btn-primary">Launch app</a>
             <button type="button" className="nav-menu" aria-label={menu ? 'Close menu' : 'Open menu'} aria-expanded={menu} aria-controls="nav-sheet" onClick={() => setMenu(m => !m)}>
               <span /><span /><span />
             </button>
@@ -85,9 +88,25 @@ export default function Landing() {
       </header>
 
       <main id="top">
-        <Stage onTry={() => openExplorer()} />
+        <Stage />
 
-        <section id="notes" className="notes-sec">
+        <section id="live" className="ts-sec">
+          <div className="wrap ts-wrap">
+            <div className="section-head" data-reveal>
+              <span className="badge"><i />Live on testnet</span>
+              <h2>Every term on one sheet, before you subscribe.</h2>
+              <p>Each note publishes its coupon, tenor, autocall level, knock-in barrier and the collateral pledged behind it.</p>
+              <div className="hero-cta"><a href={APP_URL} className="btn btn-ghost">Browse live notes</a></div>
+            </div>
+            <div data-reveal><TermSheet /></div>
+          </div>
+        </section>
+
+        <WhyOnchain />
+        <Outcomes />
+        <Shelf />
+
+        <section id="note-types" className="notes-sec">
           <div className="wrap">
             <div className="section-head">
               <span className="eyebrow">What a note can do</span>
@@ -106,6 +125,8 @@ export default function Landing() {
             </div>
           </div>
         </section>
+
+        <HowItWorks />
 
         <section id="arbitrum">
           <div className="wrap">
@@ -134,13 +155,16 @@ export default function Landing() {
           </div>
         </section>
 
+        <ForIssuers />
+        <Faq />
+
         <section id="cta">
           <div className="wrap">
             <div className="cta-final" data-reveal>
-              <h2>Try it on testnet.</h2>
+              <h2>Terms agreed.<br />Payments enforced.</h2>
               <div className="hero-cta">
-                <a href={APP_URL} className="btn btn-primary btn-lg">Open the app</a>
-                <button type="button" className="btn btn-ghost btn-lg" onClick={() => openExplorer()}>Try a note</button>
+                <a href={APP_URL} className="btn btn-primary btn-lg">Browse live notes</a>
+                <a href={ISSUE_URL} className="btn btn-ghost btn-lg">Issue a note</a>
               </div>
             </div>
           </div>
@@ -155,7 +179,8 @@ export default function Landing() {
             <a href={REPO_URL} target="_blank" rel="noopener">GitHub</a>
             <a href={STRATOS_URL} target="_blank" rel="noopener">stratoslab.xyz</a>
           </div>
-          <small className="by"><img src="/logos/stratos-mark.png" alt="" width={16} height={16} />by Stratos Lab · Testnet only · Trademarks belong to their owners; no endorsement implied.</small>
+          <small className="by"><img src="/logos/stratos-mark.png" alt="" width={16} height={16} />notes.markets by StratosLab · Built on Arbitrum, Robinhood Chain and Chainlink</small>
+          <small className="disclaimer">Structured notes carry risk, including loss of principal. Nothing on this site is an offer or investment advice. Testnet only. Trademarks belong to their owners; no endorsement implied.</small>
         </div>
       </footer>
       {explorer && <ExplorerPanel start={explorer} onClose={closeExplorer} />}
