@@ -23,7 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, encodeAbiParameters, http, keccak256, parseAbi, parseEther, toHex, zeroAddress, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { compile, dec, EXAMPLE_PRODUCTS, evmInput, FEEDS, instantiateProduct, parseBpmn, SRC, type EvmInput, type ProductParams } from '@sn/core';
+import { CASH_TOKENS, compile, dec, EXAMPLE_PRODUCTS, evmInput, FEEDS, instantiateProduct, parseBpmn, SRC, type EvmInput, type ProductParams } from '@sn/core';
 import { engineAbi, flowEngineAbi, lensAbi } from '@sn/sdk';
 
 const RPCS: Record<string, { rpc: string; id: number }> = {
@@ -35,7 +35,12 @@ const net = RPCS[chainKey];
 if (!net) throw new Error(`CHAIN: ${Object.keys(RPCS).join(' | ')}`);
 const DIR = process.env.DEPLOY_DIR ?? 'deployments';
 const dep = JSON.parse(readFileSync(`${DIR}/${chainKey}.json`, 'utf8')) as { engine: Address; lens: Address; faucet: Address; tokens: Record<string, Address> };
-const tusd = dep.tokens.tUSD;
+/** CASH=USDG: Paxos testnet USDG is the cash leg and the collateral; the deployer must already hold it (faucet.paxos.com),
+ * and funds the demo investors from its own balance. Default: our test tUSD, minted by the deployer. */
+const usdg = process.env.CASH === 'USDG';
+const tusd = usdg ? CASH_TOKENS[chainKey] as Address : dep.tokens.tUSD;
+if (!tusd) throw new Error(`no ${usdg ? 'USDG' : 'tUSD'} on ${chainKey}`);
+const CASH = usdg ? 'USDG' : 'tUSD';
 
 const keyFrom = (file: string): Hex => {
   if (!existsSync(file)) execFileSync('bash', ['-c', `umask 077 && cast wallet new --json > ${file}`]);
@@ -48,7 +53,7 @@ const investors = [privateKeyToAccount(keyFrom('.keys/investor1.json')), private
 const chain = defineChain({ id: net.id, name: chainKey, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [net.rpc] } } });
 const client = createPublicClient({ chain, transport: http(net.rpc) });
 const walletOf = (a: typeof deployer) => createWalletClient({ chain, account: a, transport: http(net.rpc) });
-const erc20 = parseAbi(['function mint(address to, uint256 amount)', 'function approve(address spender, uint256 amount) returns (bool)', 'function balanceOf(address) view returns (uint256)']);
+const erc20 = parseAbi(['function mint(address to, uint256 amount)', 'function transfer(address to, uint256 amount) returns (bool)', 'function approve(address spender, uint256 amount) returns (bool)', 'function balanceOf(address) view returns (uint256)']);
 const faucetAbi = parseAbi(['function claim(address token)', 'function nextClaimAt(address token, address account) view returns (uint256)']);
 const NO = 0xffff;
 
@@ -68,12 +73,13 @@ const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params }
 const def = toHex(c.bytes);
 const definition = toHex(c.hash);
 const roleIdx = (name: string) => c.def.roles.indexOf(name);
-const subs = [600, 400];
+const subs = (process.env.SUBS ?? '600,400').split(',').map(Number);
 const unsold = Number(process.env.UNSOLD ?? 1000);
 const notional = subs.reduce((a, b) => a + b, 0) + unsold;
-const pledge = notional; // 100% USDC collateral (the default ratio): covers whatever sells
+const ratio = Number(process.env.RATIO ?? 1); // collateral ratio (1 = 100% of the notional)
+const pledge = Math.ceil(notional * ratio);
 
-console.log(`${product.name} on ${chainKey}: ${notional} units (${unsold} left for visitors), ${pledge} tUSD collateral pledged`);
+console.log(`${product.name} on ${chainKey}: ${notional} units (${unsold} left for visitors), ${pledge} ${CASH} collateral pledged (ratio ${ratio * 100}%)`);
 // Both are content-addressed and idempotent: re-running for the same design is a cheap no-op.
 await send(deployer, { address: dep.engine, abi: engineAbi, functionName: 'registerDefinition', args: [def] });
 await send(deployer, { address: dep.lens, abi: lensAbi, functionName: 'publish', args: [def] });
@@ -110,12 +116,18 @@ const strikeAt = now + Number(process.env.STRIKE_IN ?? 900);
 const every = Number(process.env.OBS_EVERY ?? 300);
 const obsAt = Array.from({ length: product.observations }, (_, k) => strikeAt + every * (k + 1));
 const lag = Number(process.env.LAG ?? Math.floor(every / 4)), grace = Number(process.env.GRACE ?? Math.floor(every / 3));
-await send(deployer, { address: tusd, abi: erc20, functionName: 'mint', args: [deployer.address, BigInt(pledge) * 10n ** 6n] });
+if (usdg) {
+  const need = BigInt(pledge + subs.reduce((a, b) => a + b, 0)) * 10n ** 6n;
+  const have = await client.readContract({ address: tusd, abi: erc20, functionName: 'balanceOf', args: [deployer.address] });
+  if (have < need) throw new Error(`the deployer holds ${Number(have) / 1e6} USDG; this seed needs ${Number(need) / 1e6} (collateral + investors): claim more at faucet.paxos.com`);
+} else {
+  await send(deployer, { address: tusd, abi: erc20, functionName: 'mint', args: [deployer.address, BigInt(pledge) * 10n ** 6n] });
+}
 await send(deployer, { address: tusd, abi: erc20, functionName: 'approve', args: [dep.engine, BigInt(pledge) * 10n ** 6n] });
 const byName: Record<string, EvmInput> = {
   isin: evmInput.text(`XSDEMO${String(now).slice(-6)}`), notional: evmInput.number(dec(notional)), strikeDate: evmInput.number(BigInt(strikeAt)),
   ...Object.fromEntries(obsAt.map((t, k) => [`obsDate${k + 1}`, evmInput.number(BigInt(t))])),
-  lag: evmInput.number(BigInt(lag)), grace: evmInput.number(BigInt(grace)), collateralRatio: evmInput.number(dec(1)),
+  lag: evmInput.number(BigInt(lag)), grace: evmInput.number(BigInt(grace)), collateralRatio: evmInput.number(dec(ratio)),
   haircut_USD: evmInput.number(dec(1)), pledge_USD: evmInput.number(dec(pledge)),
 };
 const approve = c.def.steps[c.stepIndex.Task_ApproveTerms].captures.filter(x => x.source === SRC.INPUT).map(x => byName[c.def.fields[x.field].name]);
@@ -132,7 +144,9 @@ for (const [i, inv] of investors.entries()) {
     console.log(`  gas for investor ${i + 1}  ${hash}`);
   }
   if ((await client.readContract({ address: tusd, abi: erc20, functionName: 'balanceOf', args: [inv.address] })) < cash) {
-    await send(inv, { address: dep.faucet, abi: faucetAbi, functionName: 'claim', args: [tusd] });
+    // USDG can't be minted by us: the deployer sends the investor what it subscribes with.
+    if (usdg) await send(deployer, { address: tusd, abi: erc20, functionName: 'transfer', args: [inv.address, cash] });
+    else await send(inv, { address: dep.faucet, abi: faucetAbi, functionName: 'claim', args: [tusd] });
   }
   await send(inv, { address: tusd, abi: erc20, functionName: 'approve', args: [dep.engine, cash] });
   await send(inv, { address: dep.engine, abi: engineAbi, functionName: 'executeStep', args: [pid, c.stepIndex.Task_Subscribe, NO, [evmInput.number(dec(units))]] });
@@ -140,6 +154,7 @@ for (const [i, inv] of investors.entries()) {
 
 const out = {
   chain: chainKey, pid: pid.toString(), name: product.name, definition, engine: dep.engine, fromBlock: start.blockNumber.toString(),
+  cash: CASH, ratio, issuer: { address: deployer.address, label: 'notes.markets demo issuer (temporary: deployer key)' },
   strikeAt, obsAt, lag, grace, pledge, investors: investors.map((a, i) => ({ address: a.address, units: subs[i] })), unsold,
 };
 mkdirSync(`${DIR}/notes`, { recursive: true });
