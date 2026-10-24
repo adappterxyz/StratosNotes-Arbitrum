@@ -3,8 +3,8 @@
   "chains": [
     {
       "chainSelectorName": "ethereum-testnet-sepolia-arbitrum-1",
-      "engine": "0x774D56991b73cB254842d302Cc1fd82f2846f370",
-      "lens": "0xE8d9Fa95ad823A20B0e2c3FC0f017C15de98A410",
+      "engine": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
+      "lens": "0x7544378876D780E69968CD67c3FEf9a294C23A0B",
       "gasLimit": "8000000",
       "fromPid": 1,
       "scan": 200,
@@ -13,8 +13,8 @@
     },
     {
       "chainSelectorName": "robinhood-testnet",
-      "engine": "0xA1C0A6c72d07D885e2b91ecaD4AabE758F446C35",
-      "lens": "0xCb510Dcdd6E3BB3C19f041EEe6D3b383227583Fe",
+      "engine": "0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D",
+      "lens": "0x0969cCc3e714A3Ac5a49b1cD8e07989B8C7CaA41",
       "gasLimit": "8000000",
       "fromPid": 1,
       "scan": 200,
