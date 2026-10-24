@@ -77,7 +77,14 @@ function client(name: string): EVMClient {
 }
 
 /** One view call, at the last finalized block unless `at` is 'latest'; returns the raw result. */
+/**
+ * Chain reads this run. CRE caps EVM reads per workflow run (PerWorkflow.ChainRead.CallLimit, 15 in the
+ * simulator), so optional checks (vault backing) only spend what the reports leave.
+ */
+const READ_LIMIT = 15
+let readsThisRun = 0
 function view(runtime: Runtime<Config>, evm: EVMClient, to: string, data: Hex, at: 'finalized' | 'latest' = 'finalized'): Hex {
+  readsThisRun++
   const reply = evm.callContract(runtime, {
     call: encodeCallMsg({ from: zeroAddress, to: to as Address, data }),
     blockNumber: at === 'latest' ? LATEST_BLOCK_NUMBER : LAST_FINALIZED_BLOCK_NUMBER,
@@ -135,6 +142,7 @@ function readFeed(runtime: Runtime<Config>, f: FeedRef, nowSec: number): bigint 
 export const onCron = (runtime: Runtime<Config>): string => {
   const cfg = runtime.config
   const nowSec = Math.floor(runtime.now().getTime() / 1000)
+  readsThisRun = 0
   const written: string[] = []
   const failed: string[] = []
   let due = 0
@@ -171,8 +179,13 @@ export const onCron = (runtime: Runtime<Config>): string => {
     }
   }
   // Cross-chain collateral: does every vault still back the receipts outstanding at home?
+  // Four reads per vault, within what this run has left; a rotating start so every vault is checked in turn.
   const readings: VaultReading[] = []
-  for (const w of cfg.vaults ?? []) {
+  const all = cfg.vaults ?? []
+  const fit = Math.max(0, Math.floor((READ_LIMIT - readsThisRun) / 4))
+  const start = all.length ? Math.floor(nowSec / 60) % all.length : 0
+  const turn = Array.from({ length: Math.min(fit, all.length) }, (_, i) => all[(start + i) % all.length])
+  for (const w of turn) {
     const at = w.stateBlock ?? 'finalized'
     const asset = client(w.assetChain)
     const home = client(w.homeChain)

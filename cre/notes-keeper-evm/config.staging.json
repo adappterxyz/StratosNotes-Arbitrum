@@ -23,5 +23,52 @@
     }
   ],
   "maxReportsPerRun": 5,
+  "vaults": [
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0x62f28cF2EAF65eddA7FB57321f9809042e4f1B67",
+      "assetChain": "robinhood-testnet",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
+      "label": "USDG.rh",
+      "stateBlock": "latest"
+    },
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0xcDb6f71FeEEB73F3c001681A390EE7940575AAc2",
+      "assetChain": "robinhood-testnet",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+      "label": "TSLA.rh",
+      "stateBlock": "latest"
+    },
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0x67c475C9CbB9fa695dEeBae62A57291376a9FDD9",
+      "assetChain": "robinhood-testnet",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+      "label": "AMZN.rh",
+      "stateBlock": "latest"
+    },
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0xD07f12Fa6a657f4A0F6DdA6095a5FA10667248e9",
+      "assetChain": "robinhood-testnet",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
+      "label": "NFLX.rh",
+      "stateBlock": "latest"
+    },
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0x4A20107535C9d82310A3EfD7e4f9993Edeaade9B",
+      "assetChain": "robinhood-testnet",
+      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "token": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
+      "label": "tTSLA.rh",
+      "stateBlock": "latest"
+    }
+  ],
   "finalityAllowanceSec": 1800
 }
