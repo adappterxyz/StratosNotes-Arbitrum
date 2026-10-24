@@ -487,6 +487,15 @@ export class NoteScene {
       this.camera.position.y -= drop * 0.4;
     }
     this.camera.lookAt(this.look);
+    // The opening frame: on landscape screens the hero copy sits on the left, so render the scene off-centre to the
+    // right (a lens shift, not a camera move) and ease it back to centre as the story starts.
+    const shift = this.camera.aspect >= 1 ? 0.27 * (1 - smooth(span(p, 0.03, 0.13))) : 0;
+    if (shift > 0.001) {
+      const fw = 1000, fh = 1000 / this.camera.aspect;
+      this.camera.setViewOffset(fw, fh, -shift * fw, 0, fw, fh);
+    } else if (this.camera.view?.enabled) {
+      this.camera.clearViewOffset();
+    }
   }
 
   /** Lay out every story element for progress p (pure: scrolling back plays it backwards). */

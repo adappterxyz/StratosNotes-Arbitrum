@@ -128,7 +128,15 @@ header.nav.scrolled, header.nav.open { background: rgba(255, 255, 255, 0.94); bo
   background:
     linear-gradient(to right, rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .6) 32%, rgba(255, 255, 255, 0) 62%),
     linear-gradient(to top, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, 0) 34%); }
-.stage-hero { position: absolute; inset: 0; display: flex; align-items: center; padding-top: 68px; will-change: opacity, transform; }
+/* The hero's own veil: it fades out with the hero copy, so the scroll story keeps the full scene. */
+.stage-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: -1;
+  background: linear-gradient(to right, rgba(255, 255, 255, .97) 0%, rgba(255, 255, 255, .92) 32%, rgba(255, 255, 255, .5) 48%, rgba(255, 255, 255, 0) 62%); }
+@media (max-aspect-ratio: 1/1) {
+  /* Portrait: the copy spans the width, so the scene sits under a near-solid veil while the hero is up. */
+  .stage-hero::before { background: linear-gradient(to bottom, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .92) 28%, rgba(255, 255, 255, .94) 75%, rgba(255, 255, 255, .75) 100%); }
+}
+
+.stage-hero { position: absolute; inset: 0; z-index: 1; isolation: isolate; display: flex; align-items: center; padding-top: 68px; will-change: opacity, transform; }
 .hero-inner { display: grid; gap: clamp(18px, 2.4vw, 26px); justify-items: start; }
 .stage-hero h1 { font-size: clamp(44px, 7.6vw, 104px); line-height: .98; letter-spacing: -0.025em; max-width: 11ch; }
 .badge { display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: rgba(255, 255, 255, .9); color: var(--text-soft); font-size: 14px; }
