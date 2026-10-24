@@ -112,6 +112,8 @@ svg.i { width: 14px; height: 14px; flex: none; }
 .seg a, .seg button { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font: 500 14px var(--font); color: hsl(var(--muted-foreground)); background: none; border: 0; cursor: pointer; white-space: nowrap; }
 .seg a:hover, .seg button:hover { color: hsl(var(--foreground)); text-decoration: none; }
 .seg a.active, .seg button.active { background: hsl(var(--accent) / 0.12); color: hsl(var(--accent-text)); }
+/* Main navigation: the selected section has no background; Ink text, semibold, with a thin underline. */
+.main-nav a.active { background: none; color: hsl(var(--foreground)); font-weight: 600; box-shadow: inset 0 -2px 0 hsl(var(--foreground)); border-radius: 0; }
 .seg .arrow { color: hsl(var(--text-dim)); font-size: 10px; }
 .appbar .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
