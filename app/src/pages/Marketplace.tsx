@@ -2,6 +2,7 @@
  * The marketplace, for investors: each note as its yield (an annual rate, honest about conditions) and the few
  * things to know, with filters in plain words. Technical terms are on each note's page under "Full terms".
  */
+import { cashSymbol } from '../lib/chains';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
@@ -24,12 +25,13 @@ export default function Marketplace() {
   const [sort, setSort] = useState<Sort>('yield');
   const [q, setQ] = useState('');
   const { notes, error } = useNotes({ status: 'all', q: q.trim() || undefined });
-  const cashOf = (chain: string) => config.chains.find(c => c.key === chain)?.stablecoin.symbol ?? 'USDG';
+  // Each note's own cash token (older demo notes settle in tUSD), falling back to the chain's stablecoin.
+  const cashOf = (chain: string, token?: string) => cashSymbol(config.chains.find(c => c.key === chain), token);
 
   const shown = useMemo(() => {
     const items = (notes ?? [])
       .filter(n => !openOnly || n.view.phase === 'book')
-      .map(n => ({ n, l: listingOf(n.view.params, { strikeDate: n.view.strikeDate, obsDates: n.view.obsDates }, cashOf(n.chain)) }))
+      .map(n => ({ n, l: listingOf(n.view.params, { strikeDate: n.view.strikeDate, obsDates: n.view.obsDates }, cashOf(n.chain, n.view.cashToken)) }))
       .filter(({ l }) => {
         if (filters.has('yield') && l.goal !== 'yield') return false;
         if (filters.has('protect') && l.goal !== 'protect' && !l.protection) return false;
@@ -83,7 +85,7 @@ export default function Marketplace() {
           </div>
         ) : (
           <div className="ls-list">
-            {shown.map(({ id, view, chain }) => <ListingRow key={id} id={id} o={view} cash={cashOf(chain)} now={now} />)}
+            {shown.map(({ id, view, chain }) => <ListingRow key={id} id={id} o={view} cash={cashOf(chain, view.cashToken)} now={now} />)}
           </div>
         )}
       <p className="xs muted" style={{ marginTop: 14 }}>Rates are annualised from each note's terms. "Up to" rates depend on prices staying above a level and are not guaranteed. Testnet only.</p>

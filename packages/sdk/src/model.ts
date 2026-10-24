@@ -141,6 +141,8 @@ export interface NoteView {
   reports: ReportStats;
   /** Collateral, coverage, the issuer's payment schedule and default state (null for workflows without escrow). */
   economics: NoteEconomics | null;
+  /** The note's own cash token (asset 1), e.g. USDG, or tUSD for older demo notes. */
+  cashToken?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -289,7 +291,7 @@ export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000
     underlyingText: hasTerms ? underlyingLabel(params) : '—', issuer,
     isin: typeof isin === 'string' ? isin : '', notional: Number.isFinite(notional) ? notional : 0, sold: soldNow,
     strikeDate, obsDates, unds, strikeFixed, perfs, phase: finalPhase, activeSteps, outcome, reports: s.reports,
-    economics, createdAt: s.createdAt, updatedAt: s.updatedAt,
+    economics, cashToken: s.assetTokens?.[CASH_ASSET], createdAt: s.createdAt, updatedAt: s.updatedAt,
   };
 }
 

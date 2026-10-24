@@ -3,6 +3,7 @@
  * and receipts, and payouts waiting to be withdrawn. Every note row opens that note's current state.
  * `?address=0x…` shows any wallet read-only (no actions), e.g. to look at a demo investor.
  */
+import { cashSymbol } from '../lib/chains';
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isAddress } from 'viem';
@@ -113,7 +114,7 @@ export default function Portfolio() {
                 <thead><tr><th>Note</th><th>Underlying</th><th>State</th><th className="r">Units</th><th className="r">Paid so far</th><th>Next</th></tr></thead>
                 <tbody>
                   {subscribed.map(p => {
-                    const sym = byKey[p.chain]?.cfg.stablecoin.symbol ?? 'USDG';
+                    const sym = cashSymbol(byKey[p.chain]?.cfg, p.view.cashToken);
                     const paid = p.view.outcome ? p.view.outcome.perUnit * p.position.units : null;
                     return (
                       <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
@@ -149,7 +150,7 @@ export default function Portfolio() {
                         <td><strong>{o.name}</strong><div className="xs muted">{byKey[o.chain]?.cfg.name ?? o.chain}</div></td>
                         <td><StatePill o={o} /></td>
                         <td><div className="bar"><span style={{ width: `${pct}%` }} /></div><div className="xs muted num" style={{ marginTop: 3 }}>{fmtMoney(o.sold, 0)} of {fmtMoney(o.notional, 0)}</div></td>
-                        <td>{o.economics?.collateral.length ? <span className="coll-line" style={{ justifyContent: 'flex-start' }}>{o.economics.collateral.map(c => <Asset key={c.asset} sym={c.symbol === 'USD' ? (byKey[o.chain]?.cfg.stablecoin.symbol ?? 'USDG') : c.symbol} size={16} />)}</span> : <span className="muted">—</span>}</td>
+                        <td>{o.economics?.collateral.length ? <span className="coll-line" style={{ justifyContent: 'flex-start' }}>{o.economics.collateral.map(c => <Asset key={c.asset} sym={c.symbol === 'USD' ? cashSymbol(byKey[o.chain]?.cfg, o.cashToken) : c.symbol} size={16} />)}</span> : <span className="muted">—</span>}</td>
                         <td className="r num">{o.economics?.coveragePct != null ? fmtPct(o.economics.coveragePct) : '—'}</td>
                         <td className="small">
                           {call && !call.funded && (st.key === 'due' || st.key === 'grace')
@@ -174,7 +175,7 @@ export default function Portfolio() {
                 <thead><tr><th>Note</th><th className="r">Cash</th><th>Tokens</th><th /></tr></thead>
                 <tbody>
                   {withdrawable.map(p => {
-                    const sym = byKey[p.chain]?.cfg.stablecoin.symbol ?? 'USDG';
+                    const sym = cashSymbol(byKey[p.chain]?.cfg, p.view.cashToken);
                     const tokens = p.position.holdings.filter(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n);
                     return (
                       <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
@@ -207,7 +208,7 @@ export default function Portfolio() {
                   {issued.flatMap(({ id, view: o }) => (o.economics?.collateral ?? []).map(c => (
                     <tr key={`${id}:${c.asset}`} {...rowProps(id, o.name)}>
                       <td><strong>{o.name}</strong></td>
-                      <td><span className="asset"><span className="num">{fmtMoney(c.amount, c.amount < 1 ? 6 : 2)}</span><Asset sym={c.symbol === 'USD' ? (byKey[o.chain]?.cfg.stablecoin.symbol ?? 'USDG') : c.symbol} size={16} /></span></td>
+                      <td><span className="asset"><span className="num">{fmtMoney(c.amount, c.amount < 1 ? 6 : 2)}</span><Asset sym={c.symbol === 'USD' ? cashSymbol(byKey[o.chain]?.cfg, o.cashToken) : c.symbol} size={16} /></span></td>
                       <td className="small">{/\.rh$/i.test(c.symbol) ? 'Robinhood Chain (via Chainlink CCIP)' : byKey[o.chain]?.cfg.name ?? o.chain}</td>
                       <td className="r num">{c.value == null ? '—' : fmtMoney(c.value)}</td>
                     </tr>
