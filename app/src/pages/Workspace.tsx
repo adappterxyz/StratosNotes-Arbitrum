@@ -1,9 +1,10 @@
 /**
- * Issue: Flow's workspace, for structured notes. With nothing open it is a
- * start page (a template, a term sheet, the AI, or a blank workflow); with a
- * workflow open it is the AI assistant, the BPMN canvas and the stages in
- * order: Overview | Properties -> Validate -> Payoff -> Template -> Issue.
- * Templates and edited workflows are issued from the same place.
+ * The workflow studio (/issue/advanced): Flow's workspace, for structured notes.
+ * Canvas only: notes are picked on /issue and opened here by deep link (or a
+ * blank workflow, an imported file, the AI); with a workflow open it is the AI
+ * assistant, the BPMN canvas and the stages in
+ * order: Overview | Properties -> Validate -> Payoff -> Ready-made note -> Issue.
+ * Ready-made notes and edited workflows are issued from the same place. Picking a note happens on /issue.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -12,7 +13,7 @@ import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import {
-  ArrowRight, BookOpen, LayoutTemplate, CheckCircle2, AlertCircle, ChevronRight, Download, FilePlus2, FileUp, LayoutList, LineChart, Rocket, Sparkles, TrendingUp, Workflow, X,
+  BookOpen, CheckCircle2, AlertCircle, ChevronRight, Download, FilePlus2, FileUp, LayoutList, LineChart, Rocket, Sparkles, TrendingUp, Workflow, X,
 } from 'lucide-react';
 import {
   buildWorkflow, chain, check, compileTemplate, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, field, instantiateProduct, irToDraft, normalizeParams, parseBpmn,
@@ -26,12 +27,11 @@ import { IssuePanel, OverviewPanel, PayoffPanel, TemplatePanel, ValidatePanel, t
 import { flowModdle } from '../lib/bpmnProps';
 import { fitReadable } from '../lib/fit';
 import { tagTypes } from '../lib/bpmnTheme';
-import { headline } from '@sn/sdk';
 import { short } from '../lib/format';
+import { AI_DRAFT_KEY } from '../lib/readymade';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const NOTE_ASSETS: AssetDefinition[] = [{ id: 'note', name: 'Note', kind: 'issued' }, { id: 'cash', name: 'USDG', kind: 'cash', decimals: 6, token: 'USDG' }];
-const STOCK: ProductParams[] = [...(Object.keys(EXAMPLE_PRODUCTS) as ProductType[]).map(t => EXAMPLE_PRODUCTS[t]), EXAMPLE_WORST_OF];
 
 /** A blank note: an Issuer pool with a pre-trade step, to build on. */
 function blankWorkflow() {
@@ -66,7 +66,6 @@ export default function Workspace() {
   const [issues, setIssues] = useState<{ errors: Issue[]; warnings: Issue[] }>({ errors: [], warnings: [] });
   const [info, setInfo] = useState({ fields: [] as string[], dates: [] as string[], pools: [] as string[], steps: 0 });
   const [built, setBuilt] = useState<Built | null>(null);
-  const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [notice, setNotice] = useState('');
 
   // ---- canvas ---------------------------------------------------------------
@@ -120,10 +119,8 @@ export default function Workspace() {
     setStage('design');
   };
   const close = () => { setDoc(null); setBuilt(null); setSelected(null); setSearch({}, { replace: true }); };
-  /** Back to the start page, at the template list (the open workflow is closed). */
-  const showTemplates = () => { close(); setTimeout(() => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' }), 50); };
 
-  // Deep links: /issue?template=<definition> or /issue?product=<type>.
+  // Deep links: ?template=<definition>, ?product=<type>, ?params=<term sheet JSON>, ?draft=ai (from /issue), ?ai=1.
   const linked = useRef(false);
   useEffect(() => {
     if (linked.current || !modeler.current) return;
@@ -133,19 +130,19 @@ export default function Workspace() {
       if (linked.current || modeler.current !== m) return;
       linked.current = true;
       if (search.get('ai')) setAiOpen(true);
-      if (window.location.hash === '#templates') setTimeout(() => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' }), 100);
       const tpl = search.get('template');
       const p = search.get('product') as ProductType | 'worst-of' | null;
-      if (tpl) openTemplate({ definition: tpl, name: '', description: '', author: '', createdAt: 0, kind: 'custom', label: '' }).then(() => {});
+      const terms = search.get('params');
+      let aiXml: string | null = null;
+      if (search.get('draft') === 'ai') { try { aiXml = sessionStorage.getItem(AI_DRAFT_KEY); } catch { /* storage blocked */ } }
+      if (aiXml) load(aiXml, { name: 'AI workflow', origin: 'custom', basis: null, assets: NOTE_ASSETS }).then(() => setStage('design'), e => setNotice(`The AI's workflow could not be opened: ${e instanceof Error ? e.message : String(e)}`));
+      else if (terms) { try { openProduct(normalizeParams(JSON.parse(terms) as ProductParams)); } catch (e) { setNotice(`Those terms could not be opened: ${e instanceof Error ? e.message : String(e)}`); } }
+      else if (tpl) openTemplate({ definition: tpl, name: '', description: '', author: '', createdAt: 0, kind: 'custom', label: '' }).then(() => {});
       else if (p === 'worst-of') openProduct(EXAMPLE_WORST_OF);
       else if (p && EXAMPLE_PRODUCTS[p]) openProduct(EXAMPLE_PRODUCTS[p]);
     }, 0);
     return () => clearTimeout(t);
   }); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    fetch('/api/templates').then(r => (r.ok ? r.json() : [])).then(setTemplates).catch(() => setTemplates([]));
-  }, []);
 
   // ---- checks: on every change, validate and compile as it would be published ----
   const recheck = useCallback(async () => {
@@ -211,7 +208,7 @@ export default function Workspace() {
     { id: 'design', label: selected ? 'Properties' : 'Overview', icon: selected ? <Workflow className="i" /> : <LayoutList className="i" /> },
     { id: 'validate', label: issues.errors.length ? `Check (${issues.errors.length})` : 'Check', icon: issues.errors.length ? <AlertCircle className="i" style={{ color: 'hsl(var(--destructive))' }} /> : <CheckCircle2 className="i" /> },
     { id: 'payoff', label: 'Payoff', icon: <LineChart className="i" /> },
-    { id: 'template', label: 'Template', icon: <BookOpen className="i" /> },
+    { id: 'template', label: 'Ready-made note', icon: <BookOpen className="i" /> },
     { id: 'issue', label: 'Issue', icon: <Rocket className="i" /> },
   ];
 
@@ -223,7 +220,6 @@ export default function Workspace() {
           <nav className="crumbs ws-crumbs" aria-label="Breadcrumb"><Link to="/issue">Issue</Link><span aria-hidden="true">/</span><span aria-current="page">Advanced studio</span></nav>
           <input ref={fileInput} type="file" accept=".bpmn,.xml" hidden onChange={e => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
           {doc && <button className="btn" onClick={close} title="Close this workflow"><X className="i" />Close</button>}
-          <button className="btn" onClick={showTemplates} title="Products and published templates"><LayoutTemplate className="i" />Templates</button>
           <button className="btn" onClick={() => fileInput.current?.click()}><FileUp className="i" />Import</button>
           {doc && <button className="btn" onClick={exportFile}><Download className="i" />Export BPMN</button>}
           {doc && <span className="row" style={{ gap: 4 }}><ChevronRight className="i dim" /><span className="name" title={doc.name}>{doc.name}</span></span>}
@@ -247,51 +243,20 @@ export default function Workspace() {
               <div className="ws-start">
                 <div className="ws-start-inner">
                   <div>
-                    <h1>Issue a note</h1>
-                    <p className="small muted" style={{ marginTop: 6, maxWidth: '64ch' }}>Start from a ready-made product or template, describe the note to the AI, or draw your own workflow. Check the payoff, then issue it, or save it as a template for others.</p>
+                    <h1>Workflow studio</h1>
+                    <p className="small muted" style={{ marginTop: 6, maxWidth: '64ch' }}>Edit a note's workflow on the BPMN canvas: add steps, change who does what, connect services. Check the payoff, then issue it, or save it as a ready-made note for others. Import a .bpmn file, or ask the AI for a change.</p>
                   </div>
                   <div className="start-cards">
-                    {[
-                      { icon: <Workflow className="i" />, title: 'From a template', detail: 'Stock payoffs and templates other issuers published. Pick one below.', onClick: () => document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' }), primary: true },
-                      { icon: <TrendingUp className="i" />, title: 'Structured product', detail: 'FCN, reverse convertible, phoenix, snowball or principal-protected, on one underlying or a worst-of basket.', onClick: () => setProductDialog({ initial: null }) },
-                      { icon: <Sparkles className="i" />, title: 'Describe it to the AI', detail: 'Paste a term sheet or describe the note; missing terms come back as a question.', onClick: () => setAiOpen(true) },
-                      { icon: <FilePlus2 className="i" />, title: 'Blank workflow', detail: 'An Issuer pool with a pre-trade step: draw the rest on the canvas.', onClick: openBlank },
-                    ].map(c => (
-                      <button key={c.title} className={`start-card ${c.primary ? 'primary' : ''}`} onClick={c.onClick}>
-                        <span className="t">{c.icon}{c.title}</span>
-                        <span className="d">{c.detail}</span>
-                      </button>
-                    ))}
+                    <Link to="/issue" className="start-card primary">
+                      <span className="t"><TrendingUp className="i" />Start from a note type or ready-made note</span>
+                      <span className="d">The guided issue flow: pick one, then open it here to change the workflow.</span>
+                    </Link>
+                    <button className="start-card" onClick={openBlank}>
+                      <span className="t"><FilePlus2 className="i" />Blank workflow</span>
+                      <span className="d">An Issuer pool with a pre-trade step: draw the rest on the canvas.</span>
+                    </button>
                   </div>
                   {notice && <div className="notice err" role="alert">{notice}</div>}
-                  <section id="templates" className="stack" style={{ gap: 10 }}>
-                    <div className="spread"><h2>Products</h2><span className="xs muted">Verified payoff engines; issue as is or edit first</span></div>
-                    <div className="tpl-grid">
-                      {STOCK.map(p => (
-                        <button key={p.name} className="tpl" onClick={() => openProduct(p)}>
-                          <span className="label">{PRODUCT_LABELS[p.productType]} · {underlyingLabel(p)}</span>
-                          <span className="n">{p.name}</span>
-                          <span className="xs muted">{headline(p)}</span>
-                          <span className="xs row" style={{ color: 'hsl(var(--accent-text))', gap: 4 }}>Open <ArrowRight className="i" style={{ width: 12, height: 12 }} /></span>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="spread" style={{ marginTop: 8 }}><h2>Published templates</h2><span className="xs muted">Saved by issuers from the studio</span></div>
-                    {templates === null ? <p className="xs muted">Loading the template library…</p>
-                      : templates.length === 0 ? <div className="empty small">No templates yet. Open a product or design a workflow, then save it from the Template stage.</div>
-                      : (
-                        <div className="tpl-grid">
-                          {templates.map(t => (
-                            <button key={t.definition} className="tpl" onClick={() => openTemplate(t)}>
-                              <span className="label">{t.label}</span>
-                              <span className="n">{t.name}</span>
-                              {t.description && <span className="xs muted">{t.description}</span>}
-                              <span className="xs dim">by {short(t.author)} · {new Date(t.createdAt * 1000).toLocaleDateString()}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                  </section>
                 </div>
               </div>
             )}
@@ -304,7 +269,7 @@ export default function Workspace() {
                     onEditTerms={() => setProductDialog({ initial: doc.basis })} />)}
               {stage === 'validate' && <ValidatePanel issues={issues} onSelect={selectNode} />}
               {stage === 'payoff' && <PayoffPanel key={doc.pristine + String(doc.edited)} doc={doc} />}
-              {stage === 'template' && <TemplatePanel key={doc.pristine} doc={doc} build={build} onSaved={t => { setDoc(d => (d ? { ...d, template: t } : d)); setTemplates(x => [t, ...(x ?? []).filter(y => y.definition !== t.definition)]); }} />}
+              {stage === 'template' && <TemplatePanel key={doc.pristine} doc={doc} build={build} onSaved={t => setDoc(d => (d ? { ...d, template: t } : d))} />}
               {stage === 'issue' && <IssuePanel key={doc.pristine} doc={doc} built={built} />}
             </aside>
           )}

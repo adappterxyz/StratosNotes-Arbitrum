@@ -1,6 +1,6 @@
 /**
  * The workspace's stages, in order (Flow's right panel): Overview, Validate,
- * Payoff, Template, Issue. Each works on the workflow open on the canvas.
+ * Payoff, Ready-made note (save), Issue. Each works on the workflow open on the canvas.
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -48,10 +48,10 @@ export function OverviewPanel({ doc, info, onEditTerms, onStage }: {
   const p = doc.basis;
   return (
     <>
-      <Head title={doc.name} sub={doc.template ? `Template by ${short(doc.template.author)}` : undefined} />
+      <Head title={doc.name} sub={doc.template ? `Ready-made note by ${short(doc.template.author)}` : undefined} />
       <div className="section">
         <div className="row">
-          <span className={`pill ${doc.origin === 'product' && !doc.edited ? 'book' : 'live'}`}><span className="dot" />{doc.origin === 'product' && !doc.edited ? 'Stock product' : doc.edited && doc.origin === 'product' ? 'Edited: custom workflow' : 'Custom workflow'}</span>
+          <span className={`pill ${doc.origin === 'product' && !doc.edited ? 'book' : 'live'}`}><span className="dot" />{doc.origin === 'product' && !doc.edited ? 'Standard note' : doc.edited && doc.origin === 'product' ? 'Edited: custom workflow' : 'Custom workflow'}</span>
           <span className="xs muted">{info.steps} steps</span>
         </div>
         <p className="xs muted">{doc.origin === 'product' && !doc.edited
@@ -83,7 +83,7 @@ export function OverviewPanel({ doc, info, onEditTerms, onStage }: {
         <div className="row">
           {info.errors > 0 && <button className="btn" onClick={() => onStage('validate')}>Fix {info.errors} error{info.errors > 1 ? 's' : ''}</button>}
           <button className="btn" onClick={() => onStage('payoff')}>See the payoff</button>
-          <button className="btn" onClick={() => onStage('template')}>Save as template</button>
+          <button className="btn" onClick={() => onStage('template')}>Save as ready-made note</button>
         </div>
         <p className="xs muted">Advanced: select a step, gateway or flow on the canvas to change what it does.</p>
       </div>
@@ -190,7 +190,7 @@ export function PayoffPanel({ doc }: { doc: DocInfo }) {
 
 // ---- Template -----------------------------------------------------------------
 
-export function TemplatePanel({ doc, build, onSaved }: { doc: DocInfo; build: () => Promise<Built>; onSaved: (t: TemplateSummary) => void }) {
+export function TemplatePanel({ doc, build, onSaved, bare = false }: { doc: DocInfo; build: () => Promise<Built>; onSaved: (t: TemplateSummary) => void; bare?: boolean }) {
   const me = useAddress();
   const { wagmi } = useChains();
   const [name, setName] = useState(doc.template && !doc.edited ? doc.template.name : doc.name);
@@ -204,25 +204,25 @@ export function TemplatePanel({ doc, build, onSaved }: { doc: DocInfo; build: ()
       setBusy('Compiling…');
       const { c, source } = await build();
       const definition = definitionId(c);
-      setBusy('Sign the template with your wallet…');
+      setBusy('Sign it with your wallet…');
       const signature = await signMessage(wagmi, { message: templateMessage(definition) });
-      setBusy('Saving to the template library…');
+      setBusy('Saving to the ready-made notes…');
       const j = await api.saveTemplate({ ...source, definition, name: name.trim(), description, author: me }, signature);
-      setMsg({ kind: 'ok', text: `Saved "${j.name}". Issuers can now pick it from Issue → Templates, on any network.` });
+      setMsg({ kind: 'ok', text: `Saved "${j.name}". Any issuer can now start from it under Issue → Ready-made notes, on any network.` });
       onSaved(j);
     } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
     finally { setBusy(''); }
   };
   return (
     <>
-      <Head title="Save as template" sub="Publish this workflow so that you, or any issuer, can issue it again from the template library." />
+      {!bare && <Head title="Save as ready-made note" sub="Publish this note so that you, or any issuer, can start from it again under Issue → Ready-made notes." />}
       <div className="section">
-        {doc.template && !doc.edited && <div className="notice info">Opened from the template "{doc.template.name}" by {short(doc.template.author)}. Saving again under a new name lists it separately.</div>}
+        {doc.template && !doc.edited && <div className="notice info">Started from the ready-made note "{doc.template.name}" by {short(doc.template.author)}. Saving it again under a new name lists it separately.</div>}
         <div className="field"><label htmlFor="tp-name">Name</label><input id="tp-name" value={name} maxLength={80} onChange={e => setName(e.target.value)} /></div>
         <div className="field"><label htmlFor="tp-desc">Description</label><textarea id="tp-desc" rows={3} maxLength={280} value={description} onChange={e => setDescription(e.target.value)} placeholder="Who it is for, what is special about it" /></div>
-        <p className="xs muted">A template is identified by the hash of its compiled workflow, the same on every network. The library checks your signature, recompiles the workflow and accepts it only if it lands on that hash. It goes on-chain the first time someone issues it.</p>
+        <p className="xs muted">A ready-made note is identified by the hash of its compiled workflow, the same on every network. The library checks your signature, recompiles the workflow and accepts it only if it lands on that hash. It goes on-chain the first time someone issues it.</p>
         <button className="btn primary lg" disabled={!me || !!busy || !name.trim()} onClick={save}>
-          {!me ? 'Connect a wallet' : busy || 'Publish template'}
+          {!me ? 'Connect a wallet' : busy || 'Save as ready-made note'}
         </button>
         {msg && <div className={`notice ${msg.kind}`} role="status">{msg.text}</div>}
       </div>
