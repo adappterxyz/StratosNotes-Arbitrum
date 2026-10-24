@@ -10,7 +10,8 @@ describe('listingOf: the annual rate and plain specs', () => {
   it('fixed coupon note: a fixed annual rate', () => {
     const p: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, couponRatePct: 2.5 };
     const l = listingOf(p, quarterly());
-    expect(l.yield.headline).toBe('10% a year');
+    expect(l.yield.headline).toBe('10%');
+    expect(l.yield.rateLabel).toBe('est. annualized return');
     expect(l.yield.sub).toBe('in USDG, paid every 3 months');
     expect(l.yield.guaranteed).toBe(true);
     expect(l.yield.qualifier).toBeNull();
@@ -20,7 +21,7 @@ describe('listingOf: the annual rate and plain specs', () => {
   it('reverse convertible: fixed rate, money back above the barrier, stock below when physical', () => {
     const p: ProductParams = { ...EXAMPLE_PRODUCTS['reverse-convertible'], underlyings: [FEEDS.TSLA], couponRatePct: 3, knockInBarrierPct: 60, settlement: 'physical' };
     const l = listingOf(p, quarterly());
-    expect(l.yield.headline).toBe('12% a year');
+    expect(l.yield.headline).toBe('12%');
     expect(l.protection).toBe('Your money back if Tesla stays above 60%; below it, you get the stock');
     expect(l.early).toBeNull();
     expect(l.kind).toBe('stocks');
@@ -29,7 +30,7 @@ describe('listingOf: the annual rate and plain specs', () => {
   it('phoenix with memory on a basket: "up to", conditional, early repayment in months', () => {
     const p: ProductParams = { ...EXAMPLE_WORST_OF, underlyings: [FEEDS.TSLA, FEEDS.NVDA], couponRatePct: 2.5, couponBarrierPct: 70, memory: true, autocallLevelPct: 100, autocallFromPeriod: 2, knockInBarrierPct: 60 };
     const l = listingOf(p, quarterly());
-    expect(l.yield.headline).toBe('Up to 10% a year');
+    expect(l.yield.headline).toBe('Up to 10%');
     expect(l.yield.qualifier).toBe('if the weaker one stays above 70%');
     expect(l.yield.guaranteed).toBe(false);
     expect(l.assets).toBe('Tesla & NVIDIA: the weaker one counts');
@@ -39,7 +40,7 @@ describe('listingOf: the annual rate and plain specs', () => {
 
   it('snowball: up to, paid at redemption', () => {
     const l = listingOf({ ...EXAMPLE_PRODUCTS.snowball, couponRatePct: 2 }, quarterly());
-    expect(l.yield.headline).toBe('Up to 8% a year');
+    expect(l.yield.headline).toBe('Up to 8%');
     expect(l.yield.sub).toBe('in USDG, paid at redemption');
     expect(l.yield.guaranteed).toBe(false);
   });
@@ -56,14 +57,14 @@ describe('listingOf: the annual rate and plain specs', () => {
     const start = 1_800_000_000;
     const p: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix on ETH', couponRatePct: 2.5, observations: 4 };
     const l = listingOf(p, { strikeDate: start, obsDates: [1, 2, 3, 4].map(k => start + k * DAY) });
-    expect(l.yield.headline).toBe('Up to 10% a year');
+    expect(l.yield.headline).toBe('Up to 10%');
     expect(l.demo).toBe(true);
     expect(l.term).toBe('about 4 days (demo schedule)');
     expect(l.early).toMatch(/from date \d/);
   });
 
   it('without dates, the design sets the rate', () => {
-    expect(listingOf({ ...EXAMPLE_PRODUCTS.fcn, name: '6M FCN on BTC', couponRatePct: 1, observations: 6 }).yield.headline).toBe('12% a year');
+    expect(listingOf({ ...EXAMPLE_PRODUCTS.fcn, name: '6M FCN on BTC', couponRatePct: 1, observations: 6 }).yield.headline).toBe('12%');
   });
 });
 

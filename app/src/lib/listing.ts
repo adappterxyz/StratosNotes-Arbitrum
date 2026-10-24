@@ -20,8 +20,10 @@ const MONTH = YEAR / 12;
 export interface Schedule { strikeDate?: number; obsDates?: number[] }
 
 export interface Yield {
-  /** e.g. "10% a year", "Up to 10% a year", "90% protected + 100% of the upside". */
+  /** e.g. "10%", "Up to 10%" (with rateLabel), or "90% protected + 100% of the upside". */
   headline: string;
+  /** Small label under a rate headline: "est. annualized return" (absent for protected notes). */
+  rateLabel?: string;
   /** e.g. "in USDG, paid every 3 months". */
   sub: string;
   /** A condition, when the rate is not fixed: "if Tesla stays above 70%". */
@@ -102,11 +104,11 @@ export function listingOf(p: ProductParams, s: Schedule = {}, cash = 'USDG'): Li
   if (p.productType === 'ppn') {
     y = { headline: `${p.protectionPct ?? 100}% protected + ${p.participationPct ?? 0}% of the upside`, sub: `in ${cash} at the end`, qualifier: null, apr: null, guaranteed: (p.protectionPct ?? 0) >= 100 };
   } else if (p.productType === 'phoenix') {
-    y = { headline: `Up to ${pct(apr)} a year`, sub: `in ${cash}, paid ${every}`, qualifier: `if ${who} stays above ${p.couponBarrierPct ?? 0}%`, apr, guaranteed: false };
+    y = { headline: `Up to ${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid ${every}`, qualifier: `if ${who} stays above ${p.couponBarrierPct ?? 0}%`, apr, guaranteed: false };
   } else if (p.productType === 'snowball') {
-    y = { headline: `Up to ${pct(apr)} a year`, sub: `in ${cash}, paid at redemption`, qualifier: `only if it ends early or ${who} is above ${p.autocallLevelPct ?? 100}% at the end`, apr, guaranteed: false };
+    y = { headline: `Up to ${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid at redemption`, qualifier: `only if it ends early or ${who} is above ${p.autocallLevelPct ?? 100}% at the end`, apr, guaranteed: false };
   } else {
-    y = { headline: `${pct(apr)} a year`, sub: `in ${cash}, paid ${every}`, qualifier: null, apr, guaranteed: true };
+    y = { headline: `${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid ${every}`, qualifier: null, apr, guaranteed: true };
   }
   let protection: string | null = null;
   if (p.productType === 'ppn') protection = `At least ${p.protectionPct ?? 100}% of your money back at the end`;

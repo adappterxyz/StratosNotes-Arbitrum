@@ -38,6 +38,7 @@ export function YieldBlock({ o, cash, big = false }: { o: NoteView; cash: string
   return (
     <div className={`ls-yield ${big ? 'big' : ''}`}>
       <strong className="num">{l.yield.headline}</strong>
+      {l.yield.rateLabel && <span className="ls-rate-label">{l.yield.rateLabel}</span>}
       <span className="small muted">{l.yield.sub}</span>
       {l.yield.qualifier && <span className="xs ls-cond">{l.yield.qualifier} · not guaranteed</span>}
     </div>
