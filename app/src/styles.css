@@ -583,3 +583,15 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
   .alerts-page.two { grid-template-columns: 1fr; grid-template-areas: "head" "config" "mail"; }
   .alerts-page.two .alerts-config { position: static; }
 }
+
+/* Lock tracker: each recent lock as three steps (locked → CCIP → credited). */
+.xc-track { gap: 8px; }
+.xc-steps { list-style: none; margin: 0; padding: 10px 12px; border: 1px solid hsl(var(--border)); border-radius: 8px; display: grid; gap: 6px; font-size: 13px; background: hsl(var(--card)); }
+.xc-steps li { display: flex; gap: 8px; align-items: flex-start; color: hsl(var(--muted-foreground)); }
+.xc-steps li .i { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.xc-steps li.done { color: hsl(var(--foreground)); }
+.xc-steps li.done .i { color: hsl(var(--accent-text)); }
+.xc-steps li.active { color: hsl(var(--foreground)); }
+.xc-steps li.active .i { color: #B7791F; animation: xc-pulse 1.6s ease-in-out infinite; }
+@keyframes xc-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .xc-steps li.active .i { animation: none; } }

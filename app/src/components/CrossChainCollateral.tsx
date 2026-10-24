@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRightLeft, CheckCircle2, Clock, ExternalLink, Lock } from 'lucide-react';
-import { erc20Abi, formatUnits, parseUnits } from 'viem';
+import { erc20Abi, formatUnits, parseAbiItem, parseUnits } from 'viem';
 import { homeGatewayAbi, remoteVaultAbi } from '@sn/sdk';
 import type { ChainConfig, CrossChainReceipt } from '../lib/api';
 import { legacyConfig, useAddress, useChains, useSigner } from '../lib/chains';
@@ -148,6 +148,81 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
         ))}
       </ul>
       {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
+      <LockTracker leg={leg} address={address} tick={tick} />
+    </div>
+  );
+}
+
+const lockedEvent = parseAbiItem('event Locked(bytes32 indexed lockId, address indexed from, address indexed beneficiary, address token, uint256 amount, bytes32 messageId, uint256 fee)');
+const creditedEvent = parseAbiItem('event LockCredited(bytes32 indexed lockId, uint64 indexed chainSelector, address indexed account, address receipt, uint256 amount, bytes32 messageId)');
+type TrackedLock = { lockId: `0x${string}`; token: string; amount: bigint; messageId: string; tx: string; at: number; credited: string | null };
+
+/**
+ * The wallet's recent locks, read from both chains (so it survives a reload): locked in the vault on the asset chain,
+ * Chainlink CCIP on the way, credited on the home chain and ready to pledge. Re-read every 15 s.
+ */
+function useMyLocks(leg: Leg, address: string | null, tick: number) {
+  const { byKey } = useChains();
+  const [locks, setLocks] = useState<TrackedLock[] | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let live = true;
+    const asset = byKey[leg.asset.key]?.client, home = byKey[leg.home.key]?.client;
+    if (!asset || !home) return;
+    const read = async () => {
+      try {
+        const head = await asset.getBlockNumber();
+        const found: TrackedLock[] = [];
+        // Recent history in a few ranges (the asset chain makes several blocks a second).
+        for (let i = 0n; i < 4n && found.length < 3; i++) {
+          const to = head - i * 50_000n, from = to - 49_999n;
+          const logs = await asset.getLogs({ address: leg.vault, event: lockedEvent, args: { beneficiary: address as `0x${string}` }, fromBlock: from > 0n ? from : 0n, toBlock: to });
+          for (const l of logs.reverse()) {
+            const b = await asset.getBlock({ blockNumber: l.blockNumber! });
+            found.push({ lockId: l.args.lockId!, token: l.args.token!, amount: l.args.amount!, messageId: l.args.messageId!, tx: l.transactionHash!, at: Number(b.timestamp), credited: null });
+          }
+        }
+        const recent = found.filter(x => Date.now() / 1000 - x.at < 86_400).slice(0, 3);
+        if (recent.length) {
+          const hHead = await home.getBlockNumber();
+          for (let i = 0n; i < 6n; i++) {
+            const to = hHead - i * 10_000n, from = to - 9_999n;
+            const logs = await home.getLogs({ address: leg.gateway, event: creditedEvent, args: { lockId: recent.map(x => x.lockId) }, fromBlock: from, toBlock: to });
+            for (const l of logs) { const x = recent.find(y => y.lockId === l.args.lockId); if (x) x.credited = l.transactionHash!; }
+            if (recent.every(x => x.credited)) break;
+          }
+        }
+        if (live) setLocks(recent);
+      } catch { /* a slow RPC: keep the last reading */ }
+    };
+    void read();
+    const t = setInterval(read, 15_000);
+    return () => { live = false; clearInterval(t); };
+  }, [leg.vault, leg.gateway, leg.asset.key, leg.home.key, address, tick, byKey]);
+  return locks;
+}
+
+function LockTracker({ leg, address, tick }: { leg: Leg; address: string | null; tick: number }) {
+  const locks = useMyLocks(leg, address, tick);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 5_000); return () => clearInterval(t); }, []);
+  if (!locks?.length) return null;
+  const symOf = (token: string) => receiptLabel(Object.entries(leg.receipts).find(([, r]) => r.token.toLowerCase() === token.toLowerCase())?.[0] ?? 'tokens');
+  const decOf = (token: string) => Object.values(leg.receipts).find(r => r.token.toLowerCase() === token.toLowerCase())?.decimals ?? 18;
+  const ex = (c: ChainConfig, tx: string) => (c.explorer ? `${c.explorer}/tx/${tx}` : undefined);
+  const mins = (s: number) => `${Math.max(0, Math.floor(s / 60))} min`;
+  return (
+    <div className="xc-track stack" aria-label="Your recent locks">
+      {locks.map(l => {
+        const done = !!l.credited;
+        return (
+          <ol key={l.lockId} className="xc-steps" data-lock-state={done ? 'credited' : 'in-flight'}>
+            <li className="done"><CheckCircle2 className="i" /><span><b>Locked on {leg.asset.name}</b> · {formatUnits(l.amount, decOf(l.token))} {symOf(l.token)} · {new Date(l.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{ex(leg.asset, l.tx) && <> · <a href={ex(leg.asset, l.tx)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
+            <li className={done ? 'done' : 'active'}>{done ? <CheckCircle2 className="i" /> : <Clock className="i" />}<span><b>{done ? 'Delivered by Chainlink CCIP' : 'Chainlink CCIP delivering'}</b>{done ? '' : ` · ${mins(now - l.at)} so far, usually 15–25`} · <a href={ccipLink(l.messageId)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a></span></li>
+            <li className={done ? 'done' : ''}>{done ? <CheckCircle2 className="i" /> : <ArrowRightLeft className="i" />}<span><b>{done ? `Credited on ${leg.home.name}: ready to pledge` : `Credited on ${leg.home.name}`}</b>{done && ex(leg.home, l.credited!) && <> · <a href={ex(leg.home, l.credited!)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
+          </ol>
+        );
+      })}
     </div>
   );
 }
