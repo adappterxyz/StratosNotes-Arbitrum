@@ -11,7 +11,14 @@ const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
 
 /** The wordmark: lowercase, with the dot as the one blue mark. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
-  return <span className={`wordmark ${size}`} aria-label="notes.markets">notes<i>.</i>markets</span>;
+  // Primary lockup (docs/brand/logo-guide.pdf): the payoff note, then "notes" in Geist Bold, a Signal-green square dot,
+  // "markets" in Geist Regular, Slate.
+  return (
+    <span className={`wordmark ${size}`} aria-label="notes.markets">
+      <img className="wm-mark" src="/brand/mark.svg" alt="" aria-hidden="true" />
+      <span className="wm-text" aria-hidden="true"><b>notes</b><i /><span>markets</span></span>
+    </span>
+  );
 }
 
 export default function Landing() {
