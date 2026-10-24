@@ -18,13 +18,29 @@
  *                stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS) under the same
  *                policy, funding nothing: any funded account will do, since pushing is permissionless.
  *
- * Cross-chain collateral (HomeGateway v2, docs/CROSS-CHAIN.md): receipts paid out of a note are burned and queued
- * at the gateway as releases on the asset chain. Chainlink CRE flushes the queue; as a fallback, with GATEWAY set
- * this bot calls `flush` whenever releases wait and the gateway's fee pool can pay for the next one (FLUSH=0: off;
- * FLUSH_MAX: releases per transaction, default 10). Flushing is permissionless: any funded key will do.
+ * Cross-chain collateral (HomeGateway v2, docs/CROSS-CHAIN.md). Collateral stays on its own chain; Arbitrum is only
+ * the anchor, so receipts never wait inside the engine: they burn and queue a release on the asset chain only when
+ * they LEAVE the engine, and this bot makes them leave (RECEIPTS=0 turns both off):
+ *   - Paid in full (or the excess after a capped default): the engine credits the released receipts to the
+ *     issuer's ledger. Once the note no longer runs, the bot withdraws every receipt asset on its ledger: the
+ *     receipts burn and the gateway queues a release to the issuer's own address on the asset chain.
+ *   - Default: the collateral is distributed to the holders as a payout. For receipt assets only, the bot pushes
+ *     it to every holder owed one (`pushTo`, permissionless, RECEIPT_BATCH holders per transaction, default 25,
+ *     with gas set for the engine's 150k per-transfer cap; the receipt hook takes ~102k), whatever PUSH says, so
+ *     each holder's collateral is released on the asset chain without them acting. Cash payouts (USDG) stay
+ *     claim-by-default under PUSH as above. With PUSH_ONLY=1 it does this for every note (or PIDS).
+ *   A receipt is a token the gateway's registry knows (`receiptInfo`); the gateway must be VERSION 2.
+ * Chainlink CRE flushes the release queue (about every minute). This bot is only the fallback: it calls `flush`
+ * for releases that have waited more than FLUSH_AFTER seconds (default 180; the queued time is the block time of
+ * the release's first ReleaseQueued event) when the fee pool can pay (FLUSH=0: never; FLUSH_MAX: releases per
+ * transaction, default 10). Flushing is permissionless: any funded key will do.
+ * The gateway is GATEWAY, or else home.gateway of CROSSCHAIN_CONFIG (default deployments/crosschain-testnet.json)
+ * when its home chain id and engine are this bot's (GATEWAY= empty: none). Its events are read from
+ * GATEWAY_FROM_BLOCK (default: the config's gatewayBlock, else FROM_BLOCK), LOG_CHUNK blocks per query (50000).
  *
  *   RPC=... CHAIN_ID=421614 ENGINE=0x... LENS=0x... ISSUER_KEY_FILE=path [FROM_BLOCK=n] [GATEWAY=0x...] \
- *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [PUSH=1|0] [PUSH_MIN=0.5] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
+ *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [PUSH=1|0] [PUSH_MIN=0.5] [RECEIPTS=0] [RECEIPT_BATCH=25] \
+ *   [FLUSH_AFTER=180] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
  *
  * PIDS: the notes to look after (default: every note whose Issuer role is this key). MISS: pid:period payments
  * to leave unfunded. MINT=1: mint tokens the wallet lacks where the key may mint (a local MockERC20, or the retired
@@ -33,9 +49,12 @@
  * `cast wallet new --json` array, or a bare hex key) or ISSUER_KEY, and never printed.
  */
 import { readFileSync } from 'node:fs';
-import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, parseEventLogs, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { CHAIN_TOKENS, collateralSymbolOfAsset, dec, planFlush, releaseQueueAbi, toBase } from '@sn/core';
+import {
+  CHAIN_TOKENS, collateralSymbolOfAsset, dec, gatewayRegistryAbi, isReceiptInfo, MAX_FLUSH, overdueReleases, planFallbackFlush, planReceiptPush,
+  planReceiptWithdrawals, receiptPushGas, releaseEventsAbi, releaseQueueAbi, releaseQueueReading, toBase,
+} from '@sn/core';
 import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, pushesNote, pushPolicyFromEnv, type ChainInfo } from '@sn/sdk';
 
 const env = (k: string, d?: string) => { const v = process.env[k] ?? d; if (v === undefined) throw new Error(`set ${k}`); return v; };
@@ -59,8 +78,41 @@ const miss = new Set((process.env.MISS ?? '').split(',').map(s => s.trim()).filt
 const only = process.env.PIDS ? new Set(process.env.PIDS.split(',').map(s => s.trim())) : null;
 const mintAbi = parseAbi(['function mint(address to, uint256 amount)']);
 const log = (s: string) => console.log(`[issuer-bot] ${s}`);
-const gateway = process.env.GATEWAY as Address | undefined;
 const flushAbi = parseAbi(['function flush(uint256 maxItems) returns (uint256 sent)']);
+/** The HomeGateway (v2) and the block its events start at: GATEWAY, else the cross-chain config's for this engine. */
+function gatewayOf(): { gateway?: Address; fromBlock: bigint } {
+  const from = BigInt(env('FROM_BLOCK', '0'));
+  const explicit = process.env.GATEWAY;
+  if (explicit !== undefined) {
+    const gateway = /^0x[0-9a-fA-F]{40}$/.test(explicit) ? explicit as Address : undefined;
+    return { gateway, fromBlock: BigInt(process.env.GATEWAY_FROM_BLOCK ?? from) };
+  }
+  try {
+    const x = JSON.parse(readFileSync(process.env.CROSSCHAIN_CONFIG ?? 'deployments/crosschain-testnet.json', 'utf8')) as
+      { home?: { chainId?: number; engine?: string; gateway?: string; gatewayBlock?: number; version?: number } };
+    const h = x.home;
+    if (h?.gateway && h.chainId === chainId && (h.version ?? 1) >= 2 && h.engine?.toLowerCase() === engine.toLowerCase())
+      return { gateway: h.gateway as Address, fromBlock: BigInt(process.env.GATEWAY_FROM_BLOCK ?? h.gatewayBlock ?? from) };
+  } catch { /* no config: no gateway */ }
+  return { fromBlock: from };
+}
+const gw = gatewayOf();
+let gateway = gw.gateway;
+/** Receipts leave the engine automatically (withdraw the issuer's, push holders'): on unless RECEIPTS=0. */
+let autoRelease = !!gateway && process.env.RECEIPTS !== '0';
+const flushAfter = Number(process.env.FLUSH_AFTER ?? 180);
+const receiptBatch = Number(process.env.RECEIPT_BATCH ?? 25);
+const logChunk = BigInt(process.env.LOG_CHUNK ?? 50_000);
+if (gateway) {
+  const version = await client.readContract({ address: gateway, abi: gatewayRegistryAbi, functionName: 'VERSION' }).catch(() => 0n);
+  if (version < 2n) {
+    console.log(`[issuer-bot] gateway ${gateway} is not an auto-release (v2) gateway (VERSION ${version}): no flush, no receipt release`);
+    gateway = undefined;
+    autoRelease = false;
+  } else {
+    console.log(`[issuer-bot] gateway ${gateway} (v${version}): receipts ${autoRelease ? 'withdrawn / pushed automatically' : 'not moved (RECEIPTS=0)'}; fallback flush ${process.env.FLUSH === '0' ? 'off' : `after ${flushAfter} s`}`);
+  }
+}
 const policy = pushPolicyFromEnv(process.env);
 const pushOnly = process.env.PUSH_ONLY === '1';
 const pushBatch = policy.batch;
@@ -98,7 +150,7 @@ async function pushOwed(pid: bigint, asset: number, min: bigint, what: string) {
  * Push the open payout rounds of the notes this bot pushes for (`push`: its policy said yes for the note), to the
  * end of each holder set; with PUSH_MIN, only to holders owed at least that.
  */
-async function pushPayouts(push: Set<string>) {
+async function scanRounds() {
   const head = await client.getBlockNumber();
   if (head >= pushFrom) {
     const [rec, settled] = await Promise.all([
@@ -115,9 +167,13 @@ async function pushPayouts(push: Set<string>) {
     }
     pushFrom = head + 1n;
   }
+}
+
+async function pushPayouts(push: Set<string>) {
   for (const [key] of [...openRounds]) {
     const [pid, asset] = key.split(':');
     if (!push.has(pid) || (policy.assets && !policy.assets.has(asset))) continue;
+    if (await roundIsReceipt(key)) continue; // receipts: pushReceiptRounds, whatever the cash policy
     if (policy.min > 0n) {
       openRounds.delete(key);
       await pushOwed(BigInt(pid), Number(asset), policy.min, 'paid');
@@ -151,21 +207,165 @@ async function ensure(token: Address, base: bigint) {
 
 const ceil6 = (x: number) => Math.ceil(x * 1e6 - 1e-6) / 1e6;
 
+// ---- Cross-chain collateral: receipts leave the engine; CRE flushes, this bot only as a late fallback ----------
+
+const receiptTokens = new Map<string, boolean>();
+/** Whether `token` is a receipt of the gateway (cached: the registry only grows, and a token never changes). */
+async function isReceipt(token: string): Promise<boolean> {
+  if (!gateway || BigInt(token) === 0n) return false;
+  const k = token.toLowerCase();
+  let yes = receiptTokens.get(k);
+  if (yes === undefined) {
+    yes = isReceiptInfo(await client.readContract({ address: gateway, abi: gatewayRegistryAbi, functionName: 'receiptInfo', args: [token as Address] }));
+    receiptTokens.set(k, yes);
+  }
+  return yes;
+}
+
+/** The releases a transaction queued at the gateway, for the log. */
+function queuedIn(r: TransactionReceipt): string {
+  const q = parseEventLogs({ abi: releaseEventsAbi, logs: r.logs, eventName: 'ReleaseQueued' }).filter(l => l.address.toLowerCase() === gateway?.toLowerCase());
+  return q.length ? q.map(l => `#${l.args.index} ${l.args.added} to ${l.args.to}`).join(', ') : 'none';
+}
+
+/** Notes whose receipts are all off the issuer's ledger after the note ended: nothing more can come. */
+const withdrawn = new Set<string>();
 /**
- * Fallback to CRE: send queued releases (auto-released receipts) when the gateway's fee pool can pay for them. The
- * gateway re-checks everything; a flush racing CRE's simply finds less to send.
+ * Paid in full (or the excess after a capped default): the engine credited the released receipts to the issuer's
+ * ledger. Withdraw them: each burns and queues a release to the issuer's own address on the asset chain.
+ */
+async function withdrawReceipts(pid: bigint, running: boolean, assetTokens: readonly string[], decimals: readonly number[]) {
+  if (!autoRelease || running || withdrawn.has(pid.toString())) return;
+  const id = noteId(info.key, engine, pid);
+  const ledger = [];
+  for (let i = 0; i < assetTokens.length; i++) {
+    if (!(await isReceipt(assetTokens[i]))) continue;
+    const balance = await client.readContract({ address: engine, abi: engineAbi, functionName: 'balanceOf', args: [pid, account.address, BigInt(i)] });
+    ledger.push({ asset: i, token: assetTokens[i], decimals: decimals[i], balance });
+  }
+  const plan = planReceiptWithdrawals(running, ledger, () => true);
+  for (const w of plan) {
+    const hash = await wallet.writeContract({ address: engine, abi: engineAbi, functionName: 'withdraw', args: [pid, w.asset, w.base], chain, account });
+    const r = await client.waitForTransactionReceipt({ hash });
+    if (r.status !== 'success') throw new Error(`withdraw of receipt asset ${w.asset} reverted (${hash})`);
+    log(`${id}: withdrew ${w.base} base units of receipt asset ${w.asset} (${w.token}): burned, release queued to the issuer on the asset chain [${queuedIn(r)}] (tx ${hash})`);
+  }
+  if (!plan.length) withdrawn.add(pid.toString());
+}
+
+const roundTokens = new Map<string, string>();
+/** Whether a payout round (`pid:asset`) pays a receipt asset (and receipts are released automatically). */
+async function roundIsReceipt(key: string): Promise<boolean> {
+  if (!autoRelease) return false;
+  let token = roundTokens.get(key);
+  if (token === undefined) {
+    const [pid, asset] = key.split(':');
+    token = await client.readContract({ address: engine, abi: engineAbi, functionName: 'assetTokenOf', args: [BigInt(pid), BigInt(asset)] });
+    roundTokens.set(key, token);
+  }
+  return isReceipt(token);
+}
+
+const tokenDecimals = new Map<string, number>();
+/**
+ * A default paid the holders in collateral receipts: push each holder's share out of the engine (`pushTo`,
+ * permissionless), so it burns and is released to them on the asset chain without any holder action. Cash payouts
+ * are not touched here (claim by default, PUSH). One pass per payout round; what could not be sent (under one base
+ * unit, or a deferred transfer) stays claimable and is logged.
+ */
+async function pushReceiptRounds(pids: Set<string>) {
+  if (!autoRelease) return;
+  for (const [key] of [...openRounds]) {
+    const [pid, asset] = key.split(':');
+    if (!pids.has(pid) || !(await roundIsReceipt(key))) continue;
+    const id = noteId(info.key, engine, BigInt(pid));
+    const token = roundTokens.get(key)! as Address;
+    let decimals = tokenDecimals.get(token);
+    if (decimals === undefined) {
+      decimals = await client.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' });
+      tokenDecimals.set(token, decimals);
+    }
+    const who = await holdersOf(BigInt(pid));
+    const owed = who.length ? await client.readContract({ address: lens, abi: lensAbi, functionName: 'claimable', args: [BigInt(pid), BigInt(asset), who] }) : [];
+    const batches = planReceiptPush(who, owed, decimals, receiptBatch);
+    for (const batch of batches) {
+      const hash = await wallet.writeContract({
+        address: engine, abi: engineAbi, functionName: 'pushTo', args: [BigInt(pid), Number(asset), batch as Address[]],
+        gas: receiptPushGas(batch.length), chain, account,
+      });
+      const r = await client.waitForTransactionReceipt({ hash });
+      if (r.status !== 'success') throw new Error(`pushTo of receipt asset ${asset} reverted (${hash})`);
+      const deferred = parseEventLogs({ abi: engineAbi, logs: r.logs, eventName: 'PayoutDeferred' }).length;
+      log(`${id}: pushed receipt collateral (asset ${asset}) to ${batch.length} holder(s), released on the asset chain [${queuedIn(r)}]${deferred ? `, ${deferred} deferred` : ''} (${r.gasUsed} gas, tx ${hash})`);
+    }
+    const pushed = batches.flat() as Address[];
+    if (pushed.length) {
+      const left = await client.readContract({ address: lens, abi: lensAbi, functionName: 'claimable', args: [BigInt(pid), BigInt(asset), pushed] });
+      const stuck = planReceiptPush(pushed, left, decimals, receiptBatch).flat().length;
+      if (stuck) log(`${id}: ${stuck} holder(s) still hold receipt asset ${asset} in the engine (transfer deferred): claimable, not retried`);
+    }
+    openRounds.delete(key);
+  }
+}
+
+/** Release queue bookkeeping from the gateway's events: when each release was first queued, and which were sent. */
+const releaseBlock = new Map<bigint, bigint>();
+const queuedAt = new Map<bigint, number>();
+const releaseSent = new Set<bigint>();
+const blockTime = new Map<bigint, number>();
+let gatewayFrom = gw.fromBlock;
+let noEventLogged = -1n;
+
+async function scanGateway(head: bigint) {
+  while (gateway && gatewayFrom <= head) {
+    const to = gatewayFrom + logChunk - 1n < head ? gatewayFrom + logChunk - 1n : head;
+    const [queued, sent] = await Promise.all([
+      client.getContractEvents({ address: gateway, abi: releaseEventsAbi, eventName: 'ReleaseQueued', fromBlock: gatewayFrom, toBlock: to }),
+      client.getContractEvents({ address: gateway, abi: releaseEventsAbi, eventName: 'ReleaseSent', fromBlock: gatewayFrom, toBlock: to }),
+    ]);
+    for (const l of queued) if (!releaseBlock.has(l.args.index!)) releaseBlock.set(l.args.index!, l.blockNumber);
+    for (const l of sent) releaseSent.add(l.args.index!);
+    gatewayFrom = to + 1n;
+  }
+}
+
+/**
+ * Fallback to Chainlink CRE (the primary flusher, about every minute): send queued releases only once they have
+ * waited more than FLUSH_AFTER seconds, and only when the gateway's fee pool can pay. The gateway re-checks
+ * everything; a flush racing CRE's simply finds less to send.
  */
 async function flushReleases() {
   if (!gateway || process.env.FLUSH === '0') return;
-  const [pending, head, queued, pool, nextFee] = await client.readContract({ address: gateway, abi: releaseQueueAbi, functionName: 'releaseQueue' });
-  const plan = planFlush({ pending, head, queued, pool, nextFee }, { maxItems: Number(process.env.FLUSH_MAX ?? 10) });
+  const q = releaseQueueReading(await client.readContract({ address: gateway, abi: releaseQueueAbi, functionName: 'releaseQueue' }));
+  if (q.pending === 0n) return;
+  const latest = await client.getBlock();
+  await scanGateway(latest.number);
+  const now = Number(latest.timestamp);
+  const maxItems = Number(process.env.FLUSH_MAX ?? 10);
+  for (let i = q.head; i <= q.queued && i < q.head + BigInt(MAX_FLUSH); i++) {
+    if (releaseSent.has(i) || queuedAt.has(i)) continue;
+    const b = releaseBlock.get(i);
+    if (b === undefined) {
+      // Its event is older than GATEWAY_FROM_BLOCK: count from now (never ahead of CRE on a guess).
+      queuedAt.set(i, now);
+      if (noEventLogged !== i) { log(`gateway: no ReleaseQueued event for release #${i} since block ${gw.fromBlock}: counting its wait from now`); noEventLogged = i; }
+      continue;
+    }
+    let t = blockTime.get(b);
+    if (t === undefined) { t = Number((await client.getBlock({ blockNumber: b })).timestamp); blockTime.set(b, t); }
+    queuedAt.set(i, t);
+  }
+  const overdue = overdueReleases(q, queuedAt, releaseSent, now, flushAfter);
+  const plan = planFallbackFlush(q, overdue, { maxItems });
   if (!plan.flush) {
-    if (plan.reason !== 'empty') log(`gateway: ${pending} release(s) waiting, not flushed (${plan.reason}; pool ${pool} wei, next fee ${nextFee} wei)`);
+    if (plan.reason !== 'empty' && plan.reason !== 'cre-window') log(`gateway: ${q.pending} release(s) waiting, not flushed (${plan.reason}; pool ${q.pool} wei, next fee ${q.nextFee} wei)`);
     return;
   }
   const hash = await wallet.writeContract({ address: gateway, abi: flushAbi, functionName: 'flush', args: [BigInt(plan.maxItems)], chain, account });
   const r = await client.waitForTransactionReceipt({ hash });
-  log(`gateway: flushed up to ${plan.maxItems} of ${pending} queued release(s) to the asset chain (${r.gasUsed} gas, tx ${hash})`);
+  const sent = parseEventLogs({ abi: releaseEventsAbi, logs: r.logs, eventName: 'ReleaseSent' }).map(l => `#${l.args.index}`);
+  log(`gateway: CRE had not sent ${overdue} release(s) waiting over ${flushAfter} s: flushed ${sent.join(', ') || 'none'} of ${q.pending} queued (${r.gasUsed} gas, tx ${hash})`);
+  for (const i of [...queuedAt.keys()]) if (i < q.head) queuedAt.delete(i); // bounded memory
 }
 
 async function tick() {
@@ -173,9 +373,11 @@ async function tick() {
   const count = await client.readContract({ address: engine, abi: engineAbi, functionName: 'processCount' });
   const mine = new Set<string>();
   if (pushOnly) {
-    if (policy.mode === 'off') return;
     for (let pid = 1n; pid <= count; pid++) if (!only || only.has(pid.toString())) mine.add(pid.toString());
-    return pushPayouts(await toPush(mine));
+    await scanRounds();
+    await pushReceiptRounds(mine);
+    if (policy.mode !== 'off') await pushPayouts(await toPush(mine));
+    return;
   }
   for (let pid = 1n; pid <= count; pid++) {
     if (only && !only.has(pid.toString())) continue;
@@ -187,6 +389,9 @@ async function tick() {
     const issuerRole = def.roles.indexOf('Issuer');
     if (issuerRole < 0 || s.roles[issuerRole] !== account.address.toLowerCase()) continue;
     mine.add(pid.toString()); // a completed note may still have its redemption to push
+    // Its collateral receipts back on the issuer's ledger once the note ended: release them on the asset chain.
+    await withdrawReceipts(pid, s.status === 0, s.assetTokens, def.assets.map(a => a.decimals))
+      .catch(err => log(`${id}: receipt withdraw: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`));
     if (s.status !== 0) continue;
     const now = Number((await client.getBlock()).timestamp);
     const v = noteView(def, s, now);
@@ -231,6 +436,9 @@ async function tick() {
       if (t && need > 0) await run(t.step, `topUp_${c.symbol}`, Math.ceil(need * 1.01 * 1e6) / 1e6, colName, `topped up ${c.symbol} collateral:`);
     }
   }
+  await scanRounds();
+  // A default's collateral receipts to the holders' wallets, so they are released on the asset chain (always).
+  await pushReceiptRounds(mine).catch(err => log(`receipt push: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`));
   if (policy.mode !== 'off') await pushPayouts(await toPush(mine));
 }
 

@@ -49,15 +49,53 @@ locally (Chainlink Local, mock routers) and on forks of both testnets with the r
    coverage sums every collateral asset, local or remote, on any number of asset chains.
 3. **Run.** Observations, coupons, margin calls, the grace period and the default rule are the engine's
    unchanged, reference-tested paths.
-4. **Paid in full.** The engine releases the receipts to the issuer. When they leave the engine (the issuer's
-   withdraw), the receipt burns them and the gateway **queues a RELEASE** to the issuer's address on Robinhood.
-5. **Default.** The engine pays the receipts to the holders (cap-at-owed: what they are owed, the excess to the
-   issuer). Each holder's share leaves the engine on their claim (or a keeper's `pushTo`): burned and queued the
-   same way, to the holder's address on Robinhood.
+4. **Paid in full.** The engine credits the receipts to the issuer's ledger in the note. When they leave the
+   engine (the issuer's withdraw), the receipt burns them and the gateway **queues a RELEASE** to the issuer's
+   address on Robinhood. The issuer bot does that withdraw automatically once the note has ended (below).
+5. **Default.** The engine pays the receipts to the holders as a payout (cap-at-owed: what they are owed, the
+   excess to the issuer's ledger). Each holder's share leaves the engine on a `pushTo`: burned and queued the same
+   way, to the holder's address on Robinhood. The issuer bot pushes every holder's receipts automatically; a
+   holder's own claim does the same.
 6. **Flush.** Chainlink CRE writes a report to the gateway (`onReport` through the KeystoneForwarder) that sends
    the queued RELEASEs, paying each CCIP fee from the gateway's ETH **fee pool**; anyone can call `flush` too (the
-   issuer bot does, as a fallback), and anyone can send one queued release with their own fee (`sendQueued`). The
-   vault pays the real token; the app shows "Released to your wallet on Robinhood Chain" with the CCIP message.
+   issuer bot does, as a late fallback), and anyone can send one queued release with their own fee
+   (`sendQueued`). The vault pays the real token; the app shows "Released to your wallet on Robinhood Chain" with
+   the CCIP message.
+
+### Automation: receipts never wait inside the engine
+
+The engine is unchanged, so a receipt only burns and queues when something moves it OUT of the engine. Left alone,
+a paid-in-full note's collateral would sit on the issuer's ledger and a default's on the holders' accounts (the
+live proof, pid 2 on engine v4, needed a manual withdraw). The issuer bot (`scripts/issuer-bot.ts`) closes that
+gap, with the decisions in pure, unit-tested functions in packages/core/src/crosschain.ts:
+
+| Case | What the bot does | Decision |
+|---|---|---|
+| Note paid in full (or a capped default's excess), note no longer running | `withdraw(pid, asset, base)` of every receipt asset on the issuer's ledger: burned, RELEASE queued to the issuer | `planReceiptWithdrawals` (whole base units only, `withdrawableBase`; nothing while the note runs) |
+| Default: receipts distributed to holders | `pushTo(pid, asset, holders)` for every holder owed at least one base unit, `RECEIPT_BATCH` (25) per transaction, gas set to 200k + 250k per holder (each transfer gets the engine's full 150k push cap; the receipt hook takes ~102k) | `planReceiptPush`, `receiptPushGas` |
+| Releases queued | `flush` only for releases waiting longer than `FLUSH_AFTER` (180 s): CRE is primary (about every minute) | `overdueReleases` + `planFallbackFlush` |
+
+- **Receipts only.** A receipt is a token the gateway's registry knows (`receiptInfo(token)` non-zero; the
+  gateway must report `VERSION() >= 2`). Cash payouts (USDG) stay claim-by-default under the bot's `PUSH` policy;
+  receipt payouts are pushed whatever `PUSH` says (`RECEIPTS=0` turns the receipt automation off). With
+  `PUSH_ONLY=1` the bot does the receipt pushes for every note (or `PIDS`), with any funded key.
+- **Explicit push gas.** The engine gives each pushed transfer at most 150k and a transfer that runs out is
+  deferred, not reverted, so a gas estimate that merely avoids a revert could defer every holder. One pass per
+  payout round; a holder whose transfer was deferred stays claimable and is logged, not retried.
+- **Queued time.** The gateway does not store when a release was queued; the bot takes the block time of the
+  release's first `ReleaseQueued` event (scanned from `GATEWAY_FROM_BLOCK`, default the config's `gatewayBlock`, in
+  `LOG_CHUNK` blocks) and skips releases already sent (`ReleaseSent`). A release whose event it cannot find counts
+  from when the bot first saw it: never flushed ahead of CRE on a guess.
+- **Gateway.** `GATEWAY`, or `home.gateway` of `CROSSCHAIN_CONFIG` (default deployments/crosschain-testnet.json)
+  when its chain id and engine are the bot's (`GATEWAY=` empty: none).
+- **Other automation.** The CRE keeper (cre/notes-keeper-evm) flushes; it does not withdraw or push (it writes
+  reports only). services/keeper-fallback stands in for CRE's engine reports on Robinhood Chain mainnet, where no
+  home gateway runs; if a home gateway is ever deployed on a chain without CRE, it needs the flush (planFlush, no
+  delay) and the same receipt pushes.
+- **End to end on a fork:** `bash scripts/e2e-xc-autorelease.sh` (anvil fork of Arbitrum Sepolia, the live engine v4
+  and gateway v2, receipts minted by impersonating the gateway): a note paid in full -> the bot withdraws ->
+  `ReleaseQueued` to the issuer; a note that defaults -> the bot pushes the holders -> `ReleaseQueued` per holder;
+  both flushed by the bot only after `FLUSH_AFTER` (the real router on the fork emits `ReleaseSent`).
 
 Receipts a locker holds and never pledged are ordinary: pledge them into a note, or `redeem` them at the gateway
 (burn + RELEASE, the caller pays the fee) to unlock the tokens on Robinhood.
@@ -85,7 +123,7 @@ Receipts a locker holds and never pledged are ordinary: pledge them into a note,
   transfer: the issuer at pledge, the protocol). `flush(maxItems)` sends queued releases oldest first, at most 25
   per call, and stops at the first one the pool cannot pay for (`FlushStalled`): it stays queued and goes on the
   next flush. A CRE report triggers the same flush, so releases go out without anyone acting; the issuer bot
-  flushes as a fallback. `sendQueued(index)` lets anyone (the holder) send one release paying the fee
+  flushes as a late fallback (releases older than `FLUSH_AFTER`, 180 s). `sendQueued(index)` lets anyone (the holder) send one release paying the fee
   themselves: no release ever depends on the pool or the queue order.
 - **Dust cannot drain the pool.** Releases to the same (receipt, recipient) that are not sent yet add up into one
   queue entry, so many small withdrawals between two flushes cost the pool one message, not one each.
@@ -215,8 +253,9 @@ it says so, one write per run, on the home chain:
   pool or a paused gateway (it is a no-op); it reverts only for a kind other than 1 or a sender other than the
   forwarder. Releases sent emit `ReleaseSent(index, releaseId, to, receipt, amount, messageId, fee, fromPool)`.
 - **Config** the keeper needs per home chain: the gateway address (deployments/crosschain-testnet.json
-  `home.gateway`) and its gas settings. Racing the issuer bot's fallback flush is harmless: whoever is second
-  finds less (or nothing) to send.
+  `home.gateway`) and its gas settings. The issuer bot's fallback flush only sends releases that have waited more
+  than `FLUSH_AFTER` (180 s), so CRE sends them first; a race is harmless anyway: whoever is second finds less (or
+  nothing) to send.
 - **Wired** (cre/notes-keeper-evm/main.ts): config `gateways: [{ chainSelectorName, gateway, maxItems, baseGas,
   gasPerItem, stateBlock }]`, emitted by `scripts/cre-config.ts staging` from `home.gateway` when `home.version >= 2`
   (`keeperGateways`; base gas 250k: one release through the forwarder measured ~395k). Each run, after the engine

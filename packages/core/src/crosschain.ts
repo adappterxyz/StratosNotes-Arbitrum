@@ -190,3 +190,117 @@ export const releaseEventsAbi = [
     ],
   },
 ] as const;
+
+// ---- Auto-release automation (the issuer bot): receipts never wait inside the engine ----------------------------
+
+/**
+ * The gateway's receipt registry: `receiptInfo(token)` is (chain selector, locked token) for a receipt this gateway
+ * created, zero for any other token. `VERSION()` is 2 for an auto-release gateway.
+ */
+export const gatewayRegistryAbi = [
+  { type: 'function', name: 'VERSION', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  {
+    type: 'function', name: 'receiptInfo', stateMutability: 'view', inputs: [{ name: 'receipt', type: 'address' }],
+    outputs: [{ name: 'chainSelector', type: 'uint64' }, { name: 'remoteToken', type: 'address' }],
+  },
+] as const;
+
+/** Whether a `receiptInfo` reading names a receipt (a registered one has a non-zero locked token). */
+export function isReceiptInfo(info: readonly [bigint, string]): boolean {
+  return BigInt(info[1]) !== 0n;
+}
+
+const LEDGER_SCALE = 10n ** 10n;
+
+/**
+ * The ERC-20 base units of an engine ledger balance (10-decimal fixed point) that `FlowEngine.withdraw` accepts:
+ * floored to whole base units, so the amount converts back exactly (the engine refuses one that does not). What
+ * does not fit one base unit stays on the ledger.
+ */
+export function withdrawableBase(balance: bigint, decimals: number): bigint {
+  if (balance <= 0n) return 0n;
+  return (balance * 10n ** BigInt(decimals)) / LEDGER_SCALE;
+}
+
+/** One cash asset of a note on an account's engine ledger. */
+export interface LedgerAsset { asset: number; token: string; decimals: number; balance: bigint }
+
+/**
+ * Which receipts an issuer withdraws from a note (each withdraw burns them and queues a release to the issuer on the
+ * asset chain): every receipt asset with at least one whole base unit on the issuer's ledger, once the note no longer
+ * runs (paid in full, the collateral released to the issuer; or the excess after a capped default). While a note
+ * runs its ledger may hold what a workflow step is about to move, so nothing is withdrawn then.
+ */
+export function planReceiptWithdrawals(
+  noteRunning: boolean, assets: readonly LedgerAsset[], isReceipt: (token: string) => boolean,
+): Array<{ asset: number; token: string; base: bigint }> {
+  if (noteRunning) return [];
+  return assets
+    .filter(a => isReceipt(a.token))
+    .map(a => ({ asset: a.asset, token: a.token, base: withdrawableBase(a.balance, a.decimals) }))
+    .filter(w => w.base > 0n);
+}
+
+/**
+ * The holders to push a receipt payout to (a default's collateral, claim-by-default otherwise), in batches of at
+ * most `batch` for `pushTo`: everyone owed at least one whole base unit (less cannot be sent and stays on the
+ * account). Each pushed receipt burns and queues a release inside the engine's 150k per-transfer cap (~102k worst
+ * case), so a batch costs up to ~150k gas per holder plus the call (see `receiptPushGas`).
+ */
+export function planReceiptPush(holders: readonly string[], owed: readonly bigint[], decimals: number, batch: number): string[][] {
+  if (holders.length !== owed.length) throw new Error('holders and owed differ in length');
+  if (!Number.isInteger(batch) || batch < 1) throw new Error('batch must be a positive integer');
+  const due = holders.filter((_, i) => withdrawableBase(owed[i], decimals) > 0n);
+  const out: string[][] = [];
+  for (let i = 0; i < due.length; i += batch) out.push(due.slice(i, i + batch));
+  return out;
+}
+
+/**
+ * Gas for a `pushTo` of receipts to `holders` addresses. Set explicitly, not estimated: the engine gives each
+ * transfer at most 150k and a transfer that runs out defers the payment instead of reverting, so an estimate that
+ * just avoids a revert could leave every holder deferred.
+ */
+export function receiptPushGas(holders: number, opts: { baseGas?: bigint; perHolder?: bigint } = {}): bigint {
+  return (opts.baseGas ?? 200_000n) + (opts.perHolder ?? 250_000n) * BigInt(holders);
+}
+
+/**
+ * How many queued releases a FALLBACK flusher (the issuer bot) may send: Chainlink CRE is the primary flusher, so
+ * only releases that have waited longer than `flushAfter` seconds count. Walks the queue from `head` in index order
+ * (flush sends oldest first, skipping releases already sent with `sendQueued`) and counts the unsent releases whose
+ * queued time (`queuedAt`, the block time of their first ReleaseQueued) is more than `flushAfter` before `now`;
+ * stops at the first unsent release that is younger or whose time is unknown. At most `cap`.
+ */
+export function overdueReleases(
+  q: Pick<ReleaseQueueReading, 'head' | 'queued'>, queuedAt: ReadonlyMap<bigint, number>, sent: ReadonlySet<bigint>,
+  now: number, flushAfter: number, cap = MAX_FLUSH,
+): number {
+  let n = 0;
+  for (let i = q.head; i <= q.queued && n < cap; i++) {
+    if (sent.has(i)) continue;
+    const t = queuedAt.get(i);
+    if (t === undefined || now - t <= flushAfter) break;
+    n++;
+  }
+  return n;
+}
+
+export interface FallbackFlushPlan extends Omit<FlushPlan, 'reason'> {
+  reason?: FlushPlan['reason'] | 'cre-window';
+}
+
+/**
+ * The fallback flush: planFlush (pool, vault, cap), limited to the releases CRE has had `flushAfter` seconds to send
+ * (`overdue`, from overdueReleases). Nothing overdue: no flush (`cre-window`), CRE is expected to send them.
+ */
+export function planFallbackFlush(
+  q: ReleaseQueueReading, overdue: number, opts: { maxItems?: number; baseGas?: bigint; gasPerItem?: bigint } = {},
+): FallbackFlushPlan {
+  const plan = planFlush(q, opts);
+  if (!plan.flush) return plan;
+  if (overdue <= 0) return { flush: false, maxItems: 0, gasLimit: 0n, reason: 'cre-window' };
+  const n = Math.min(plan.maxItems, overdue);
+  const per = opts.gasPerItem ?? 300_000n;
+  return { flush: true, maxItems: n, gasLimit: (opts.baseGas ?? 150_000n) + per * BigInt(n) };
+}
