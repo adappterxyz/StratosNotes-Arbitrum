@@ -5,8 +5,8 @@
  * (Robinhood Chain's TSLA, AMZN, NFLX) come from that chain's faucet, linked. tUSD, our old test dollar, is not
  * offered (it only settles notes issued before USDG). On a local dev chain the API mints its mock stablecoin.
  */
-import { useState } from 'react';
-import { Droplet, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Droplet, ExternalLink } from 'lucide-react';
 import { CASH_FAUCET, CASH_TOKEN, EXTERNAL_TOKENS, STOCK_TOKEN_FAUCETS, TEST_CASH_TOKEN } from '@sn/core';
 import { parseAbi } from 'viem';
 import { useAccount } from 'wagmi';
@@ -55,14 +55,11 @@ export default function FaucetButton() {
   const external = new Set(Object.keys(EXTERNAL_TOKENS[ch.key] ?? {}));
   // Receipts (TSLA.rh…) are minted by CCIP for collateral locked on another chain: never from the faucet.
   const ours = Object.keys(ch.tokens).filter(s => !external.has(s) && !s.endsWith('.rh') && s !== TEST_CASH_TOKEN.token && s !== CASH_TOKEN.token);
-  const symbols = [CASH_TOKEN.token, ...ours, ...external];
-  // Where a token comes from when it is not ours to hand out.
-  const outside = token === CASH_TOKEN.token ? { url: CASH_FAUCET, who: 'Paxos' }
-    : external.has(token) ? { url: STOCK_TOKEN_FAUCETS[ch.key], who: 'Robinhood' } : undefined;
-  const claim = async () => {
+  const claim = async (token: string) => {
     const addr = ch.tokens[token];
     if (!addr || !ch.tokenFaucet) return;
-    setState({ busy: true, text: `Claiming ${token} on ${ch.name}…` });
+    setToken(token);
+    setState({ busy: true, text: `Claiming ${token} on ${ch.name}: confirm in your wallet…` });
     try {
       const w = await signer(ch.key);
       const client = byKey[ch.key].client;
@@ -71,18 +68,51 @@ export default function FaucetButton() {
       setState({ busy: false, text: `${token} received on ${ch.name}.` });
     } catch (e) {
       const t = errText(e);
-      setState({ busy: false, bad: true, text: /insufficient funds|gas/i.test(t) && GAS_FAUCETS[ch.key] ? `You need testnet ETH for gas first: ${GAS_FAUCETS[ch.key]}` : /TooSoon/.test(t) ? `You already claimed ${token} this hour.` : t });
+      setState({ busy: false, bad: true, text: /insufficient funds|gas/i.test(t) ? `You need testnet ETH for gas first (see above).` : /TooSoon/.test(t) ? `You already claimed ${token} this hour.` : t });
     }
   };
+  return <TokenMenu chainName={ch.name} gas={config.chains.filter(c => GAS_FAUCETS[c.key]).map(c => ({ name: c.name, url: GAS_FAUCETS[c.key] }))}
+    stockUrl={external.size ? STOCK_TOKEN_FAUCETS[ch.key] : (STOCK_TOKEN_FAUCETS['robinhood-testnet'] ?? '')} stocks={[...external]}
+    ours={ours} onClaim={claim} state={state} active={token} />;
+}
+
+/** "Get test tokens": one menu that says where each token comes from, in the order a newcomer needs them. */
+function TokenMenu({ chainName, gas, stockUrl, stocks, ours, onClaim, state, active }: {
+  chainName: string; gas: Array<{ name: string; url: string }>; stockUrl: string; stocks: string[]; ours: string[];
+  onClaim: (t: string) => void; state: { busy: boolean; text: string; bad?: boolean }; active: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', off); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', esc); };
+  }, [open]);
   return (
-    <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-      {status}
-      <select aria-label="Test token" value={token} onChange={e => setToken(e.target.value)} disabled={state.busy}>
-        {symbols.map(s => <option key={s} value={s}>{external.has(s) ? `${s} (${ch.name})` : s}</option>)}
-      </select>
-      {outside
-        ? <a className="btn" href={outside.url} target="_blank" rel="noreferrer" title={`Test ${token} is handed out by ${outside.who}, not by notes.markets`}><ExternalLink className="i" />Get test {token} from {outside.who}</a>
-        : <button className="btn" onClick={claim} disabled={state.busy} title={`Claim test ${token} on ${ch.name} (once an hour); gas is paid in testnet ETH`}><Droplet className="i" />Get {token}</button>}
+    <span className="menu" ref={ref}>
+      <button className="btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(o => !o)}><Droplet className="i" />Get test tokens<ChevronDown className="i" /></button>
+      {open && (
+        <div className="menu-pop" role="menu">
+          <span className="label" style={{ padding: '4px 10px' }}>1 · Gas (testnet ETH)</span>
+          {gas.map(g => <a key={g.url} className="mi" role="menuitem" href={g.url} target="_blank" rel="noreferrer"><span>ETH on {g.name}<small>Pays for transactions</small></span><ExternalLink className="i" /></a>)}
+          <div className="sep" />
+          <span className="label" style={{ padding: '4px 10px' }}>2 · {CASH_TOKEN.token} to subscribe</span>
+          <a className="mi" role="menuitem" href={CASH_FAUCET} target="_blank" rel="noreferrer"><span>{CASH_TOKEN.token} from Paxos<small>The stablecoin notes are paid in</small></span><ExternalLink className="i" /></a>
+          {stockUrl && <>
+            <div className="sep" />
+            <span className="label" style={{ padding: '4px 10px' }}>Stock tokens (collateral, delivery)</span>
+            <a className="mi" role="menuitem" href={stockUrl} target="_blank" rel="noreferrer"><span>{(stocks.length ? stocks : ['TSLA', 'AMZN', 'NFLX']).join(', ')} from Robinhood<small>On Robinhood Chain testnet</small></span><ExternalLink className="i" /></a>
+          </>}
+          {ours.length > 0 && <>
+            <div className="sep" />
+            <span className="label" style={{ padding: '4px 10px' }}>Test tokens on {chainName}</span>
+            {ours.map(t => <button key={t} className="mi" role="menuitem" style={{ border: 0, background: 'none', font: 'inherit', textAlign: 'left', cursor: 'pointer' }} disabled={state.busy} onClick={() => onClaim(t)}><span>{t}<small>Claim once an hour</small></span><span className="xs muted">{state.busy && active === t ? 'Claiming…' : 'Claim'}</span></button>)}
+          </>}
+          {state.text && <div className={`notice ${state.bad ? 'err' : 'ok'}`} role="status" style={{ marginTop: 6 }}>{state.text}</div>}
+        </div>
+      )}
     </span>
   );
 }

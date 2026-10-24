@@ -8,6 +8,7 @@ import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { dec, type WorkflowDef } from '@sn/core';
 import { issuerActions, type NoteEconomics, type NoteState, type PeriodStatus } from '@sn/sdk';
 import { useAddress, useChains, useSigner } from '../lib/chains';
+import { When } from './ui';
 import { errText, fmtDate, fmtMoney, fmtPct } from '../lib/format';
 
 const STATUS: Record<PeriodStatus, string> = {
@@ -75,6 +76,18 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
         </span>
       </div>
 
+      {isIssuer && running && call && fundStep && !call.funded && (
+        <div className="due" data-payment-due={call.period}>
+          <div className="spread"><strong>Payment {call.period} due</strong><span className="pill fixing">{countdown(call.payDate, now) === 'now' ? 'due now' : `due ${countdown(call.payDate, now)}`}</span></div>
+          <div className="small">Fund <b className="num">{fmtMoney(shortfall)} {sym}</b> by <When t={call.payDate} />{e.inGrace?.period === call.period ? <> (grace until <When t={call.graceEnd} />)</> : ''}. Holders are paid from it on the payment date.</div>
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <input aria-label="Amount to fund" inputMode="decimal" value={amounts.fund ?? proposed} onChange={ev => setAmounts(a => ({ ...a, fund: ev.target.value }))} style={{ maxWidth: 160 }} />
+            <button className="btn primary" disabled={!!busy} onClick={() => run('fund', fundStep.step, 'fundAmount', `Payment ${call.period} funded`, proposed)} data-fund>{busy === 'fund' ? 'Confirm in your wallet…' : `Fund ${fmtMoney(Number(amounts.fund ?? proposed) || 0)} ${sym}`}</button>
+          </div>
+          <span className="xs muted">Your wallet asks you to approve {sym} first, then to fund.</span>
+        </div>
+      )}
+
       {e.state === 'defaulted' && (
         <div className="notice err row" role="status"><ShieldAlert className="i" />The issuer did not {e.milestones.some(m => m.name === 'margin-call') && !e.milestones.some(m => m.name === 'payment-missed') ? 'top up its collateral' : 'fund a payment'} in time. {e.defaultRule === 'cap-at-owed' ? 'The holders received what they were owed (the missed payment and par) from escrow, stablecoin first, then collateral at its last Chainlink price, pro rata to their units; the rest went back to the issuer.' : 'Everything in escrow (the collateral and any partial funding) went to the holders, pro rata to their units.'} Withdraw it under Your position.</div>
       )}
@@ -119,7 +132,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
             {e.periods.map(p => (
               <tr key={p.k} data-period={p.k} data-status={p.status}>
                 <td>{p.k}</td>
-                <td className="small">{fmtDate(p.payDate)}<div className="xs dim">grace to {fmtDate(p.graceEnd)}</div></td>
+                <td className="small"><When t={p.payDate} /><div className="xs dim">grace to <When t={p.graceEnd} /></div></td>
                 <td className="r num">{p.perUnit === null ? '—' : p.perUnit.toFixed(4)}{p.deliver && <div className="xs dim">+ {p.deliver.perUnit.toFixed(6)} t{p.deliver.symbol}</div>}</td>
                 <td className="r num">{p.total === null ? '—' : fmtMoney(p.total)}</td>
                 <td><span className={`pill ${p.status === 'paid' ? 'live' : p.status === 'missed' ? 'defaulted' : p.status === 'grace' || p.status === 'due' ? 'fixing' : 'plain'}`}>{STATUS[p.status]}</span></td>
@@ -131,19 +144,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
 
       {isIssuer && running && (
         <div className="stack" style={{ gap: 10, borderTop: '1px solid hsl(var(--border))', paddingTop: 10 }} data-issuer-actions>
-          {call && fundStep && (
-            <div className="stack" style={{ gap: 6 }} data-payment-due={call.period}>
-              <span className="label">Payment due · period {call.period}</span>
-              <div className="small">{fmtMoney(call.total)} {sym} by {fmtDate(call.payDate)} ({countdown(call.payDate, now)}){e.inGrace?.period === call.period ? `; grace until ${fmtDate(call.graceEnd)}` : ''}.</div>
-              <div className="small">{call.funded ? <span className="row"><ShieldCheck className="i" />Funded: holders are paid on the payment date.</span> : `Still to fund: ${fmtMoney(shortfall)} ${sym}.`}</div>
-              {!call.funded && (
-                <div className="row" style={{ flexWrap: 'nowrap' }}>
-                  <input aria-label="Amount to fund" inputMode="decimal" value={amounts.fund ?? proposed} onChange={ev => setAmounts(a => ({ ...a, fund: ev.target.value }))} />
-                  <button className="btn primary" disabled={!!busy} onClick={() => run('fund', fundStep.step, 'fundAmount', `Payment ${call.period} funded`, proposed)} data-fund>{busy === 'fund' ? 'Funding…' : 'Fund'}</button>
-                </div>
-              )}
-            </div>
-          )}
+          {call && fundStep && call.funded && <div className="small row"><ShieldCheck className="i" style={{ color: 'hsl(var(--success))' }} />Payment {call.period} is funded: holders are paid on <When t={call.payDate} />.</div>}
           {!call && actions.fund.length > 0 && <p className="xs muted">No payment is due now. You can fund the next one early from Fund Payment in the workflow; it stays in escrow until its payment date.</p>}
           {actions.topUp.map(t => (
             <div key={t.symbol} className="row" style={{ flexWrap: 'nowrap' }}>

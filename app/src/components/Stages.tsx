@@ -16,6 +16,7 @@ import { FIELD_LABEL, fieldLabel, headline, obsIndex, planIssuance, type InputVa
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
 import { useAddress, useChains, useSigner } from '../lib/chains';
+import { Steps } from './ui';
 import { useVerifiedEmail } from './VerifiedEmail';
 import { LockOnRobinhood } from './CrossChainCollateral';
 import { errText, fmtMoney, short } from '../lib/format';
@@ -51,7 +52,7 @@ export function OverviewPanel({ doc, info, onEditTerms, onStage }: {
       <div className="section">
         <div className="row">
           <span className={`pill ${doc.origin === 'product' && !doc.edited ? 'book' : 'live'}`}><span className="dot" />{doc.origin === 'product' && !doc.edited ? 'Stock product' : doc.edited && doc.origin === 'product' ? 'Edited: custom workflow' : 'Custom workflow'}</span>
-          <span className="xs muted">{info.steps} steps · {info.pools.length} pools</span>
+          <span className="xs muted">{info.steps} steps</span>
         </div>
         <p className="xs muted">{doc.origin === 'product' && !doc.edited
           ? 'Runs a verified payoff engine: the marketplace prices it from the reference payoff.'
@@ -66,19 +67,25 @@ export function OverviewPanel({ doc, info, onEditTerms, onStage }: {
         </div>
       )}
       <div className="section">
-        <span className="label">Pools</span>
-        <div className="row">{info.pools.map(x => <span key={x} className="pill plain">{x}</span>)}</div>
-        <span className="label" style={{ marginTop: 4 }}>Fields</span>
-        <div className="xs muted num" style={{ lineHeight: 1.7 }}>{info.fields.join(', ') || 'none'}</div>
+        <details className="adv">
+          <summary>Advanced: parties and fields</summary>
+          <div className="adv-body">
+            <span className="label">Parties</span>
+            <div className="row">{info.pools.map(x => <span key={x} className="pill plain">{x}</span>)}</div>
+            <span className="label">Fields</span>
+            <div className="xs muted num" style={{ lineHeight: 1.7 }}>{info.fields.join(', ') || 'none'}</div>
+          </div>
+        </details>
       </div>
       <div className="section">
         <span className="label">Next</span>
+        <button className="btn primary lg" onClick={() => onStage('issue')} disabled={info.errors > 0}>{info.errors ? 'Fix the errors first' : 'Set the terms and issue →'}</button>
         <div className="row">
-          <button className="btn" onClick={() => onStage('validate')}>{info.errors ? `Fix ${info.errors} error${info.errors > 1 ? 's' : ''}` : 'Validate'}</button>
+          {info.errors > 0 && <button className="btn" onClick={() => onStage('validate')}>Fix {info.errors} error{info.errors > 1 ? 's' : ''}</button>}
+          <button className="btn" onClick={() => onStage('payoff')}>See the payoff</button>
           <button className="btn" onClick={() => onStage('template')}>Save as template</button>
-          <button className="btn primary" onClick={() => onStage('issue')} disabled={info.errors > 0}>Issue</button>
         </div>
-        <p className="xs muted">Select a step, gateway or flow on the canvas to edit what it does.</p>
+        <p className="xs muted">Advanced: select a step, gateway or flow on the canvas to change what it does.</p>
       </div>
     </>
   );
@@ -333,8 +340,9 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
   const deposits = plan.steps.filter(s => s.deposits.length);
   return (
     <>
-      <Head title="Issue" sub="Pre-trade terms for this issuance, and the collateral you pledge. Publishing opens the book: investors subscribe until the strike date (their stablecoin is yours), then Chainlink CRE observes, and you fund each payment before its date." />
+      <Head title="Issue this note" sub="Four steps. Publishing opens the book: investors subscribe until the strike date and their USDG is yours. Chainlink CRE then checks prices on each date, and you fund each payment before it falls due." />
       <div className="section">
+        <div className="step-h"><span className="n">1</span><h3>Network and size</h3></div>
         {config.chains.length > 1 && (
           <div className="field">
             <label htmlFor="is-chain">Network</label>
@@ -343,10 +351,6 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
             </select>
           </div>
         )}
-        <span className="label">Roles</span>
-        <p className="xs muted">Your wallet holds {plan.heldPools.join(', ')}{plan.openPools.length ? `; ${plan.openPools.join(', ')} is open to anyone` : ''}. Runs: {all.map(s => s.name).join(' → ')}.</p>
-      </div>
-      <div className="section">
         <div className="form-grid">
           {inputs.some(f => f.name === 'notional') && (
             <div className="field"><label htmlFor="is-size">{FIELD_LABEL.notional.replace('USDC', sym)}</label><input id="is-size" type="number" min={1} value={size} onChange={e => setSize(Number(e.target.value))} /></div>
@@ -358,7 +362,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       </div>
       {hasSchedule && (
         <div className="section">
-          <span className="label">Schedule</span>
+          <div className="step-h"><span className="n">2</span><h3>Dates</h3></div>
           <div className="form-grid">
             <div className="field"><label htmlFor="is-strike">Strike in (minutes)</label><input id="is-strike" type="number" min={2} value={strikeIn} onChange={e => setStrikeIn(Math.max(2, Number(e.target.value) || 2))} /></div>
             <div className="field">
@@ -376,7 +380,8 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       )}
       {names.has('collateralRatio') && (
         <div className="section" data-collateral>
-          <span className="label">Collateral (pledged now, locked in the note's escrow)</span>
+          <div className="step-h"><span className="n">3</span><h3>Collateral you lock</h3></div>
+          <p className="xs muted">Locked in the note until every payment is made. If you miss one, holders take what they're owed from it.</p>
           <div className="form-grid">
             <div className="field">
               <label htmlFor="is-ratio">Collateral ratio, % of the notional</label>
@@ -401,7 +406,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       )}
       {names.has('grace') && (
         <div className="section" data-timing>
-          <span className="label">Payments: funded by you before each payment date</span>
+          <div className="step-h"><span className="n">4</span><h3>Paying holders</h3></div>
           <div className="form-grid">
             <div className="field"><label htmlFor="is-lag">Settlement lag ({demo ? 'seconds' : 'days'} after each observation)</label><input id="is-lag" type="number" min={0} value={demo ? t.lag : t.lag / 86400} onChange={e => setTiming({ ...t, lag: Math.max(0, Number(e.target.value) || 0) * (demo ? 1 : 86400) })} /></div>
             <div className="field"><label htmlFor="is-grace">Grace period ({demo ? 'seconds' : 'days'}, up to {MAX_GRACE_DAYS} days)</label><input id="is-grace" type="number" min={0} value={demo ? t.grace : t.grace / 86400} onChange={e => setTiming({ ...t, grace: Math.max(0, Number(e.target.value) || 0) * (demo ? 1 : 86400) })} /></div>
@@ -412,7 +417,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
       )}
       {generic.length > 0 && (
         <div className="section">
-          <span className="label">Terms</span>
+          <span className="label">Other terms</span>
           <div className="form-grid">
             {generic.map(f => (
               <div key={f.name} className="field">
@@ -428,13 +433,19 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
         {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar{built.ir.assets.some(a => a.token && ROBINHOOD_STOCK_TOKENS[a.token]?.token === a.token) ? <>; Robinhood Chain's own TSLA and AMZN come from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a></> : ''}.</p>}
         {unsupported.length > 0 && <div className="notice warn">This note needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
         <button className="btn primary lg" disabled={!me || busy || !chain} onClick={() => void emailGate.require(chainKey, issue)}>
-          {me ? (busy ? 'Issuing…' : 'Publish and open the book') : 'Connect a wallet to issue'}
+          {me ? (busy ? 'Confirm each step in your wallet…' : 'Publish and open the book') : 'Connect a wallet to issue'}
         </button>
         {emailGate.dialog}
-        {progress.length > 0 && <ol className="xs muted" style={{ margin: 0, paddingLeft: 18 }} data-progress>{progress.map((s, i) => <li key={i}>{s}</li>)}</ol>}
+        {progress.length > 0 && <div data-progress><Steps items={progress.map((p, i) => ({ label: p, state: i < progress.length - 1 || p === 'Book open.' ? 'done' : error ? 'err' : 'now' }))} /></div>}
         {error && <div className="notice err" role="alert">{error}</div>}
-        {chain?.cfg.explorer && <a className="xs" href={`${chain.cfg.explorer}/address/${chain.cfg.engine}`} target="_blank" rel="noreferrer">Engine on {chain.cfg.name}</a>}
-        {chain && <span className="xs muted">Engine {short(chain.cfg.engine)}{chain.cfg.engine === zeroAddress ? ' (not deployed)' : ''} · {chain.cfg.cre ? 'reports by Chainlink CRE' : 'reports by the fallback keeper'}</span>}
+        <details className="adv">
+          <summary>Advanced: roles, steps and contracts</summary>
+          <div className="adv-body xs muted">
+            <p>Your wallet holds {plan.heldPools.join(', ')}{plan.openPools.length ? `; ${plan.openPools.join(', ')} is open to anyone` : ''}.</p>
+            <p>Runs: {all.map(s => s.name).join(' → ')}.</p>
+            {chain && <p>Engine {short(chain.cfg.engine)}{chain.cfg.engine === zeroAddress ? ' (not deployed)' : ''} on {chain.cfg.name} · {chain.cfg.cre ? 'reports by Chainlink CRE' : 'reports by the fallback keeper'}{chain.cfg.explorer ? <> · <a href={`${chain.cfg.explorer}/address/${chain.cfg.engine}`} target="_blank" rel="noreferrer">view on explorer</a></> : ''}</p>}
+          </div>
+        </details>
       </div>
     </>
   );

@@ -89,7 +89,7 @@ async function subscribe(page: Page, id: string, units: number, email: string) {
   await page.goto(`${APP}/note/${encodeURIComponent(id)}`);
   await page.locator('[data-subscribe]').waitFor({ timeout: 60_000 });
   await page.locator('#units').fill(String(units));
-  await page.getByRole('button', { name: 'Subscribe', exact: true }).click();
+  await page.getByRole('button', { name: /^Subscribe for / }).click();
   await verifyIfAsked(page, email);
   await page.getByText(`Subscribed ${units} units`).waitFor({ timeout: 120_000 });
 }
@@ -195,7 +195,7 @@ try {
   const perUnit = totalPerUnit(ref);
   lines.push(`reference: coupons [${ref.coupons.join(', ')}], ${ref.calledAt ? `called at ${ref.calledAt}` : 'to maturity'}, redemption ${ref.redemptionCash} -> ${perUnit} per unit`);
   console.log(lines[lines.length - 1]);
-  const shown = (await page.locator('[data-per-unit]').textContent())?.trim();
+  const shown = (await page.locator('[data-per-unit]').textContent())?.trim().split(' ')[0];
   check(shown === perUnit.toFixed(4), `note page "Paid so far / unit" ${shown} = reference ${perUnit.toFixed(4)}`);
   const agent = await page.locator('[data-agent]').getAttribute('data-agent');
   check(agent === (process.env.KEEPER === 'cre' ? 'cre' : 'fallback'), `note page shows the agent: ${agent}`);

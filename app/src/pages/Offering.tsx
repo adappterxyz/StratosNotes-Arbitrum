@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { isAddress } from 'viem';
-import { ArrowLeft, Radio, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Info, Radio, ShieldCheck } from 'lucide-react';
 import { dec, defToBpmn, instantiateProduct, SCALE } from '@sn/core';
 import { CASH_ASSET, headline, NOTE_ASSET, noteView, PHASE_LABEL, positionOf } from '@sn/sdk';
 import TasksPanel from '../components/TasksPanel';
@@ -10,6 +10,8 @@ import HoldersPanel from '../components/HoldersPanel';
 import BpmnView from '../components/BpmnView';
 import { useVerifiedEmail } from '../components/VerifiedEmail';
 import PayoffChart from '../components/PayoffChart';
+import { Addr, Steps, When, type StepState } from '../components/ui';
+import { plainTerms } from '../lib/plain';
 import { useAddress, useChains, useSigner, cashSymbol } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
@@ -26,9 +28,11 @@ export default function OfferingPage() {
   const me = useAddress();
   // Phases move with the clock (the book closes at the strike date) as well as with the chain.
   const o = useMemo(() => (note && def ? noteView(def, note.state, now) : note?.view), [note, def, Math.floor(now / 5)]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [units, setUnits] = useState('100');
+  const [unitsIn, setUnits] = useState<string | null>(null);
   const [xfer, setXfer] = useState({ to: '', units: '' });
   const [busy, setBusy] = useState(false);
+  // Subscribing is two transactions (a one-time approval, then the swap): shown as steps.
+  const [subStep, setSubStep] = useState<{ approve: StepState; swap: StepState } | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string; tx?: string } | null>(null);
   // Stock products redraw from their term sheet; custom workflows from the definition.
   const xml = useMemo(() => (!o || !def ? '' : o.custom ? defToBpmn(def) : instantiateProduct(o.params).bpmnXml), [o?.custom, def]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -43,6 +47,8 @@ export default function OfferingPage() {
   const mine = me ? positionOf(s, me, def ?? undefined) : null;
   const isIssuer = !!me && me.toLowerCase() === o.issuer.toLowerCase();
   const remaining = Math.max(0, o.notional - o.sold);
+  // Default to a round amount that fits what is left in the book.
+  const units = unitsIn ?? String(Math.max(0, Math.min(100, Math.floor(remaining))));
   const cost = (Number(units) || 0) * o.params.issuePricePct / 100;
   const subscribable = !!def && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
   const run = async (what: string, f: () => Promise<{ tx: string[] }>) => {
@@ -52,8 +58,23 @@ export default function OfferingPage() {
     finally { setBusy(false); }
   };
   const progress = (t: string) => setMsg({ kind: 'ok', text: `${t}…` });
-  const subscribe = () => run(`Subscribed ${units} units for ${fmtMoney(cost)} ${sym}.`, async () =>
-    chain.adapter.subscribe(await signer(s.chain), s.id, dec(units), progress));
+  const subscribe = () => {
+    setSubStep({ approve: 'now', swap: 'todo' });
+    const onStep = (t: string) => {
+      if (/^Approve/i.test(t)) setSubStep({ approve: 'now', swap: 'todo' });
+      else if (/^Subscribe/i.test(t)) setSubStep({ approve: 'done', swap: 'now' });
+    };
+    return run(`Subscribed ${units} units for ${fmtMoney(cost)} ${sym}. They're in your portfolio.`, async () => {
+      try {
+        const r = await chain.adapter.subscribe(await signer(s.chain), s.id, dec(units), onStep);
+        setSubStep({ approve: 'done', swap: 'done' });
+        return r;
+      } catch (e) {
+        setSubStep(x => (x ? { approve: x.approve === 'now' ? 'err' : x.approve, swap: x.swap === 'now' ? 'err' : x.swap } : x));
+        throw e;
+      }
+    });
+  };
   const transfer = () => run(`Transferred ${xfer.units} units.`, async () => {
     if (!isAddress(xfer.to.trim())) throw new Error('Enter the recipient wallet address.');
     return chain.adapter.transferUnits(await signer(s.chain), s.id, xfer.to.trim(), dec(xfer.units), progress);
@@ -100,7 +121,7 @@ export default function OfferingPage() {
         </div>
       </div>
 
-      <div className="two">
+      <div className="two note-layout">
         <div className="stack">
           <section className="card">
             <div className="kv">
@@ -109,7 +130,7 @@ export default function OfferingPage() {
               <div><span className="label">Issue price</span><span className="v">{o.params.issuePricePct}%</span></div>
               <div><span className="label">Observations</span><span className="v">{o.params.observations}</span></div>
               <div><span className="label">{basket ? 'Worst performance' : 'Performance'}</span><span className="v">{o.perfs.length ? fmtPct(o.perfs[o.perfs.length - 1]) : '—'}</span></div>
-              <div><span className="label">Paid so far / unit</span><span className="v" data-per-unit>{o.outcome ? o.outcome.perUnit.toFixed(4) : '—'}</span></div>
+              <div><span className="label">Paid so far per unit</span><span className="v" data-per-unit>{o.outcome ? `${o.outcome.perUnit.toFixed(4)} ${sym}` : '—'}</span></div>
             </div>
             {o.unds.length > 0 && (
               <div className="scroll-x">
@@ -120,7 +141,7 @@ export default function OfferingPage() {
                       const last = u.observed[u.observed.length - 1];
                       return (
                         <tr key={u.symbol}>
-                          <td>{u.symbol}/USD <span className="xs dim num" title={`${u.feedChain} ${u.feed}`}>{short(u.feed)}</span></td>
+                          <td>{u.symbol}/USD <span className="xs dim" title={`Chainlink feed on ${u.feedChain}: ${u.feed}`}>Chainlink</span></td>
                           <td className="r num">{u.strike === null ? '—' : fmtPrice(u.strike)}</td>
                           <td className="r num">{last === undefined ? '—' : fmtPrice(last)}</td>
                           <td className="r num">{last === undefined || u.strike === null ? '—' : fmtPct(last / u.strike)}</td>
@@ -135,12 +156,12 @@ export default function OfferingPage() {
 
           {events.length > 0 && (
             <section className="card">
-              <h3>Schedule: set at pre-trade, observed by Chainlink</h3>
+              <div className="spread"><h3>Schedule</h3><span className="xs muted">Prices observed by Chainlink CRE · times in your time zone</span></div>
               <div className="timeline">
                 {events.map(e => (
                   <div key={e.label} className={`tl ${e.state}`}>
                     <span className="mark" />
-                    <span>{e.label}<br /><span className="xs muted">{fmtDate(e.when)}</span></span>
+                    <span>{e.label}<br /><span className="xs muted"><When t={e.when} /></span></span>
                     <span className="num small" style={{ textAlign: 'right' }}>{e.value ?? (e.state === 'now' ? (now >= e.when ? 'due: waiting for the report' : 'next') : '')}</span>
                   </div>
                 ))}
@@ -149,26 +170,39 @@ export default function OfferingPage() {
           )}
 
           {xml && (
-            <section className="stack" style={{ gap: 8 }}>
-              <div className="spread"><h3>Workflow</h3><span className="xs muted">Highlighted: where this note is now</span></div>
-              <BpmnView xml={xml} active={o.activeSteps} />
-            </section>
+            <details className="adv">
+              <summary>Advanced: the note's workflow diagram</summary>
+              <div className="adv-body">
+                <p className="xs muted">Every step of this note as it runs on-chain. Highlighted: where it is now.</p>
+                <BpmnView xml={xml} active={o.activeSteps} />
+              </div>
+            </details>
           )}
         </div>
 
         <aside className="stack">
           {subscribable && (
             <section className="card" data-subscribe>
-              <h3>Subscribe</h3>
-              <p className="small muted">Open until {fmtDate(o.strikeDate)}. {fmtMoney(remaining, 0)} units left; one unit is 1 {sym} of face.</p>
+              <div className="spread"><h2>Subscribe</h2><span className="pill book"><span className="dot" />Open until <When t={o.strikeDate} /></span></div>
+              <ul className="terms" aria-label="What you get">
+                {plainTerms(o.params, sym, o.economics?.ratio ? Math.round(o.economics.ratio * 100) : undefined).map(t => (
+                  <li key={t.text} className={t.kind}>{t.kind === 'good' ? <CheckCircle2 className="i" /> : t.kind === 'risk' ? <AlertTriangle className="i" /> : <Info className="i" />}<span>{t.text}</span></li>
+                ))}
+              </ul>
               <div className="field">
-                <label htmlFor="units">Units</label>
+                <label htmlFor="units">How many units? <span className="muted">(1 unit = 1 {sym} of face · {fmtMoney(remaining, 0)} left)</span></label>
                 <input id="units" inputMode="decimal" value={units} onChange={e => setUnits(e.target.value)} />
-                <span className="hint">You pay {fmtMoney(cost)} {sym}, delivered against note units in one transaction (after a one-time approval).</span>
               </div>
+              <div className="youpay">
+                <div><span className="label">You pay</span><span className="v">{fmtMoney(cost)} {sym}</span></div>
+                <div><span className="label">You receive</span><span className="v">{fmtMoney(Number(units) || 0, 0)} units</span></div>
+              </div>
+              {Number(units) > remaining && <p className="xs err">Only {fmtMoney(remaining, 0)} units are left.</p>}
               <button className="btn primary lg" disabled={!me || busy || !(Number(units) > 0) || Number(units) > remaining} onClick={() => void emailGate.require(s.chain, subscribe)}>
-                {me ? (busy ? 'Subscribing…' : 'Subscribe') : 'Connect a wallet to subscribe'}
+                {me ? (busy ? 'Confirm in your wallet…' : `Subscribe for ${fmtMoney(cost)} ${sym}`) : 'Connect a wallet to subscribe'}
               </button>
+              {subStep && <Steps items={[{ label: `Approve ${sym} (one time)`, state: subStep.approve }, { label: 'Subscribe: pay and receive units in one transaction', state: subStep.swap }]} />}
+              <p className="xs muted">Need {sym}? Use <b>Get test tokens</b> in the top bar.</p>
               {emailGate.dialog}
             </section>
           )}
@@ -232,13 +266,16 @@ export default function OfferingPage() {
             </section>
           )}
 
-          <section className="card small">
-            <div className="spread"><span className="muted">Network</span><span>{chain?.cfg.name ?? s.chain}</span></div>
-            <div className="spread"><span className="muted">Engine · process</span>{explorer ? <a className="num" href={`${explorer}/address/${s.engine}`} target="_blank" rel="noreferrer">{short(s.engine)} · #{s.pid}</a> : <span className="num">{short(s.engine)} · #{s.pid}</span>}</div>
-            <div className="spread"><span className="muted">Workflow definition</span><span className="num" title={s.definition}>{short(s.definition)}</span></div>
-            <div className="spread"><span className="muted">Issuer</span><span className="num">{short(o.issuer)}</span></div>
-            <div className="spread"><span className="muted">Note units held</span><span className="num">{fmtMoney(s.holdings.filter(h => h.asset === NOTE_ASSET).reduce((a, h) => a + Number(BigInt(h.balance)) / Number(SCALE), 0), 0)}</span></div>
-          </section>
+          <details className="adv">
+            <summary>Advanced: contract details</summary>
+            <div className="adv-body small">
+              <div className="spread"><span className="muted">Network</span><span>{chain?.cfg.name ?? s.chain}</span></div>
+              <div className="spread"><span className="muted">Engine · note #</span><span><Addr value={s.engine} href={explorer ? `${explorer}/address/${s.engine}` : undefined} /> · #{s.pid}</span></div>
+              <div className="spread"><span className="muted">Workflow definition</span><Addr value={s.definition} /></div>
+              <div className="spread"><span className="muted">Issuer</span><Addr value={o.issuer} href={explorer ? `${explorer}/address/${o.issuer}` : undefined} /></div>
+              <div className="spread"><span className="muted">Note units held</span><span className="num">{fmtMoney(s.holdings.filter(h => h.asset === NOTE_ASSET).reduce((a, h) => a + Number(BigInt(h.balance)) / Number(SCALE), 0), 0)}</span></div>
+            </div>
+          </details>
         </aside>
       </div>
     </main>

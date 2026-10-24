@@ -207,7 +207,7 @@ export default function Workspace() {
 
   const stages: Array<{ id: Stage; label: string; icon: ReactNode }> = [
     { id: 'design', label: selected ? 'Properties' : 'Overview', icon: selected ? <Workflow className="i" /> : <LayoutList className="i" /> },
-    { id: 'validate', label: issues.errors.length ? `Validate (${issues.errors.length})` : 'Validate', icon: issues.errors.length ? <AlertCircle className="i" style={{ color: 'hsl(var(--destructive))' }} /> : <CheckCircle2 className="i" /> },
+    { id: 'validate', label: issues.errors.length ? `Check (${issues.errors.length})` : 'Check', icon: issues.errors.length ? <AlertCircle className="i" style={{ color: 'hsl(var(--destructive))' }} /> : <CheckCircle2 className="i" /> },
     { id: 'payoff', label: 'Payoff', icon: <LineChart className="i" /> },
     { id: 'template', label: 'Template', icon: <BookOpen className="i" /> },
     { id: 'issue', label: 'Issue', icon: <Rocket className="i" /> },
