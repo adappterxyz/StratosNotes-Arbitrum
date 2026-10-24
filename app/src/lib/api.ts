@@ -25,6 +25,8 @@ export interface ChainConfig extends ChainInfo {
    * holders withdraw and settle on them; new issuance and subscriptions go to `engine`.
    */
   legacyEngines?: LegacyEngineConfig[];
+  /** Earlier gateway–vault pairs of the current engine: receipts still in wallets redeem through their own gateway. */
+  previousCrossChain?: CrossChainConfig[];
 }
 export interface LegacyEngineConfig {
   engine: `0x${string}`;

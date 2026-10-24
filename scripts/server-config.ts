@@ -50,6 +50,8 @@ const liveReceipts = (r: CrossChain['remotes'][number]['receipts']) => Object.fr
 /** Cross-chain collateral (deployments/crosschain-testnet.json): receipts are tokens on the home chain; both
  * sides get the addresses the app needs to lock, follow and redeem. */
 type CrossChain = { home: { chain: string; selector: string; router: string; gateway: string }; remotes: Array<{ chain: string; selector: string; router: string; vault: string; receipts: Record<string, { receipt: string; token: string; decimals: number; valuedAs: string | null }> }> };
+const PREVIOUS_XC: CrossChain[] = (existsSync(ARCHIVE) ? readdirSync(ARCHIVE) : []).filter(d => /^xc-\d+$/.test(d)).sort()
+  .map(d => `${ARCHIVE}/${d}/crosschain-testnet.json`).filter(f => existsSync(f)).map(f => read<CrossChain>(f));
 const XC_CURRENT: CrossChain | null = existsSync('deployments/crosschain-testnet.json') ? read<CrossChain>('deployments/crosschain-testnet.json') : null;
 const receiptsOn = (key: string, xc = XC_CURRENT) => (xc && xc.home.chain === key
   ? Object.fromEntries(xc.remotes.flatMap(r => Object.entries(liveReceipts(r.receipts)).map(([sym, v]) => [sym, v.receipt]))) : {});
@@ -78,6 +80,8 @@ const api = {
       tokens: receiptsOn(c.key, l.xc),
       ...(crossChainOn(c.key, l.xc) ? { crossChain: crossChainOn(c.key, l.xc) } : {}),
     })),
+    // The current engine's replaced gateway–vault pairs (deployments/archive/xc-<n>/crosschain-testnet.json).
+    previousCrossChain: PREVIOUS_XC.map(x => crossChainOn(c.key, x)).filter(x => x?.role === 'home'),
   })),
 };
 mkdirSync('deployments/server', { recursive: true });

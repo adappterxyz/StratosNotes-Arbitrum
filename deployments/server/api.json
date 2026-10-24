@@ -20,46 +20,52 @@
         "tUSD": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787",
         "USDG": "0xFFC95faa3d63Cde504a05B567C600B78C0b41892",
         "WETH": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
-        "USDG.rh": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
-        "TSLA.rh": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
-        "AMZN.rh": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
-        "NFLX.rh": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3"
+        "USDG.rh": "0x36a4a88AEdC8873e239fDE4A0276b58c36841b6d",
+        "TSLA.rh": "0x3667d1534FA175c1A388fC8E2C8F8d7ebBBcD9d6",
+        "AMZN.rh": "0xC1C192e7eDE3f2966e9A9B1bBEd88FC4383E7da8",
+        "AMD.rh": "0xfECA1a85Bd521CA8aBf8ADEA0FA92CD85BC19627",
+        "PLTR.rh": "0x25343e61bc52757E01bAB8fc55f03529045C5382"
       },
       "crossChain": {
         "role": "home",
-        "gateway": "0x355196434760Ce382315E2cDADaa5bA76b06372A",
+        "gateway": "0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89",
         "router": "0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165",
         "selector": "3478487238524512106",
         "remotes": [
           {
             "chain": "robinhood-testnet",
             "selector": "2032988798112970440",
-            "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+            "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
             "receipts": {
               "USDG.rh": {
-                "receipt": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
+                "receipt": "0x36a4a88AEdC8873e239fDE4A0276b58c36841b6d",
                 "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
                 "decimals": 6,
                 "valuedAs": "USD"
               },
               "TSLA.rh": {
-                "receipt": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
+                "receipt": "0x3667d1534FA175c1A388fC8E2C8F8d7ebBBcD9d6",
                 "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
                 "decimals": 18,
                 "valuedAs": "TSLA"
               },
               "AMZN.rh": {
-                "receipt": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
+                "receipt": "0xC1C192e7eDE3f2966e9A9B1bBEd88FC4383E7da8",
                 "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
                 "decimals": 18,
                 "valuedAs": "AMZN"
               },
-              "NFLX.rh": {
-                "receipt": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3",
-                "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
+              "AMD.rh": {
+                "receipt": "0xfECA1a85Bd521CA8aBf8ADEA0FA92CD85BC19627",
+                "token": "0x71178BAc73cBeb415514eB542a8995b82669778d",
                 "decimals": 18,
-                "valuedAs": null,
-                "note": "no CRE-readable NFLX feed: not usable as collateral"
+                "valuedAs": "AMD"
+              },
+              "PLTR.rh": {
+                "receipt": "0x25343e61bc52757E01bAB8fc55f03529045C5382",
+                "token": "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
+                "decimals": 18,
+                "valuedAs": "PLTR"
               }
             }
           }
@@ -118,6 +124,48 @@
             ]
           }
         }
+      ],
+      "previousCrossChain": [
+        {
+          "role": "home",
+          "gateway": "0x355196434760Ce382315E2cDADaa5bA76b06372A",
+          "router": "0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165",
+          "selector": "3478487238524512106",
+          "remotes": [
+            {
+              "chain": "robinhood-testnet",
+              "selector": "2032988798112970440",
+              "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+              "receipts": {
+                "USDG.rh": {
+                  "receipt": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
+                  "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
+                  "decimals": 6,
+                  "valuedAs": "USD"
+                },
+                "TSLA.rh": {
+                  "receipt": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
+                  "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+                  "decimals": 18,
+                  "valuedAs": "TSLA"
+                },
+                "AMZN.rh": {
+                  "receipt": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
+                  "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+                  "decimals": 18,
+                  "valuedAs": "AMZN"
+                },
+                "NFLX.rh": {
+                  "receipt": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3",
+                  "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
+                  "decimals": 18,
+                  "valuedAs": null,
+                  "note": "no CRE-readable NFLX feed: not usable as collateral"
+                }
+              }
+            }
+          ]
+        }
       ]
     },
     {
@@ -143,12 +191,12 @@
       },
       "crossChain": {
         "role": "asset",
-        "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+        "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
         "router": "0x30D197C6F5bE050D5525dD94d01760FaCdB67e7C",
         "selector": "2032988798112970440",
         "home": {
           "chain": "arbitrum-sepolia",
-          "gateway": "0x355196434760Ce382315E2cDADaa5bA76b06372A",
+          "gateway": "0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89",
           "selector": "3478487238524512106"
         }
       },
@@ -171,7 +219,8 @@
             }
           }
         }
-      ]
+      ],
+      "previousCrossChain": []
     }
   ]
 }

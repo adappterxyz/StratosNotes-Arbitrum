@@ -63,6 +63,9 @@ export const ChainCfg = z.object({
   crossChain: CrossChainCfg.optional(),
   /** Earlier engines on this chain, oldest first. */
   legacyEngines: z.array(LegacyEngineCfg).default([]),
+  /** Earlier gateway–vault pairs of the CURRENT engine (replaced by a newer pair): receipts still held in wallets
+   * redeem through their own gateway. */
+  previousCrossChain: z.array(CrossChainCfg).default([]),
 });
 export type ChainCfg = z.infer<typeof ChainCfg>;
 

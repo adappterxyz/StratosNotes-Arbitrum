@@ -143,6 +143,7 @@ export function createApp(deps: AppDeps) {
       legacyEngines: ch.legacyEngines.map(l => ({
         engine: l.engine.toLowerCase(), lens: l.lens.toLowerCase(), fromBlock: l.fromBlock, version: l.version, tokens: l.tokens, crossChain: l.crossChain ?? null,
       })),
+      previousCrossChain: ch.previousCrossChain,
     })),
     ai: !!deps.ai,
   }));

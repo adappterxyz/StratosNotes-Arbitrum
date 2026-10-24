@@ -46,38 +46,47 @@
   "vaults": [
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
+      "receipt": "0x36a4a88AEdC8873e239fDE4A0276b58c36841b6d",
       "assetChain": "robinhood-testnet",
-      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+      "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
       "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
       "label": "USDG.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
+      "receipt": "0x3667d1534FA175c1A388fC8E2C8F8d7ebBBcD9d6",
       "assetChain": "robinhood-testnet",
-      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+      "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
       "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
       "label": "TSLA.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
+      "receipt": "0xC1C192e7eDE3f2966e9A9B1bBEd88FC4383E7da8",
       "assetChain": "robinhood-testnet",
-      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
+      "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
       "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
       "label": "AMZN.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3",
+      "receipt": "0xfECA1a85Bd521CA8aBf8ADEA0FA92CD85BC19627",
       "assetChain": "robinhood-testnet",
-      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
-      "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
-      "label": "NFLX.rh",
+      "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
+      "token": "0x71178BAc73cBeb415514eB542a8995b82669778d",
+      "label": "AMD.rh",
+      "stateBlock": "latest"
+    },
+    {
+      "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
+      "receipt": "0x25343e61bc52757E01bAB8fc55f03529045C5382",
+      "assetChain": "robinhood-testnet",
+      "vault": "0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2",
+      "token": "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
+      "label": "PLTR.rh",
       "stateBlock": "latest"
     }
   ],

@@ -53,6 +53,13 @@ function legsOf(config: ReturnType<typeof useChains>['config']): Leg[] {
       if (!xc?.gateway || !r || !asset) continue;
       out.push({ home: legacyConfig(c, l), asset, vault: r.vault, gateway: xc.gateway, receipts: r.receipts, version: l.version });
     }
+    // The current engine's earlier pairs (a v1 gateway: receipts held in wallets redeem by hand).
+    for (const xc of c.previousCrossChain ?? []) {
+      const r = xc?.role === 'home' ? xc.remotes?.[0] : undefined;
+      const asset = r && config.chains.find(x => x.key === r.chain);
+      if (!xc?.gateway || !r || !asset) continue;
+      out.push({ home: c, asset, vault: r.vault, gateway: xc.gateway, receipts: r.receipts });
+    }
   }
   return out;
 }
