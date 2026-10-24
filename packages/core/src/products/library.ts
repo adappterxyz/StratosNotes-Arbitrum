@@ -62,7 +62,7 @@ const btcPhoenix: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoe
 export const SEED_TEMPLATES: Array<{ name: string; description: string; source: TemplateSource }> = [
   {
     name: '12M Worst-of Phoenix on TSLA, AMZN',
-    description: '3% quarterly coupon while the worst of Tesla and Amazon holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in, below which holders are repaid final ÷ strike in USDG. Issued and paid on Arbitrum; secured by TSLA (60% haircut) and USDG locked on Robinhood Chain. Prices: Chainlink TSLA/USD and AMZN/USD on Robinhood Chain.',
+    description: '3% quarterly while the worst of Tesla and Amazon holds 70% of strike, with memory; autocalls at 100% from Q2; 60% knock-in, repaid final ÷ strike in USDG. Runs on Arbitrum, secured by TSLA (60% haircut) and USDG locked on Robinhood Chain. Prices: Chainlink on Robinhood Chain.',
     source: { product: tslaAmznPhoenix },
   },
   {
@@ -72,7 +72,7 @@ export const SEED_TEMPLATES: Array<{ name: string; description: string; source: 
   },
   {
     name: '12M Worst-of Phoenix on TSLA, NVDA',
-    description: '3% quarterly coupon while the worst of Tesla and NVIDIA holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in, cash-settled in USDG. Issued and paid on Arbitrum; secured by TSLA (60% haircut) and USDG locked on Robinhood Chain. Prices: Chainlink equity feeds on Robinhood Chain.',
+    description: '3% quarterly while the worst of Tesla and NVIDIA holds 70% of strike, with memory; autocalls at 100% from Q2; 60% knock-in, cash-settled in USDG. Runs on Arbitrum, secured by TSLA (60% haircut) and USDG locked on Robinhood Chain. Prices: Chainlink on Robinhood Chain.',
     source: { product: equityPhoenix },
   },
   {
