@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import {Test, Vm, console2} from "forge-std/Test.sol";
 import {FlowEngine} from "../src/FlowEngine.sol";
 import {NotesLens} from "../src/NotesLens.sol";
+import {NoteToken} from "../src/NoteToken.sol";
 import {CreReceiver} from "../src/cre/CreReceiver.sol";
 import {IReceiver} from "../src/cre/IReceiver.sol";
 import {Def} from "../src/lib/Def.sol";
@@ -77,6 +78,13 @@ abstract contract ProductsBase is Test {
     uint256 maxSubscribeGas;
     uint256 maxFundGas;
     uint256[] reportGas; // every report and advance in the last replay, in order
+    /// Push mode: a keeper pushes every payout to holders' wallets after each timeline action (otherwise holders
+    /// withdraw at the end). Either way each holder ends with the reference payoff.
+    bool pushAll;
+    uint256 pushes; // payments pushed (each may round down by under one base unit)
+    address keeper = makeAddr("keeper");
+    /// What pushes paid each holder, per process and asset (engine fixed point).
+    mapping(uint256 => mapping(address => mapping(uint256 => int256))) pushedTo;
 
     function setUp() public virtual {
         engine = new FlowEngine(admin, forwarder);
@@ -122,6 +130,35 @@ abstract contract ProductsBase is Test {
         if (used > maxSubscribeGas) maxSubscribeGas = used;
     }
 
+    /// The note's units, as an ERC-20.
+    function _note(uint256 pid) internal view returns (NoteToken) {
+        return NoteToken(engine.assetTokenOf(pid, NOTE));
+    }
+
+    /// A holder transfers units (engine fixed point) on the note token.
+    function _transferUnits(uint256 pid, address from, address to, int256 amount) internal {
+        NoteToken t = _note(pid);
+        vm.prank(from);
+        t.transfer(to, uint256(amount) / 1e4);
+    }
+
+    /// The keeper pushes the latest payout of every cash asset to every holder; records what each wallet got.
+    function _pushAll(Fixture memory f, uint256 pid, address[] memory holders) internal {
+        for (uint8 a = CASH; a < f.tokenOf.length; a++) {
+            MockERC20 t = tokens[f.tokenOf[a]];
+            uint256[] memory before = new uint256[](holders.length);
+            for (uint256 k = 0; k < holders.length; k++) before[k] = t.balanceOf(holders[k]);
+            vm.prank(keeper);
+            engine.pushPayouts(pid, a, type(uint256).max, type(uint256).max);
+            for (uint256 k = 0; k < holders.length; k++) {
+                uint256 d = t.balanceOf(holders[k]) - before[k];
+                if (d == 0) continue;
+                pushes++;
+                pushedTo[pid][holders[k]][a] += int256(d) * SCALE / int256(10 ** decimals[f.tokenOf[a]]);
+            }
+        }
+    }
+
     function _roles(address issuer, address pa) internal pure returns (address[] memory roles) {
         roles = new address[](4); // Issuer, Paying Agent, Investor (open), Escrow (the engine's)
         roles[0] = issuer;
@@ -141,7 +178,7 @@ abstract contract ProductsBase is Test {
         bytes32 id = engine.registerDefinition(f.def);
         assertEq(id, sha256(f.def), "definition id = sha256(bytes)");
         vm.prank(issuer);
-        pid = engine.startProcess(id, 1, _roles(issuer, pa), _assetTokens(f), f.startStep, _none());
+        pid = engine.startProcess(id, 1, _roles(issuer, pa), _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
         vm.startPrank(issuer);
         for (uint256 t = 1; t < 5; t++) tokens[t].approve(address(engine), type(uint256).max);
         for (uint256 k = 0; k < f.pledges.length; k++) tokens[f.pledges[k].token].mint(issuer, f.pledges[k].base);
@@ -167,18 +204,19 @@ abstract contract ProductsBase is Test {
                 uint256 used = g - gasleft();
                 if (used > maxFundGas) maxFundGas = used;
             } else if (a.kind == 4) {
-                // Secondary transfer, in part: later payments (and a default's collateral) follow the units.
+                // Secondary transfer, in part, on the note token: later payments (and a default's collateral)
+                // follow the units.
                 address buyer = holders[holders.length - 1];
                 int256 amount = int256(uint256(a.inputs[0].data));
                 address escrow = engine.ESCROW(); // read first: an engine call would consume vm.expectRevert
+                NoteToken t = _note(pid);
                 vm.startPrank(holders[0]);
-                vm.expectRevert(FlowEngine.NotTransferable.selector);
-                engine.transferUnits(pid, CASH, buyer, 1);
                 vm.expectRevert(FlowEngine.BadInputs.selector);
-                engine.transferUnits(pid, NOTE, escrow, 1);
-                engine.transferUnits(pid, NOTE, buyer, amount);
+                t.transfer(escrow, 1);
+                t.transfer(buyer, uint256(amount) / 1e4);
                 vm.stopPrank();
             }
+            if (pushAll) _pushAll(f, pid, holders);
         }
     }
 
@@ -198,6 +236,7 @@ abstract contract ProductsBase is Test {
         address escrow = engine.ESCROW();
         address[] memory holders = _holders(f, idx);
         for (uint256 k = 0; k < f.investorUnits.length; k++) _subscribe(f, pid, holders[k], f.investorUnits[k], f.investorCash[k]);
+        uint256 pushesBefore = pushes;
 
         // The subscriptions are the issuer's, at once: it withdraws them before the strike.
         assertApproxEqAbs(engine.balanceOf(pid, issuer, CASH), f.issuerProceeds, uint256(TOLERANCE), string.concat(f.name, ": proceeds"));
@@ -220,15 +259,20 @@ abstract contract ProductsBase is Test {
         assertEq(engine.processOf(pid).status, engine.COMPLETED(), string.concat(f.name, ": completed"));
         assertEq(defaulted, f.defaulted, string.concat(f.name, ": default milestone"));
         assertApproxEqAbs(engine.balanceOf(pid, pa, CASH), f.paFee, uint256(TOLERANCE), string.concat(f.name, ": paying agent fees"));
-        for (uint256 k = 0; k < holders.length; k++) _checkHolder(f, pid, holders[k], k);
+        uint256 tol = uint256(TOLERANCE) + (pushes - pushesBefore) * 1e4; // a push rounds down to a base unit
+        for (uint256 k = 0; k < holders.length; k++) _checkHolder(f, pid, holders[k], k, tol);
         _checkEscrow(f, pid, issuer, escrow);
+        assertEq(_note(pid).totalSupply(), 0, "redeemed or defaulted: no units left");
     }
 
-    /// A holder's balances equal the reference, and each is withdrawn as the ERC-20.
-    function _checkHolder(Fixture memory f, uint256 pid, address holder, uint256 k) internal {
+    /// A holder's balances (pushed to the wallet plus what is left to withdraw) equal the reference, and the rest
+    /// is withdrawn as the ERC-20.
+    function _checkHolder(Fixture memory f, uint256 pid, address holder, uint256 k, uint256 tol) internal {
         for (uint8 a = CASH; a < f.tokenOf.length; a++) {
+            int256 pushed = pushedTo[pid][holder][a];
             int256 got = engine.balanceOf(pid, holder, a);
-            assertApproxEqAbs(got, f.expected[k][a], uint256(TOLERANCE), string.concat(f.name, ": holder ", vm.toString(k), " asset ", vm.toString(a)));
+            if (!pushAll) assertEq(pushed, 0, "claim mode: nothing pushed");
+            assertApproxEqAbs(got + pushed, f.expected[k][a], tol, string.concat(f.name, ": holder ", vm.toString(k), " asset ", vm.toString(a)));
             uint256 base = uint256(got * int256(10 ** decimals[f.tokenOf[a]]) / SCALE);
             if (base == 0) continue;
             uint256 before = tokens[f.tokenOf[a]].balanceOf(holder);
@@ -260,6 +304,16 @@ contract ProductsTest is ProductsBase {
         console2.log("max subscribe gas", maxSubscribeGas);
         console2.log("max issuer funding/top-up gas", maxFundGas);
         assertLt(maxReportGas, 3_000_000, "every report stays under a 3M gas budget");
+    }
+
+    /// The same runs with a keeper pushing every payout to holders' wallets as it happens.
+    function test_everyProductPaysItsReferencePayoffPushed() public {
+        pushAll = true;
+        for (uint256 i = 0; i < fixtures.length; i++) {
+            _runFixture(i);
+        }
+        console2.log("payments pushed", pushes);
+        assertGt(pushes, fixtures.length, "payouts were pushed");
     }
 
     function test_lateSubscriptionRejectedAfterTheBookCloses() public {
@@ -308,7 +362,7 @@ contract ProductsTest is ProductsBase {
         roles[3] = issuer; // the issuer tries to hold the escrow role itself
         vm.prank(issuer);
         vm.expectRevert(FlowEngine.BadInputs.selector);
-        engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none());
+        engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
 
         vm.recordLogs();
         uint256 pid = _issue(f, issuer, makeAddr("p"));
@@ -344,7 +398,7 @@ contract ProductsTest is ProductsBase {
         bytes32 id = engine.registerDefinition(f.def);
         address issuer = makeAddr("i");
         vm.prank(issuer);
-        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), _assetTokens(f), f.startStep, _none());
+        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
         vm.startPrank(issuer);
         tokens[1].approve(address(engine), type(uint256).max);
         tokens[1].mint(issuer, 10_000e6);
@@ -471,9 +525,9 @@ contract ProductsTest is ProductsBase {
         address[] memory roles = _roles(issuer, makeAddr("p"));
         vm.prank(makeAddr("impostor"));
         vm.expectRevert(FlowEngine.WrongRole.selector);
-        engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none());
+        engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
         vm.prank(issuer);
-        uint256 pid = engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none());
+        uint256 pid = engine.startProcess(id, 1, roles, _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
         vm.prank(makeAddr("impostor"));
         vm.expectRevert(FlowEngine.WrongRole.selector);
         engine.executeStep(pid, f.approveStep, NO, f.approveInputs);
@@ -509,7 +563,7 @@ contract ProductsTest is ProductsBase {
         address[] memory assetTokens = _assetTokens(f);
         for (uint256 a = 1; a < assetTokens.length; a++) assetTokens[a] = address(fee);
         vm.startPrank(issuer);
-        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), assetTokens, f.startStep, _none());
+        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), assetTokens, f.startStep, _none(), "Note", "NOTE");
         fee.mint(issuer, 1_000_000e6);
         fee.approve(address(engine), type(uint256).max);
         vm.expectRevert(FlowEngine.TransferMismatch.selector);
@@ -627,15 +681,24 @@ contract ProductsTest is ProductsBase {
         assertEq(engine.owner(), next);
     }
 
-    /// Gas with a full book: 30 investors, then the cap of 64 ledger accounts (62 investors + issuer + escrow).
+    /// Gas with a full book: 10 investors, then 1,000. A payout is O(1) in the number of holders (an accumulator),
+    /// so every report costs the same; pushing payouts to wallets costs a fixed amount per holder, in batches.
     function test_gasWithManyHolders() public {
-        _manyHolders(30, "30", 18);
-        _manyHolders(62, "62", 18);
-        _manyHolders(30, "30 all-to-holders", 19);
-        _manyHolders(62, "62 all-to-holders", 19);
+        uint256[6] memory g10 = _manyHolders(10, "10", 18);
+        uint256[6] memory g1000 = _manyHolders(1000, "1000", 18);
+        _manyHolders(10, "10 all-to-holders", 19);
+        _manyHolders(1000, "1000 all-to-holders", 19);
+        // O(1): a coupon and the default cost the same with 1,000 holders as with 10 (within the cold storage of a
+        // larger book: a few thousand gas).
+        assertApproxEqAbs(g1000[2], g10[2], 10_000, "coupon gas independent of holders");
+        assertApproxEqAbs(g1000[3], g10[3], 20_000, "default gas independent of holders");
+        console2.log("push gas per holder (1,000 holders, batches of 100)", g1000[4]);
+        console2.log("claim (withdraw) gas", g1000[5]);
+        assertLt(g1000[4], 60_000, "push per holder");
     }
 
-    function _manyHolders(uint256 n, string memory label, uint256 fixtureIdx) internal {
+    /// @return g strike, observation, coupon, default report gas; push gas per holder; one withdrawal's gas
+    function _manyHolders(uint256 n, string memory label, uint256 fixtureIdx) internal returns (uint256[6] memory g) {
         // FCN with USDC + ETH collateral; the issuer funds coupon 1, misses coupon 2 (fixture 18, default rule
         // cap-at-owed; 19, all-to-holders): the issuer's funding, a coupon paid to every holder, margin checks on
         // the ETH collateral, and the heaviest default (cash, USDC and ETH collateral distributed to every holder).
@@ -656,13 +719,44 @@ contract ProductsTest is ProductsBase {
         assertEq(engine.processOf(pid).status, engine.COMPLETED());
         // Reports in order: strike, observation 1, payment date 1 (pays every holder), observation 2,
         // payment date 2 (missed), grace end (default).
-        console2.log(string.concat("holders ", label, ": strike (with margin check) gas"), reportGas[0]);
-        console2.log(string.concat("holders ", label, ": observation (with margin check) gas"), reportGas[1]);
-        console2.log(string.concat("holders ", label, ": coupon paid to every holder gas"), reportGas[2]);
-        console2.log(string.concat("holders ", label, ": default, escrow to every holder gas"), reportGas[reportGas.length - 1]);
+        g[0] = reportGas[0];
+        g[1] = reportGas[1];
+        g[2] = reportGas[2];
+        g[3] = reportGas[reportGas.length - 1];
+        console2.log(string.concat("holders ", label, ": strike (with margin check) gas"), g[0]);
+        console2.log(string.concat("holders ", label, ": observation (with margin check) gas"), g[1]);
+        console2.log(string.concat("holders ", label, ": coupon paid to every holder gas"), g[2]);
+        console2.log(string.concat("holders ", label, ": default, escrow to every holder gas"), g[3]);
         console2.log(string.concat("holders ", label, ": issuer funding a payment gas"), maxFundGas);
         assertLt(maxReportGas, 10_000_000, "stays under CRE's 10M write gas");
         maxReportGas = reportBefore > maxReportGas ? reportBefore : maxReportGas;
+
+        // Push the default's stablecoin payout to every holder, 100 per transaction.
+        uint256 batch = n < 100 ? n : 100;
+        uint256 used;
+        uint256 left = n;
+        uint256 txs;
+        while (left > 0) {
+            vm.prank(keeper);
+            uint256 g0 = gasleft();
+            left = engine.pushPayouts(pid, CASH, type(uint256).max, batch);
+            used += g0 - gasleft();
+            txs++;
+        }
+        g[4] = used / n;
+        console2.log(string.concat("holders ", label, ": push transactions"), txs);
+        // Every holder now has the stablecoin in the wallet; one withdraws the collateral it was left.
+        address h = holders[n - 1];
+        assertGt(tokens[1].balanceOf(h), 0, "pushed to the wallet");
+        assertEq(engine.balanceOf(pid, h, CASH), 0, "nothing left to withdraw");
+        int256 col = engine.balanceOf(pid, h, 2);
+        uint256 base = col > 0 ? uint256(col) * (10 ** decimals[f.tokenOf[2]]) / uint256(SCALE) : 0;
+        if (base != 0) {
+            vm.prank(h);
+            uint256 w0 = gasleft();
+            engine.withdraw(pid, 2, base);
+            g[5] = w0 - gasleft();
+        }
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -762,7 +856,7 @@ contract ProductsTest is ProductsBase {
         bytes32 id = sha256(f.def);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(FlowEngine.IssuerEmailNotVerified.selector, issuer));
-        engine.startProcess(id, 2, _roles(issuer, makeAddr("p")), _assetTokens(f), f.startStep, _none());
+        engine.startProcess(id, 2, _roles(issuer, makeAddr("p")), _assetTokens(f), f.startStep, _none(), "Note", "NOTE");
 
         _attest(issuer);
         uint256 pid = _issue(f, issuer, makeAddr("p"));
@@ -779,18 +873,25 @@ contract ProductsTest is ProductsBase {
 
         // Units can't move to an unverified address; to a verified one they can.
         address buyer = makeAddr("buyer");
+        NoteToken t = _note(pid);
         vm.prank(inv);
         vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, buyer));
-        engine.transferUnits(pid, NOTE, buyer, 10e10);
+        t.transfer(buyer, 10e6);
+        // transferFrom (an approved spender, e.g. a marketplace) is gated the same way.
+        vm.prank(inv);
+        t.approve(address(this), 10e6);
+        vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, buyer));
+        t.transferFrom(inv, buyer, 10e6);
         _attest(buyer);
         vm.prank(inv);
-        engine.transferUnits(pid, NOTE, buyer, 10e10);
+        t.transfer(buyer, 10e6);
+        assertEq(t.balanceOf(buyer), 10e6);
 
         // An expired attestation stops counting; reports keep running regardless.
         vm.warp(block.timestamp + 366 days);
         address inv2 = makeAddr("inv2");
         vm.prank(inv);
         vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, inv2));
-        engine.transferUnits(pid, NOTE, inv2, 1e10);
+        t.transfer(inv2, 1e6);
     }
 }

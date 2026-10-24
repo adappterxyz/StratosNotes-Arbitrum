@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {CreReceiver} from "./cre/CreReceiver.sol";
@@ -10,6 +8,8 @@ import {Def} from "./lib/Def.sol";
 import {DefCheck} from "./lib/DefCheck.sol";
 import {EmailAttest} from "./lib/EmailAttest.sol";
 import {SSTORE2} from "./lib/SSTORE2.sol";
+import {Units} from "./lib/Units.sol";
+import {INoteEngine, NoteToken} from "./NoteToken.sol";
 
 /// @title FlowEngine - runs compiled BPMN workflows (structured notes) on an EVM chain
 /// @notice A workflow (e.g. a note's Issuer / Paying Agent / Investor collaboration) is compiled off-chain
@@ -20,8 +20,14 @@ import {SSTORE2} from "./lib/SSTORE2.sol";
 ///         Semantics are those of the hackathon's Solana engine (StratosNotes solana/programs/flow_engine):
 ///         a token multiset over step indexes; XOR gateways on fixed-point predicates (min/max included); AND
 ///         fork/join; timers on fixed times or date fields; repeatable windows (an open book) that close at a
-///         date; captures from inputs, oracle reports (bounds-checked) or expressions; and an internal holdings
-///         ledger with ERC-20 vaults behind cash assets, atomic DvP, distribute-to-every-holder and transfers.
+///         date; captures from inputs, oracle reports (bounds-checked) or expressions; and holdings: each note's
+///         units are an ERC-20 (NoteToken, created at startProcess), cash sits in a ledger backed by ERC-20
+///         vaults, with atomic DvP, distribute-to-every-holder and transfers (lib/Units.sol).
+///
+///         Payouts scale with nothing: a distribution is one accumulator update (O(1) in the number of holders);
+///         holders' shares settle whenever their units move, when they withdraw, or when anyone pushes the payout
+///         to their wallets in bounded batches (`pushNext`, `pushPayouts`, `pushTo`). Every payment is logged with
+///         a receipt id (PayoutPaid) and every distribution with a commitment hash (docs/ERC20-NOTES.md).
 ///
 ///         Escrow: a role the definition marks escrow is held by the engine itself (ESCROW, an address nobody
 ///         has a key for). Pledged collateral and funded payments sit on its account: nobody can withdraw them
@@ -34,7 +40,10 @@ import {SSTORE2} from "./lib/SSTORE2.sol";
 ///      - ProcessStarted(pid, definition, creator, ref, roles, assetTokens): a run and who holds each role.
 ///      - StepRun(pid, step, kind, actor): a step completed (actor = 0 for straight-through and reports).
 ///      - FieldSet(pid, field, tag, value): a field captured (tag 1 number, 2 text, 3 party).
-///      - HoldingChanged(pid, asset, owner, balance): a ledger balance, after every change.
+///      - HoldingChanged(pid, asset, owner, balance): a balance after every change: cash on the ledger, or a
+///        holder's units (the note token's balance x 1e4), including holders' own token transfers.
+///      - NoteTokenCreated(pid, asset, token): the ERC-20 of a note's units.
+///      - DistributionRecorded / PayoutPaid / PayoutDeferred / DistributionSettled: payouts and their receipts.
 ///      - TokensUpdated(pid, status, stepsRun, tokens): the live BPMN tokens after each transaction.
 ///      - Deposited / Withdrawn(pid, asset, account, base): ERC-20 into and out of the process vault.
 ///      - UnitsTransferred(pid, asset, from, to, amount): a holder moved units (also shows as HoldingChanged).
@@ -47,13 +56,11 @@ import {SSTORE2} from "./lib/SSTORE2.sol";
 ///      - ProcessCompleted(pid): no tokens left.
 ///
 ///      Caps (each bounds a loop): MAX_ROLES 8, MAX_FIELDS 64, MAX_ASSETS 8, MAX_TOKENS 32 live tokens,
-///      MAX_HOLDERS 64 ledger accounts per process (a distribute pays each once: ~25k gas per holder on a
-///      first credit; a default distributes every escrow asset, so at most ~8 x 64 credits), MAX_ADVANCE 256
-///      straight-through steps per transaction, MAX_DEPOSITS 4 ERC-20 pulls per step.
+///      MAX_ADVANCE 256 straight-through steps per transaction, MAX_DEPOSITS 4 ERC-20 pulls per step. Holders
+///      are not capped: payouts never loop over them on-chain except in a push batch whose size the caller picks.
 ///
 ///      Cross-chain (CCIP) is not in v1: report step 0xFFFE is reserved for CRE payout decisions (Phase 5).
-contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
-    using SafeERC20 for IERC20;
+contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable, INoteEngine {
 
     // ---------------------------------------------------------------------------------------------------------
     // Constants
@@ -64,7 +71,6 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     uint256 public constant MAX_FIELDS = 64;
     uint256 public constant MAX_ASSETS = 8;
     uint256 public constant MAX_TOKENS = 32;
-    uint256 public constant MAX_HOLDERS = 64;
     uint256 public constant MAX_ADVANCE = 256;
     uint256 public constant MAX_DEPOSITS = 4;
     uint16 public constant STEP_ADVANCE = 0xFFFF; // report: just run what is due
@@ -125,6 +131,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         uint256[] depAsset; // capacity MAX_DEPOSITS
         uint256[] depBase;
         uint256 nDeps;
+        uint256 step; // the step running now
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -136,12 +143,11 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     mapping(uint256 => Proc) internal _procs;
     mapping(uint256 => uint256[2]) internal _tokenWords; // 32 x uint16, packed
     mapping(uint256 => mapping(uint256 => address)) internal _roles;
-    mapping(uint256 => mapping(uint256 => address)) internal _assetTokens;
     mapping(uint256 => mapping(uint256 => bytes32)) internal _values;
-    mapping(uint256 => address[]) internal _holders;
-    mapping(uint256 => mapping(address => bool)) internal _isHolder;
-    mapping(uint256 => mapping(address => mapping(uint256 => int256))) internal _balances;
-    mapping(uint256 => mapping(uint256 => uint256)) internal _vault; // ERC-20 base units held per process asset
+    /// Cash ledger, vaults, note tokens and payout accumulators (lib/Units.sol).
+    Units.Book internal _book;
+    /// The NoteToken every note's units clone (EIP-1167).
+    address public immutable noteImplementation;
     /// Verified emails, bound as a salted hash (EmailAttest): attested by `verifier`, required when `requireEmail`.
     mapping(address => EmailAttest.Email) internal _emails;
 
@@ -167,8 +173,36 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     event Deposited(uint256 indexed pid, uint8 indexed asset, address indexed from, uint256 base);
     /// @notice ERC-20 paid out of the process vault.
     event Withdrawn(uint256 indexed pid, uint8 indexed asset, address indexed to, uint256 base);
-    /// @notice A holder moved issued units.
+    /// @notice A holder moved issued units (through the engine or the note token).
     event UnitsTransferred(uint256 indexed pid, uint8 indexed asset, address indexed from, address to, int256 amount);
+    /// Emitted by the Units library (delegatecall, so from this address); declared here for the ABI.
+    event NoteTokenCreated(uint256 indexed pid, uint8 indexed asset, address token);
+    /// A payout: `asset` per unit of `holding` to every holder but the payer (`retire`: the units are redeemed
+    /// with it and read zero from then on). distributionHash =
+    /// keccak256(abi.encode(chainid, engine, pid, asset, period, perUnit, supplyAtPayment)).
+    event DistributionRecorded(
+        uint256 indexed pid,
+        uint8 indexed asset,
+        uint64 indexed period,
+        uint8 holding,
+        uint16 step,
+        address payer,
+        int256 perUnit,
+        int256 total,
+        uint256 supplyAtPayment,
+        bool retire,
+        bytes32 distributionHash
+    );
+    /// A payout reached a wallet. payoutId = keccak256(abi.encode(chainid, engine, pid, asset, period, holder, amount)).
+    event PayoutPaid(
+        uint256 indexed pid, uint8 indexed asset, uint64 period, address indexed holder, uint256 amount, bytes32 payoutId
+    );
+    /// A pushed payment failed (or was too small to send): it stays claimable with `withdraw`.
+    event PayoutDeferred(uint256 indexed pid, uint8 indexed asset, uint64 period, address indexed holder, uint256 amount);
+    /// A push round reached the last holder: rollingHash = keccak chain of its payoutIds in push order.
+    event DistributionSettled(
+        uint256 indexed pid, uint8 indexed asset, uint64 indexed period, uint256 paidCount, uint256 paidTotal, bytes32 rollingHash
+    );
     /// @notice A report was applied; `reporter` is the forwarder (CRE) or the fallback reporter.
     event ReportProcessed(uint256 indexed pid, uint16 indexed step, int256[] values, address reporter);
     /// @notice The owner changed the fallback reporter (0 = off).
@@ -201,7 +235,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     error OracleOutOfBounds();
     error FieldNotSet();
     error InsufficientBalance();
-    error HoldingsFull();
+    error InexactUnits();
     error TooManyTokens();
     error TooManyDeposits();
     error NotCash();
@@ -217,7 +251,9 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     error SubscriberEmailNotVerified(address subscriber);
     error RecipientEmailNotVerified(address recipient);
 
-    constructor(address initialOwner, address forwarder) CreReceiver(initialOwner, forwarder) {}
+    constructor(address initialOwner, address forwarder) CreReceiver(initialOwner, forwarder) {
+        noteImplementation = address(new NoteToken());
+    }
 
     // ---------------------------------------------------------------------------------------------------------
     // Admin
@@ -247,7 +283,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
 
     /// @notice Verified emails (EmailAttest): `verifier` signs attestations (zero: none accepted); with
     ///         `requireEmail` on, issuing (startProcess), acting in an OPEN role (subscribing) and receiving units
-    ///         (transferUnits) need a current attestation. Reports, CRE and withdrawals never do: holders can
+    ///         (a note token transfer) need a current attestation. Reports, CRE and withdrawals never do: holders can
     ///         always exit.
     address public verifier;
     bool public requireEmail;
@@ -318,13 +354,17 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     /// @notice Start a run of a definition. The caller must hold the start step's role.
     /// @param roles one address per role, in definition order; address(0) = an OPEN role anyone may act in.
     /// @param assetTokens one per asset: the ERC-20 behind a cash asset, address(0) for an issued asset.
+    /// @param name the ERC-20 name of the note's units (e.g. "notes.markets ETH/BTC Phoenix 26-10")
+    /// @param symbol their ERC-20 symbol (e.g. "nmETHBTC1")
     function startProcess(
         bytes32 definition,
         uint64 ref,
         address[] calldata roles,
         address[] calldata assetTokens,
         uint16 startStep,
-        Input[] calldata inputs
+        Input[] calldata inputs,
+        string calldata name,
+        string calldata symbol
     ) external nonReentrant whenNotPaused returns (uint256 pid) {
         Definition storage d = _defs[definition];
         if (d.pointer == address(0)) revert UnknownDefinition();
@@ -337,11 +377,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         _needEmail(msg.sender, 0);
 
         pid = ++processCount;
-        for (uint256 a = 0; a < assetTokens.length; a++) {
-            bool cash = Def.assetKind(core, a) == Def.A_CASH;
-            if (cash ? assetTokens[a].code.length == 0 : assetTokens[a] != address(0)) revert BadToken();
-            if (cash) _assetTokens[pid][a] = assetTokens[a];
-        }
+        uint256 layout = _layout(pid, core, assetTokens);
         // The roles as held: escrow roles are the engine's ESCROW (the event reports these, not the inputs).
         address[] memory held = roles;
         for (uint256 k = 0; k < roles.length; k++) {
@@ -365,6 +401,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
             tags: 0
         });
         emit ProcessStarted(pid, definition, msg.sender, ref, held, assetTokens);
+        Units.setup(_book, pid, layout, noteImplementation, name, symbol); // NoteTokenCreated, after the start
 
         Run memory r = _newRun(pid, core, msg.sender, inputs, new int256[](0), NO_CHOICE);
         r.tokens[0] = startStep;
@@ -373,6 +410,17 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         if (r.nDeps != 0) revert BadInputs(); // a start step takes no cash: the process has no vault yet
         _advance(r);
         _save(r);
+    }
+
+    /// Which assets are cash and which issued, and their decimals (Units.Book.layout); checks the tokens.
+    function _layout(uint256 pid, bytes memory core, address[] calldata assetTokens) internal returns (uint256 layout) {
+        for (uint256 a = 0; a < assetTokens.length; a++) {
+            bool cash = Def.assetKind(core, a) == Def.A_CASH;
+            if (cash ? assetTokens[a].code.length == 0 : assetTokens[a] != address(0)) revert BadToken();
+            if (cash) _book.token[pid][a] = assetTokens[a];
+            // forge-lint: disable-next-line(incorrect-shift) bit flags: 1 << a
+            layout |= (cash ? uint256(1) << a : uint256(1) << (8 + a)) | (Def.assetDecimals(core, a) << (16 + 8 * a));
+        }
     }
 
     /// @notice A role-holder runs a step: a user task, a decision, or a stuck service step. A step that
@@ -398,7 +446,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         _save(r);
         // Interactions last: the cash the step committed to.
         for (uint256 k = 0; k < r.nDeps; k++) {
-            _pull(pid, r.depAsset[k], msg.sender, r.depBase[k]);
+            Units.pull(_book, pid, r.depAsset[k], msg.sender, r.depBase[k]);
         }
     }
 
@@ -413,45 +461,53 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     // Ledger
     // ---------------------------------------------------------------------------------------------------------
 
-    /// @notice Put cash into a process on your own account (e.g. an issuer topping up coupons). Only for an
-    ///         account the note already holds: a stranger's dust deposit would take one of the MAX_HOLDERS slots.
+    /// @notice Put cash into a process on your own account (e.g. an issuer topping up coupons).
     /// @param base the amount in the token's base units, pulled from the caller (approve the engine first).
     function deposit(uint256 pid, uint8 asset, uint256 base) external nonReentrant whenNotPaused {
-        bytes memory core = _core(pid);
-        if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_CASH) revert NotCash();
-        if (!_isHolder[pid][msg.sender]) revert WrongRole();
-        _credit(pid, msg.sender, asset, _fromBase(base, Def.assetDecimals(core, asset)));
-        _pull(pid, asset, msg.sender, base);
+        Units.deposit(_book, pid, asset, msg.sender, base);
     }
 
-    /// @notice Take your cash (or delivered tokens) out of a process. Works while paused.
+    /// @notice Take your cash (payouts not pushed yet, delivered tokens, ...) out of a process. Works while paused.
     /// @param base the amount in the token's base units. It must convert exactly to the ledger's 10-decimal fixed
     ///        point: for a token with more than 10 decimals a smaller amount would otherwise debit nothing (or
     ///        less than it pays out) and drain other holders' share of the vault.
     function withdraw(uint256 pid, uint8 asset, uint256 base) external nonReentrant {
-        bytes memory core = _core(pid);
-        if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_CASH) revert NotCash();
-        uint256 decimals = Def.assetDecimals(core, asset);
-        int256 amt = _fromBase(base, decimals);
-        if (amt <= 0 || _toBase(amt, decimals) != base) revert BadInputs();
-        _debit(pid, msg.sender, asset, amt);
-        uint256 held = _vault[pid][asset];
-        if (held < base) revert VaultShort();
-        _vault[pid][asset] = held - base;
-        emit Withdrawn(pid, asset, msg.sender, base);
-        IERC20(_assetTokens[pid][asset]).safeTransfer(msg.sender, base);
+        Units.withdraw(_book, pid, asset, msg.sender, base);
     }
 
-    /// @notice Move issued units (e.g. note units) to another address, in whole or in part. Later coupons and
-    ///         the redemption pay whoever holds the units then: distributions read this ledger.
-    function transferUnits(uint256 pid, uint8 asset, address to, int256 amount) external nonReentrant whenNotPaused {
-        bytes memory core = _core(pid);
-        if (asset >= Def.nAssets(core) || Def.assetKind(core, asset) != Def.A_ISSUED) revert NotTransferable();
-        if (amount <= 0 || to == address(0) || to == ESCROW) revert BadInputs();
+    /// @notice A note token asks before a holder's own transfer: the recipient must be verified (when
+    ///         requireEmail) and the note running and not redeemed. Settles both holders' payouts first.
+    function beforeNoteTransfer(uint256 pid, uint256 asset, address from, address to, uint256 amount)
+        external
+        nonReentrant
+        whenNotPaused
+    {
+        if (msg.sender != _book.note[pid][asset] || msg.sender == address(0)) revert BadToken();
+        if (to == ESCROW || to == address(this)) revert BadInputs();
+        if (_procs[pid].status != RUNNING) revert NotTransferable();
         _needEmail(to, 2);
-        _debit(pid, msg.sender, asset, amount);
-        _credit(pid, to, asset, amount);
-        emit UnitsTransferred(pid, asset, msg.sender, to, amount);
+        Units.beforeTransfer(_book, pid, asset, from, to, amount);
+        // forge-lint: disable-next-line(unsafe-typecast) asset < 8; token amounts fit int256
+        emit UnitsTransferred(pid, uint8(asset), from, to, int256(amount) * 1e4);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Payout push
+    // ---------------------------------------------------------------------------------------------------------
+
+    /// @notice Anyone (a keeper, the issuer's bot): pay the latest distribution of cash asset `asset` to holders
+    ///         [start, start + count) of the note token's holder set, straight to their wallets; start =
+    ///         type(uint256).max continues from the round's cursor (push the next `count`). A failed payment stays
+    ///         claimable (PayoutDeferred). Works while paused.
+    /// @return left holders after the cursor still to push in this round (0: settled)
+    function pushPayouts(uint256 pid, uint8 asset, uint256 start, uint256 count) external nonReentrant returns (uint256 left) {
+        return Units.push(_book, pid, asset, start, count);
+    }
+
+    /// @notice Anyone: push to these addresses (their accruals plus payouts already on their account, e.g. a
+    ///         holder who sold between a distribution and its push, or a deferred payment to retry).
+    function pushTo(uint256 pid, uint8 asset, address[] calldata holders) external nonReentrant {
+        Units.pushTo(_book, pid, asset, holders);
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -513,9 +569,10 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         return _roles[pid][role];
     }
 
-    /// @notice The ERC-20 behind a cash asset (zero for issued units).
+    /// @notice The ERC-20 behind an asset: the cash token, or the note token of an issued asset.
     function assetTokenOf(uint256 pid, uint256 asset) external view returns (address) {
-        return _assetTokens[pid][asset];
+        address t = _book.token[pid][asset];
+        return t != address(0) ? t : _book.note[pid][asset];
     }
 
     /// @notice A captured field's value.
@@ -524,19 +581,20 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         return (uint8((_procs[pid].tags >> (2 * field)) & 3), _values[pid][field]);
     }
 
-    /// @notice A ledger balance in 10-decimal fixed point.
+    /// @notice A balance in 10-decimal fixed point: an issued asset's units (zero once redeemed), or cash on the
+    ///         account plus payouts accrued to it and not settled yet (all withdrawable).
     function balanceOf(uint256 pid, address owner, uint256 asset) external view returns (int256) {
-        return _balances[pid][owner][asset];
+        return Units.balanceOf(_book, pid, owner, asset);
     }
 
-    /// @notice Every ledger account a process has had (at most MAX_HOLDERS).
-    function holdersOf(uint256 pid) external view returns (address[] memory) {
-        return _holders[pid];
+    /// @notice Payouts accrued to `owner` in a cash asset and not settled to its account yet.
+    function pendingOf(uint256 pid, address owner, uint256 asset) external view returns (int256) {
+        return Units.pending(_book, pid, owner, asset);
     }
 
     /// @notice ERC-20 base units the engine holds for a process's cash asset.
     function vaultOf(uint256 pid, uint256 asset) external view returns (uint256) {
-        return _vault[pid][asset];
+        return _book.vault[pid][asset];
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -709,7 +767,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
                     uint256 rf = Def.u16(c, p + 1);
                     address acct = _roles[r.pid][rf >> 8];
                     if (acct == address(0)) return (false, 0); // an open role has no single account
-                    x = _balances[r.pid][acct][rf & 0xFF];
+                    x = Units.balanceOf(_book, r.pid, acct, rf & 0xFF);
                 }
                 if (sp >= 32) revert BadExpression();
                 st[sp++] = x;
@@ -803,52 +861,6 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
 
     // ---- Ledger -----------------------------------------------------------------------------------------------
 
-    function _credit(uint256 pid, address owner, uint256 asset, int256 amt) internal {
-        if (amt == 0) return;
-        if (!_isHolder[pid][owner]) {
-            if (_holders[pid].length >= MAX_HOLDERS) revert HoldingsFull();
-            _isHolder[pid][owner] = true;
-            _holders[pid].push(owner);
-        }
-        int256 b = _balances[pid][owner][asset] + amt;
-        _balances[pid][owner][asset] = b;
-        // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
-        emit HoldingChanged(pid, uint8(asset), owner, b);
-    }
-
-    function _debit(uint256 pid, address owner, uint256 asset, int256 amt) internal {
-        if (amt == 0) return;
-        int256 b = _balances[pid][owner][asset];
-        if (b < amt) revert InsufficientBalance();
-        b -= amt;
-        _balances[pid][owner][asset] = b;
-        // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
-        emit HoldingChanged(pid, uint8(asset), owner, b);
-    }
-
-    /// Fixed point to ERC-20 base units (truncated).
-    function _toBase(int256 amount, uint256 decimals) internal pure returns (uint256) {
-        // forge-lint: disable-next-line(unsafe-typecast) callers pass amounts >= 0 (_amount); decimals <= 36
-        return uint256((amount * int256(10 ** decimals)) / SCALE);
-    }
-
-    function _fromBase(uint256 base, uint256 decimals) internal pure returns (int256) {
-        if (base > uint256(uint128(type(int128).max))) revert BadInputs();
-        // forge-lint: disable-next-line(unsafe-typecast) bounded above; decimals <= 36 (Def.check)
-        return (int256(base) * SCALE) / int256(10 ** decimals);
-    }
-
-    function _pull(uint256 pid, uint256 asset, address from, uint256 base) internal {
-        if (base == 0) return;
-        IERC20 token = IERC20(_assetTokens[pid][asset]);
-        uint256 before = token.balanceOf(address(this));
-        token.safeTransferFrom(from, address(this), base);
-        if (token.balanceOf(address(this)) - before != base) revert TransferMismatch(); // no fee-on-transfer tokens
-        _vault[pid][asset] += base;
-        // forge-lint: disable-next-line(unsafe-typecast) bounded by Def.check (assets < 8, fields < 64, steps < 0xFFFE, kinds <= 7, core < 24,576) or a two's-complement store
-        emit Deposited(pid, uint8(asset), from, base);
-    }
-
     /// The address acting as role `role`: its holder, or for an OPEN role the signer.
     function _roleKey(Run memory r, uint256 role) internal view returns (address k) {
         k = _roles[r.pid][role];
@@ -866,58 +878,32 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
         uint256 amountExpr = Def.u16(c, o + 4);
         uint256 pid = r.pid;
         if (kind == Def.OP_MINT) {
-            _credit(pid, _roleKey(r, Def.u8(c, o + 3)), asset, _amount(r, amountExpr));
+            Units.mint(_book, pid, asset, _roleKey(r, Def.u8(c, o + 3)), _amount(r, amountExpr));
         } else if (kind == Def.OP_BURN) {
-            _debit(pid, _roleKey(r, Def.u8(c, o + 2)), asset, _amount(r, amountExpr));
+            Units.burn(_book, pid, asset, _roleKey(r, Def.u8(c, o + 2)), _amount(r, amountExpr));
         } else if (kind == Def.OP_TRANSFER) {
-            int256 a = _amount(r, amountExpr);
-            _debit(pid, _roleKey(r, Def.u8(c, o + 2)), asset, a);
-            _credit(pid, _roleKey(r, Def.u8(c, o + 3)), asset, a);
+            Units.move(_book, pid, asset, _roleKey(r, Def.u8(c, o + 2)), _roleKey(r, Def.u8(c, o + 3)), _amount(r, amountExpr));
         } else if (kind == Def.OP_SWAP) {
+            // Both legs or neither: the transaction is atomic.
             int256 a = _amount(r, amountExpr);
             int256 b = _amount(r, Def.u16(c, o + 9));
-            uint256 asset2 = Def.u8(c, o + 6);
-            _debit(pid, _roleKey(r, Def.u8(c, o + 2)), asset, a);
-            _debit(pid, _roleKey(r, Def.u8(c, o + 7)), asset2, b);
-            _credit(pid, _roleKey(r, Def.u8(c, o + 3)), asset, a);
-            _credit(pid, _roleKey(r, Def.u8(c, o + 8)), asset2, b);
+            Units.move(_book, pid, asset, _roleKey(r, Def.u8(c, o + 2)), _roleKey(r, Def.u8(c, o + 3)), a);
+            Units.move(_book, pid, Def.u8(c, o + 6), _roleKey(r, Def.u8(c, o + 7)), _roleKey(r, Def.u8(c, o + 8)), b);
         } else if (kind == Def.OP_DEPOSIT) {
             address from = _roleKey(r, Def.u8(c, o + 2));
             if (r.signer != from) revert WrongRole();
-            if (Def.assetKind(c, asset) != Def.A_CASH) revert NotCash();
-            uint256 decimals = Def.assetDecimals(c, asset);
-            uint256 base = _toBase(_amount(r, amountExpr), decimals);
-            _credit(pid, from, asset, _fromBase(base, decimals));
+            // Credited now; the ERC-20 is pulled after the step (interactions last).
+            uint256 base = Units.pledge(_book, pid, asset, from, _amount(r, amountExpr));
             if (r.nDeps >= MAX_DEPOSITS) revert TooManyDeposits();
             r.depAsset[r.nDeps] = asset;
             r.depBase[r.nDeps] = base;
             r.nDeps++;
         } else if (kind == Def.OP_DISTRIBUTE) {
-            // Pay every holder of `asset2` units x per-unit of `asset`, from the payer role. The ledger is this
-            // contract's, so "every holder" is complete by construction.
-            int256 perUnit = _amount(r, amountExpr);
-            address payer = _roleKey(r, Def.u8(c, o + 2));
-            uint256 holding = Def.u8(c, o + 6);
-            bool retire = Def.u8(c, o + 11) != 0;
-            address[] storage hs = _holders[pid];
-            uint256 n = hs.length; // a snapshot: payees credited here are already holders
-            int256 total;
-            for (uint256 k = 0; k < n; k++) {
-                address owner = hs[k];
-                int256 units = _balances[pid][owner][holding];
-                if (units <= 0) continue;
-                // The payer's own units (e.g. an issuer's unsold notes) would pay itself: a wash, skipped so an
-                // undersubscribed note never needs cash for its own book.
-                if (owner != payer) {
-                    int256 pay = _mul(units, perUnit);
-                    total += pay;
-                    _credit(pid, owner, asset, pay);
-                }
-                if (retire) _debit(pid, owner, holding, units);
-            }
-            // One debit for the whole distribution (the Solana engine debits per holder; the transaction is
-            // atomic, so the outcome and the failure condition, total > payer's balance, are the same).
-            _debit(pid, payer, asset, total);
+            // Pay every holder of `holding` units x per-unit of `asset`, from the payer role, except the payer's
+            // own units (e.g. an issuer's unsold notes would pay itself). O(1): an accumulator (lib/Units.sol).
+            Units.distribute(
+                _book, pid, Def.u8(c, o + 6), asset, _amount(r, amountExpr), _roleKey(r, Def.u8(c, o + 2)), Def.u8(c, o + 11) != 0, r.step
+            );
         } else {
             revert Def.BadDefinition();
         }
@@ -973,6 +959,7 @@ contract FlowEngine is CreReceiver, ReentrancyGuard, Pausable {
     /// Run one step that holds a token.
     function _runStep(Run memory r, uint256 i) internal {
         if (r.status != RUNNING) revert ProcessFinished();
+        r.step = i;
         Def.Step memory s = Def.step(r.core, i);
         if (s.until != 0) {
             if (_tokenCount(r, i) == 0) revert StepNotActive();

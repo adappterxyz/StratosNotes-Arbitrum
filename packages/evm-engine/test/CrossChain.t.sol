@@ -119,7 +119,7 @@ contract CrossChainTest is ProductsBase {
         vm.warp(t0);
         bytes32 id = engine.registerDefinition(f.def);
         vm.prank(issuer);
-        pid = engine.startProcess(id, 1, _roles(issuer, pa), _assetTokensRemote(f), f.startStep, _none());
+        pid = engine.startProcess(id, 1, _roles(issuer, pa), _assetTokensRemote(f), f.startStep, _none(), "Note", "NOTE");
         vm.startPrank(issuer);
         for (uint256 t = 1; t < 5; t++) tokens[t].approve(address(engine), type(uint256).max);
         rEth.approve(address(engine), type(uint256).max);

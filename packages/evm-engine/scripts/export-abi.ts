@@ -15,6 +15,8 @@ export const flowEngineAbi = ${JSON.stringify(abi('FlowEngine'), null, 1)} as co
 
 export const notesLensAbi = ${JSON.stringify(abi('NotesLens'), null, 1)} as const;
 
+export const noteTokenAbi = ${JSON.stringify(abi('NoteToken'), null, 1)} as const;
+
 export const mockErc20Abi = ${JSON.stringify(abi('MockERC20'), null, 1)} as const;
 
 export const homeGatewayAbi = ${JSON.stringify(abi('HomeGateway'), null, 1)} as const;

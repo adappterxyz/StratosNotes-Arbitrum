@@ -3,12 +3,14 @@ pragma solidity 0.8.24;
 
 import {FlowEngine} from "./FlowEngine.sol";
 import {SSTORE2} from "./lib/SSTORE2.sol";
+import {NoteToken} from "./NoteToken.sol";
 
 /// @title NotesLens - one-call reads of a FlowEngine for keepers, plus full definition bytes on-chain
 /// @notice The engine stores only a definition's executable CORE; its META (names, oracle feeds, term sheet)
 ///         is emitted once in an event. A keeper that reads chain state at a finalized block (Chainlink CRE)
 ///         needs META too, so `publish` stores the full definition bytes here, content-addressed and checked
-///         against the engine. `running` returns every running process's state in one call.
+///         against the engine. `running` returns every running process's state in one call; `position` and
+///         `claimable` read a holder's note tokens, accrued payouts and what is left to withdraw.
 /// @dev Holds no funds and has no owner: anyone may publish, and only bytes whose sha256 is a definition
 ///      registered on the engine are accepted.
 contract NotesLens {
@@ -125,11 +127,52 @@ contract NotesLens {
         next = pid > count ? 0 : pid;
     }
 
+    /// @notice A holder's position in a note, per asset: the ERC-20 behind it (the note token for issued units),
+    ///         the balance (units, or cash withdrawable: on the account plus accrued) and, of that, the payouts
+    ///         accrued and not settled yet (engine fixed point).
+    function position(uint256 pid, address holder)
+        external
+        view
+        returns (address[] memory tokens, int256[] memory balances, int256[] memory accrued)
+    {
+        bytes memory core = engine.definitionCore(engine.processOf(pid).definition);
+        uint256 assets = uint8(core[3]);
+        tokens = new address[](assets);
+        balances = new int256[](assets);
+        accrued = new int256[](assets);
+        for (uint256 a = 0; a < assets; a++) {
+            tokens[a] = engine.assetTokenOf(pid, a);
+            balances[a] = engine.balanceOf(pid, holder, a);
+            accrued[a] = engine.pendingOf(pid, holder, a);
+        }
+    }
+
+    /// @notice What each address can withdraw of a cash asset now (payouts not pushed or deferred, plus any other
+    ///         cash on its account), in engine fixed point. A keeper pushes to the non-zero ones with `pushTo`.
+    function claimable(uint256 pid, uint256 asset, address[] calldata accounts) external view returns (int256[] memory out) {
+        out = new int256[](accounts.length);
+        for (uint256 i = 0; i < accounts.length; i++) out[i] = engine.balanceOf(pid, accounts[i], asset);
+    }
+
+    /// @notice The current holders of a note's units [start, start + count), with their balances (token base
+    ///         units, 6 decimals).
+    function holders(uint256 pid, uint256 asset, uint256 start, uint256 count)
+        external
+        view
+        returns (address[] memory who, uint256[] memory units, uint256 total)
+    {
+        NoteToken t = NoteToken(engine.assetTokenOf(pid, asset));
+        total = t.holderCount();
+        who = t.holders(start, count);
+        units = new uint256[](who.length);
+        for (uint256 i = 0; i < who.length; i++) units[i] = t.balanceOf(who[i]);
+    }
+
     /// @notice Verified-email bindings for many addresses at once: the salted hash and until when it counts
     ///         (zero: none). The email and its salt are never on-chain.
-    function emails(address[] calldata holders) external view returns (bytes32[] memory hashes, uint64[] memory verifiedUntil) {
-        hashes = new bytes32[](holders.length);
-        verifiedUntil = new uint64[](holders.length);
-        for (uint256 i = 0; i < holders.length; i++) (hashes[i], verifiedUntil[i],) = engine.emailOf(holders[i]);
+    function emails(address[] calldata accounts) external view returns (bytes32[] memory hashes, uint64[] memory verifiedUntil) {
+        hashes = new bytes32[](accounts.length);
+        verifiedUntil = new uint64[](accounts.length);
+        for (uint256 i = 0; i < accounts.length; i++) (hashes[i], verifiedUntil[i],) = engine.emailOf(accounts[i]);
     }
 }

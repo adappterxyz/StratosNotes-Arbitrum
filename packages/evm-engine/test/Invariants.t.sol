@@ -5,6 +5,7 @@ import {Test, StdInvariant} from "forge-std/Test.sol";
 import {FlowEngine} from "../src/FlowEngine.sol";
 import {CreReceiver} from "../src/cre/CreReceiver.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {NoteToken} from "../src/NoteToken.sol";
 import {ProductsBase} from "./Products.t.sol";
 
 /// Drives one note (a product fixture) through its real timeline while the fuzzer interleaves everything else a
@@ -28,7 +29,7 @@ contract NoteHandler is Test {
     bool public escrowMovedOutsideWorkflow;
     bool public strangerReported;
     bool public unitsChangedByTransfer;
-    bool public strangerDeposited;
+    bool public strangerDepositLost;
     uint256 public calls;
 
     constructor(FlowEngine engine_, MockERC20[5] memory tokens_, bytes memory fixture_, uint256 pid_, address issuer_, address pa_, address forwarder_, address[] memory investors_) {
@@ -62,8 +63,25 @@ contract NoteHandler is Test {
     }
 
     function _units() internal view returns (int256 s) {
-        address[] memory hs = engine.holdersOf(pid);
+        NoteToken t = NoteToken(engine.assetTokenOf(pid, NOTE));
+        address[] memory hs = t.holders(0, type(uint256).max);
         for (uint256 k = 0; k < hs.length; k++) s += engine.balanceOf(pid, hs[k], NOTE);
+    }
+
+    /// A keeper pushes the latest payouts (any batch size): never more than each holder is owed.
+    function push(uint256 assetSeed, uint256 count) external {
+        calls++;
+        uint8 a = uint8(1 + assetSeed % (_f().tokenOf.length - 1));
+        if (_f().tokenOf[a] == 0) return;
+        int256[] memory esc = _escrow();
+        uint256 d = tokens[_f().tokenOf[a]].decimals();
+        uint256[] memory before = new uint256[](investors.length);
+        for (uint256 k = 0; k < investors.length; k++) before[k] = tokens[_f().tokenOf[a]].balanceOf(investors[k]);
+        try engine.pushPayouts(pid, a, type(uint256).max, bound(count, 1, 8)) {} catch {}
+        for (uint256 k = 0; k < investors.length; k++) {
+            withdrawnByHolders[a] += int256(tokens[_f().tokenOf[a]].balanceOf(investors[k]) - before[k]) * SCALE / int256(10 ** d);
+        }
+        _sameEscrow(esc);
     }
 
     // ---- The workflow's own timeline (reports, keeper advances, the issuer's funding) --------------------------
@@ -99,8 +117,9 @@ contract NoteHandler is Test {
         int256 amount = int256(bound(amountSeed, 1, uint256(held)));
         int256[] memory esc = _escrow();
         int256 before = _units();
+        NoteToken t = NoteToken(engine.assetTokenOf(pid, NOTE));
         vm.prank(from);
-        try engine.transferUnits(pid, NOTE, to, amount) {} catch {}
+        try t.transfer(to, uint256(amount) / 1e4) {} catch {}
         if (_units() != before) unitsChangedByTransfer = true;
         _sameEscrow(esc);
     }
@@ -137,18 +156,26 @@ contract NoteHandler is Test {
         _sameEscrow(esc);
     }
 
-    /// A stranger's deposit: refused (it would take a holder slot).
+    /// A stranger's deposit stays the stranger's: it can take back exactly what it put in, and nobody else's
+    /// balance moves. (Accounts no longer have a cap, so a deposit takes nothing from anyone.)
     function strangerDeposit(uint256 seed, uint256 base) external {
         calls++;
         address s = address(uint160(uint256(keccak256(abi.encode("stranger", seed)))));
         base = bound(base, 1, 1e12);
         tokens[1].mint(s, base);
+        uint256 wallet = tokens[1].balanceOf(s);
+        int256 account = engine.balanceOf(pid, s, 1);
+        int256[] memory esc = _escrow();
         vm.startPrank(s);
         tokens[1].approve(address(engine), base);
         try engine.deposit(pid, 1, base) {
-            strangerDeposited = true;
+            try engine.withdraw(pid, 1, base) {} catch {
+                strangerDepositLost = true;
+            }
+            if (tokens[1].balanceOf(s) != wallet || engine.balanceOf(pid, s, 1) != account) strangerDepositLost = true;
         } catch {}
         vm.stopPrank();
+        _sameEscrow(esc);
     }
 
     /// Anyone but the forwarder (and the fallback reporter, off here) reporting: refused.
@@ -198,8 +225,7 @@ abstract contract NoteInvariants is StdInvariant, ProductsBase {
         }
         investors[investors.length - 1] = makeAddr("inv_buyer"); // receives units only by transfer
         handler = new NoteHandler(engine, tokens, fixtures[fixtureIndex()], notePid, issuer, pa, forwarder, investors);
-        address[] memory hs = engine.holdersOf(notePid);
-        for (uint256 k = 0; k < hs.length; k++) initialUnits += engine.balanceOf(notePid, hs[k], NOTE);
+        initialUnits = int256(_note(notePid).totalSupply()) * 1e4;
         targetContract(address(handler));
     }
 
@@ -213,7 +239,7 @@ abstract contract NoteInvariants is StdInvariant, ProductsBase {
     /// together (holders, issuer, paying agent, escrow) is covered by it.
     function invariant_solvency() public view {
         ProductsBase.Fixture memory fx = _fixture(fixtureIndex());
-        address[] memory hs = engine.holdersOf(notePid);
+        address[] memory hs = _accounts();
         for (uint256 a = 1; a < fx.tokenOf.length; a++) {
             if (fx.tokenOf[a] == 0) continue;
             MockERC20 t = tokens[fx.tokenOf[a]];
@@ -225,12 +251,30 @@ abstract contract NoteInvariants is StdInvariant, ProductsBase {
         }
     }
 
-    /// Note units: only issuance and redemption change their total; transfers conserve it.
+    /// Every ledger account the note can have: investors, issuer, paying agent, escrow.
+    function _accounts() internal view returns (address[] memory hs) {
+        uint256 n = handler.investorCount();
+        hs = new address[](n + 3);
+        for (uint256 k = 0; k < n; k++) hs[k] = handler.investors(k);
+        hs[n] = handler.issuer();
+        hs[n + 1] = handler.pa();
+        hs[n + 2] = engine.ESCROW();
+    }
+
+    /// Note units: only issuance and redemption change their total; transfers conserve it. The token's supply is
+    /// exactly the sum of its holders' balances (sold minus burned), and the engine reads the same balances.
     function invariant_unitsConserved() public view {
         assertFalse(handler.unitsChangedByTransfer(), "a transfer changed the total units");
-        address[] memory hs = engine.holdersOf(notePid);
+        NoteToken t = _note(notePid);
+        address[] memory hs = t.holders(0, type(uint256).max);
+        uint256 sum;
         int256 held;
-        for (uint256 k = 0; k < hs.length; k++) held += engine.balanceOf(notePid, hs[k], NOTE);
+        for (uint256 k = 0; k < hs.length; k++) {
+            sum += t.heldOf(hs[k]);
+            held += engine.balanceOf(notePid, hs[k], NOTE);
+            assertGt(t.heldOf(hs[k]), 0, "the holder set lists only non-zero balances");
+        }
+        assertEq(sum, t.supplyHeld(), "totalSupply == sum of balances");
         assertLe(held, initialUnits, "no units out of thin air (only redemption retires them)");
     }
 
@@ -242,7 +286,7 @@ abstract contract NoteInvariants is StdInvariant, ProductsBase {
     /// Only the forwarder (or the fallback reporter, when set) reports; strangers never deposit into a note.
     function invariant_accessControl() public view {
         assertFalse(handler.strangerReported(), "a stranger's report was applied");
-        assertFalse(handler.strangerDeposited(), "a stranger took a holder slot by depositing");
+        assertFalse(handler.strangerDepositLost(), "a stranger's deposit did not come back in full");
     }
 
     /// Holders, all together, never receive more of any asset than the reference model pays them (in full, or on
@@ -311,7 +355,7 @@ contract EngineFuzz is ProductsBase {
         address[] memory assetTokens = _assetTokens(f);
         assetTokens[CASH] = address(usd18);
         vm.prank(issuer);
-        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), assetTokens, f.startStep, _none());
+        uint256 pid = engine.startProcess(id, 1, _roles(issuer, makeAddr("p")), assetTokens, f.startStep, _none(), "Note", "NOTE");
         vm.startPrank(issuer);
         for (uint256 t = 1; t < 5; t++) tokens[t].approve(address(engine), type(uint256).max);
         for (uint256 k = 0; k < f.pledges.length; k++) tokens[f.pledges[k].token].mint(issuer, f.pledges[k].base);
@@ -359,9 +403,8 @@ contract EngineFuzz is ProductsBase {
             address to = hs[moves[k] % 6];
             int256 held = engine.balanceOf(pid, from, NOTE);
             if (from == to || held == 0) continue;
-            int256 amt = int256(bound(moves[k] >> 8, 1, uint256(held)));
-            vm.prank(from);
-            engine.transferUnits(pid, NOTE, to, amt);
+            int256 amt = int256(bound(moves[k] >> 8, 1, uint256(held) / 1e4)) * 1e4;
+            _transferUnits(pid, from, to, amt);
         }
         int256 total;
         for (uint256 k = 0; k < 6; k++) total += engine.balanceOf(pid, hs[k], NOTE);
@@ -403,7 +446,7 @@ contract EngineFuzz is ProductsBase {
 
     /// With requireEmail on, an address without an attestation can neither subscribe nor receive units.
     function testFuzz_unverifiedAddressesAreGated(address who) public {
-        vm.assume(who != address(0) && who.code.length == 0 && who != engine.ESCROW());
+        vm.assume(who != address(0) && who.code.length == 0 && who != engine.ESCROW() && who != address(engine));
         Fixture memory f = _fixture(0);
         address issuer = makeAddr("gi");
         uint256 pid = _issue(f, issuer, makeAddr("gp"));
@@ -418,9 +461,10 @@ contract EngineFuzz is ProductsBase {
         vm.expectRevert(abi.encodeWithSelector(FlowEngine.SubscriberEmailNotVerified.selector, who));
         engine.executeStep(pid, f.subscribeStep, NO, _num(10e10));
         vm.stopPrank();
+        NoteToken t = _note(pid);
         vm.prank(inv);
         vm.expectRevert(abi.encodeWithSelector(FlowEngine.RecipientEmailNotVerified.selector, who));
-        engine.transferUnits(pid, NOTE, who, 1e10);
+        t.transfer(who, 1e6);
     }
 
     /// Only the forwarder (and a fallback reporter, once set) may report.
