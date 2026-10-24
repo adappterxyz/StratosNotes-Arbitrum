@@ -26,14 +26,28 @@ const indexer = {
     confirmations: 3, maxRange: 2000, pollMs: 2000,
   })),
 };
+/** Paxos testnet USDG (6 decimals), verified on-chain 2026-10-24. */
+const USDG: Record<string, string> = {
+  'arbitrum-sepolia': '0xFFC95faa3d63Cde504a05B567C600B78C0b41892',
+  'robinhood-testnet': '0x7E955252E15c84f5768B83c41a71F9eba181802F',
+};
+/** Robinhood Chain testnet's own stock tokens (18 decimals). */
+const REAL_STOCKS: Record<string, Record<string, string>> = {
+  'robinhood-testnet': {
+    TSLA: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E',
+    AMZN: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02',
+    NFLX: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',
+  },
+};
 const api = {
   allowedOrigins: [SITE],
   trustProxy: true,
   ai: false, // the site's Worker answers /api/ai on Workers AI
   chains: deployed.map(c => ({
     key: c.key, rpc: c.rpc, engine: c.d.engine, lens: c.d.lens, fromBlock: c.d.block,
-    stablecoin: { symbol: 'tUSD', address: c.d.tokens.tUSD, decimals: 6 },
-    tokenFaucet: c.d.faucet, tokens: c.d.tokens,
+    // Cash is Paxos's testnet USDG (docs.paxos.com/guides/stablecoin/usdg/testnet); tUSD stays for older notes.
+    stablecoin: { symbol: 'USDG', address: USDG[c.key], decimals: 6 },
+    tokenFaucet: c.d.faucet, tokens: { ...c.d.tokens, USDG: USDG[c.key], ...(REAL_STOCKS[c.key] ?? {}) },
   })),
 };
 mkdirSync('deployments/server', { recursive: true });

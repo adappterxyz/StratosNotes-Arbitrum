@@ -12,8 +12,8 @@
       "lens": "0x7544378876D780E69968CD67c3FEf9a294C23A0B",
       "fromBlock": 322211118,
       "stablecoin": {
-        "symbol": "tUSD",
-        "address": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787",
+        "symbol": "USDG",
+        "address": "0xFFC95faa3d63Cde504a05B567C600B78C0b41892",
         "decimals": 6
       },
       "tokenFaucet": "0x02BA09FB3409d310C1C8d145144c84e5bC5D09EE",
@@ -25,7 +25,8 @@
         "tSOL": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
         "tSPY": "0x5383F9857E0E1702Da773ac91E12c69245868fF2",
         "tTSLA": "0xbd162AeFA4Cd5763c41257636084d93F36DECFf5",
-        "tUSD": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787"
+        "tUSD": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787",
+        "USDG": "0xFFC95faa3d63Cde504a05B567C600B78C0b41892"
       }
     },
     {
@@ -35,8 +36,8 @@
       "lens": "0x0969cCc3e714A3Ac5a49b1cD8e07989B8C7CaA41",
       "fromBlock": 141588428,
       "stablecoin": {
-        "symbol": "tUSD",
-        "address": "0x1D91004a9DA8D385196017727046cBA8CBbff397",
+        "symbol": "USDG",
+        "address": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
         "decimals": 6
       },
       "tokenFaucet": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
@@ -48,7 +49,11 @@
         "tSOL": "0xFC0Ae02839ec2736c9799985CF270e4B111D314a",
         "tSPY": "0xBD16a9DD8EEb9948b64A15b334D16e1f65a8C582",
         "tTSLA": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
-        "tUSD": "0x1D91004a9DA8D385196017727046cBA8CBbff397"
+        "tUSD": "0x1D91004a9DA8D385196017727046cBA8CBbff397",
+        "USDG": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
+        "TSLA": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+        "AMZN": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+        "NFLX": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93"
       }
     }
   ]
