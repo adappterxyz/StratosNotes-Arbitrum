@@ -1,5 +1,5 @@
 /**
- * What a note does, in six cards on a slowly turning 3D ring (CSS perspective + rotateY, no library).
+ * What a note does, in four cards per side (investors or issuers) on a slowly turning 3D ring (CSS perspective + rotateY, no library).
  *
  * The ring is sized from its own width (ResizeObserver), so it scales from a 320px phone to a 2560px screen:
  * the front card is ~86% of the width on a phone and ~44% on a desktop (capped at 720px), side cards peek in
@@ -171,10 +171,47 @@ const CARDS: Card[] = [
     },
     start: { role: 'issuer', goal: 'clients', type: 'phoenix', syms: ['BTC'], preset: 'Crash' },
   },
+  {
+    side: 'Issuers', title: 'Offer clients a product', note: 'Fixed coupon note on TSLA',
+    body: 'Package one note with a set outcome and sell it to your clients or community.',
+    chart: {
+      aria: 'One note on the left fans out to five holders on the right; each holder receives the same terms.',
+      shapes: <>
+        <rect x="16" y="30" width="36" height="44" rx="4" fill="var(--ink)" />
+        <path d="M40 30h12v12" fill="var(--c-out)" />
+        <polyline points="22,62 30,62 38,50 46,50" stroke="var(--c-pay)" {...S} />
+        {[18, 34, 50, 66, 82].map(y => <path key={`l${y}`} d={`M54 52C100 52 110 ${y} 150 ${y}`} stroke="var(--c-axis)" {...thin} />)}
+        {[18, 34, 50, 66, 82].map(y => <circle key={y} cx="160" cy={y} r="7" fill="rgba(18,169,113,.14)" stroke="var(--c-line)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />)}
+      </>,
+      labels: [
+        { x: 34, y: 80, t: 'one note', a: 'middle', tone: 'soft' },
+        { x: 172, y: 2, t: 'your clients', tone: 'pay' },
+        { x: 100, y: 92, t: 'same terms for every holder', a: 'middle', tone: 'soft' },
+      ],
+    },
+    start: { role: 'issuer', goal: 'clients', type: 'fcn', syms: ['TSLA'], preset: 'Flat' },
+  },
+  {
+    side: 'Issuers', title: 'Monetise a market view', note: 'Phoenix on ETH',
+    body: 'Pick the barrier and coupon that fit your view. The coupon is your cost of funds.',
+    chart: {
+      aria: 'A price path above a barrier at 70%; the issuer pays a small coupon while it stays above, so the cost line rises in small steps.',
+      shapes: <>
+        {baseline}
+        <path d="M14 58H190" stroke="var(--c-floor)" strokeDasharray="4 4" {...thin} />
+        <polyline points="14,36 40,30 66,40 92,34 118,44 144,38 170,30 190,26" stroke="var(--c-line)" {...S} />
+        <polyline points="14,84 58,84 58,80 102,80 102,76 146,76 146,72 190,72" stroke="var(--c-out)" {...thin} strokeWidth={1.6} />
+      </>,
+      labels: [
+        { x: 188, y: 18, t: 'your view: stays above', a: 'end', tone: 'pay' },
+        { x: 16, y: 50, t: 'barrier 70%', tone: 'warn' },
+        { x: 188, y: 63, t: 'your cost: USDG coupons', a: 'end', tone: 'soft' },
+      ],
+    },
+    start: { role: 'issuer', goal: 'view', type: 'phoenix', syms: ['ETH'], preset: 'Rally' },
+  },
 ];
 
-const N = CARDS.length;
-const STEP = 360 / N;
 /** Continuous turn: milliseconds per card, and the ease-in after a pause or a snap. */
 const CARD_MS = 8000;
 const RAMP_MS = 1200;
@@ -183,17 +220,30 @@ const SNAP_MS = 900;
 interface Dims { w: number; r: number; persp: number; h: number }
 
 /** Card width, ring radius and perspective from the ring's width (px). */
-function size(W: number): Omit<Dims, 'h'> {
+function size(W: number, slots = 6): Omit<Dims, 'h'> {
   // Phone: front card ~86% wide, side cards peek in at the edges. Tablet: ~60%. Desktop: ~44%, capped at 720.
   const w = W < 600 ? Math.round(W * 0.86) : W < 1000 ? Math.round(W * 0.6) : Math.round(Math.min(720, Math.max(440, W * 0.44)));
   // On wide screens the radius also grows with the screen, so the ring keeps spanning ~90% of the width
   // even once the front card stops growing.
-  const r = Math.round(W < 600 ? w * 0.8 : W < 1000 ? w * 0.95 : Math.max(w * 1.06, W * 0.46));
+  const r6 = W < 600 ? w * (slots > 6 ? 0.95 : 0.8) : W < 1000 ? w * 0.95 : Math.max(w * 1.06, W * 0.46);
+  // Tuned for 6 slots (60° apart); with more slots the cards are closer in angle, so push them out to keep the
+  // same gap between neighbours.
+  const r = Math.round(r6 * Math.max(1, Math.tan(Math.PI / 6) / Math.tan(Math.PI / slots)));
   const persp = Math.round(Math.max(900, w * 3.4, r * 3));
   return { w, r, persp };
 }
 
-export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => void }) {
+export type Side = 'Investors' | 'Issuers';
+
+export default function Carousel({ onOpen, side = 'Investors' }: { onOpen: (s: ExplorerStart) => void; side?: Side }) {
+  // The cards for this tab; the ring's geometry is computed from however many there are.
+  const cards = CARDS.filter(c => c.side === side);
+  const C = cards.length;
+  // The ring repeats the cards so it always has at least 6 slots: with only 4, neighbours would sit edge-on at 90°.
+  const reps = Math.max(1, Math.ceil(6 / C));
+  const ring = Array.from({ length: C * reps }, (_, k) => cards[k % C]);
+  const N = ring.length;
+  const STEP = 360 / N;
   // `pos` is the ring's position in cards (continuous); `front` is the nearest card, the one that is active.
   const pos = useRef(0);
   const [front, setFront] = useState(0);
@@ -220,11 +270,11 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
   const measure = useCallback(() => {
     const box = boxRef.current, m = measureRef.current;
     if (!box || !m) return;
-    const base = size(box.clientWidth);
+    const base = size(box.clientWidth, N);
     m.style.width = `${base.w}px`;
     const h = Math.ceil(Math.max(...[...m.children].map(c => (c as HTMLElement).offsetHeight)));
     setDims(d => (d && d.w === base.w && d.h === h && d.r === base.r ? d : { ...base, h }));
-  }, []);
+  }, [N]);
   useLayoutEffect(() => {
     if (reduced) return;
     measure();
@@ -241,7 +291,7 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
     if (el) el.style.transform = `translateZ(calc(-1 * var(--cr-r))) rotateY(${-pos.current * STEP}deg)`;
     const f = ((Math.round(pos.current) % N) + N) % N;
     setFront(prev => (prev === f ? prev : f));
-  }, []);
+  }, [N, STEP]);
 
   // Offscreen: no turning (and no frames).
   useEffect(() => {
@@ -297,7 +347,7 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
   if (reduced) {
     return (
       <div className="cr-static">
-        {CARDS.map(c => <CardBody key={c.title} c={c} onOpen={onOpen} />)}
+        {cards.map(c => <CardBody key={c.title} c={c} onOpen={onOpen} />)}
       </div>
     );
   }
@@ -326,7 +376,7 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
     >
       {/* Off-screen copies at the front card's width, to find the tallest card. */}
       <div className="cr-measure" ref={measureRef} aria-hidden="true" inert>
-        {CARDS.map(c => <CardBody key={c.title} c={c} onOpen={() => {}} />)}
+        {cards.map(c => <CardBody key={c.title} c={c} onOpen={() => {}} />)}
       </div>
       <div
         className="cr-stage"
@@ -339,19 +389,19 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
         onPointerCancel={e => { drag.current = null; if (e.pointerType !== 'mouse') release(2500); }}
       >
         <div className="cr-ring" ref={ringRef} style={{ transform: 'translateZ(calc(-1 * var(--cr-r))) rotateY(0deg)' }}>
-          {CARDS.map((c, i) => {
+          {ring.map((c, i) => {
             // Angular distance from the front, in steps (0 = front).
             const dist = Math.min((i - front + N) % N, (front - i + N) % N);
             return (
               <div
-                key={c.title}
+                key={`${c.title}-${i}`}
                 className={`cr-slot${dist === 0 ? ' front' : ''}`}
-                style={{ transform: `rotateY(${i * STEP}deg) translateZ(var(--cr-r))`, opacity: dist === 0 ? 1 : dist === 1 ? 0.5 : 0.14 }}
+                style={{ transform: `rotateY(${i * STEP}deg) translateZ(var(--cr-r))`, opacity: dist === 0 ? 1 : dist === 1 ? 0.5 : 0, visibility: dist <= 1 ? 'visible' : 'hidden' }}
                 aria-hidden={dist !== 0}
                 inert={dist !== 0 ? true : undefined}
                 role="group"
                 aria-roledescription="slide"
-                aria-label={`${i + 1} of ${N}: ${c.title}`}
+                aria-label={`${(i % C) + 1} of ${C}: ${c.title}`}
                 onClick={dist === 1 ? () => go((i - front + N) % N === 1 ? 1 : -1) : undefined}
               >
                 <CardBody c={c} onOpen={onOpen} />
@@ -363,13 +413,17 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
       <div className="cr-controls">
         <button type="button" className="cr-arrow" onClick={() => go(-1)} aria-label="Previous card">←</button>
         <div className="cr-dots" role="tablist" aria-label="Choose a card">
-          {CARDS.map((c, i) => (
-            <button
-              key={c.title} type="button" role="tab" aria-selected={i === front} aria-label={c.title}
-              className={i === front ? 'on' : ''}
-              onClick={() => { const d = (i - front + N) % N; snapTo(Math.round(pos.current) + (d <= N / 2 ? d : d - N)); }}
-            ><span /></button>
-          ))}
+          {cards.map((c, i) => {
+            const active = front % C === i;
+            return (
+              <button
+                key={c.title} type="button" role="tab" aria-selected={active} aria-label={c.title}
+                className={active ? 'on' : ''}
+                // Snap to the nearest ring slot that shows this card.
+                onClick={() => { const d = (i - (front % C) + C) % C; snapTo(Math.round(pos.current) + (d <= C / 2 ? d : d - C)); }}
+              ><span /></button>
+            );
+          })}
         </div>
         <button type="button" className="cr-arrow" onClick={() => go(1)} aria-label="Next card">→</button>
       </div>

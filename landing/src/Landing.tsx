@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './notes.css';
-import Carousel from './Carousel';
+import Carousel, { type Side } from './Carousel';
 import Stage from './Stage';
 import ExplorerPanel from './ExplorerPanel';
 import { DEFAULT_START, type ExplorerStart } from './explorer/start';
@@ -24,6 +24,7 @@ export function Wordmark({ size = 'md', dark = false }: { size?: 'md' | 'lg'; da
 export default function Landing() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
+  const [side, setSide] = useState<Side>('Investors');
   // The full explorer opens on request only (a card, the "Try a note" buttons, or a #explore link).
   const [explorer, setExplorer] = useState<ExplorerStart | null>(() =>
     typeof window !== 'undefined' && window.location.hash === '#explore' ? DEFAULT_START : null);
@@ -90,10 +91,15 @@ export default function Landing() {
           <div className="wrap">
             <div className="section-head">
               <span className="eyebrow">What a note can do</span>
-              <h2>Six things a note can do.</h2>
+              <SideTabs side={side} onChange={setSide} />
+              <p className="side-sub" aria-live="polite">{side === 'Investors'
+                ? 'A result agreed before you buy: income, protection, exposure or a hedge, paid in USDG.'
+                : 'Raise USDG against collateral you lock, and pay each coupon when it falls due.'}</p>
             </div>
           </div>
-          <Carousel onOpen={openExplorer} />
+          <div id="notes-panel" role="tabpanel" aria-labelledby={`tab-${side}`}>
+            <Carousel key={side} side={side} onOpen={openExplorer} />
+          </div>
           <div className="wrap">
             <div className="try-row">
               <button type="button" className="btn btn-ghost" onClick={() => openExplorer()}>Try a note yourself</button>
@@ -153,6 +159,45 @@ export default function Landing() {
         </div>
       </footer>
       {explorer && <ExplorerPanel start={explorer} onClose={closeExplorer} />}
+    </div>
+  );
+}
+
+const SIDES: Array<{ id: Side; label: string }> = [
+  { id: 'Investors', label: 'For investors' },
+  { id: 'Issuers', label: 'For issuers' },
+];
+
+/** Investor / issuer pill tabs that filter the carousel. */
+function SideTabs({ side, onChange }: { side: Side; onChange: (s: Side) => void }) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const move = (i: number) => {
+    const n = (i + SIDES.length) % SIDES.length;
+    onChange(SIDES[n].id);
+    refs.current[n]?.focus();
+  };
+  return (
+    <div className="side-tabs" role="tablist" aria-label="Who the notes are for">
+      {SIDES.map((t, i) => (
+        <button
+          key={t.id}
+          ref={el => { refs.current[i] = el; }}
+          id={`tab-${t.id}`}
+          type="button"
+          role="tab"
+          aria-selected={side === t.id}
+          aria-controls="notes-panel"
+          tabIndex={side === t.id ? 0 : -1}
+          className={side === t.id ? 'on' : ''}
+          onClick={() => onChange(t.id)}
+          onKeyDown={e => {
+            if (e.key === 'ArrowRight') { e.preventDefault(); move(i + 1); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); move(i - 1); }
+            else if (e.key === 'Home') { e.preventDefault(); move(0); }
+            else if (e.key === 'End') { e.preventDefault(); move(SIDES.length - 1); }
+          }}
+        >{t.label}</button>
+      ))}
     </div>
   );
 }

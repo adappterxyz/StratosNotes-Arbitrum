@@ -376,3 +376,17 @@ header.nav.scrolled, header.nav.open { background: rgba(255, 255, 255, 0.94); bo
   .stage-hero .badge { display: none; }
   .outcomes { display: none; }
 }
+
+/* Investor / issuer pill tabs above the carousel. */
+.side-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--paper); border: 1px solid var(--border); justify-self: start; }
+.side-tabs button { min-height: 44px; padding: 0 22px; border-radius: 999px; border: 0; background: transparent; font-family: var(--font-display); font-weight: 600; font-size: clamp(15px, 1.4vw, 18px); color: var(--text-soft); cursor: pointer; transition: background-color .2s ease, color .2s ease; }
+.side-tabs button:hover { color: var(--text); }
+.side-tabs button.on { background: var(--ink); color: #FFFFFF; }
+.side-tabs button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.side-sub { min-height: 1.6em; }
+/* A switch of tab remounts the ring: fade it in. */
+@media (prefers-reduced-motion: no-preference) {
+  #notes-panel .cr, #notes-panel .cr-static { animation: side-in .45s ease both; }
+  @keyframes side-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+@media (max-width: 420px) { .side-tabs button { padding: 0 16px; } }
