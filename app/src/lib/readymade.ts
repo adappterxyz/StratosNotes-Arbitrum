@@ -30,7 +30,7 @@ const DESCRIPTION: Record<NoteKind, string> = {
   'worst-of': 'A phoenix on ETH, Bitcoin and Solana: the weakest of the three decides.',
 };
 
-/** A built-in note type's example terms (on Arbitrum Sepolia unless the issuer picks another network). */
+/** A built-in note type's example terms (on Arbitrum Sepolia, where every note is issued). */
 export const exampleOf = (k: NoteKind): ProductParams => (k === 'worst-of' ? EXAMPLE_WORST_OF : EXAMPLE_PRODUCTS[k]);
 
 export const kindOf = (p: ProductParams): NoteKind => (p.underlyings.length > 1 ? 'worst-of' : p.productType);

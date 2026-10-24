@@ -28,7 +28,7 @@ function Slider({ id, label, value, min, max, step = 1, unit = '%', onChange, hi
 export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerStart }) {
   const [role, setRole] = useState<Role>(start.role);
   const [goalId, setGoalId] = useState(start.goal);
-  const [terms, setTerms] = useState<Terms>(() => ({ ...defaultTerms(start.type, start.syms), ...(start.physical ? { physical: true } : {}) }));
+  const [terms, setTerms] = useState<Terms>(() => ({ ...defaultTerms(start.type, start.syms), ...(start.physical && physicalPossible(start.syms) ? { physical: true } : {}) }));
   const [preset, setPreset] = useState<Preset | null>(start.preset);
   const [paths, setPaths] = useState<number[][]>(() => presetPaths(start.preset, start.syms.length));
   const [invest, setInvest] = useState(10_000);

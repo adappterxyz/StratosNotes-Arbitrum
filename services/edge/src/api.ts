@@ -272,6 +272,8 @@ export function createEdgeApp(deps: EdgeAppDeps) {
       ...(e.bpmnXml ? { bpmnXml: e.bpmnXml, assets: e.assets as TemplateEntry['assets'] } : {}),
       ...(e.basis ? { basis: e.basis as TemplateEntry['basis'] } : {}),
     };
+    // Notes are issued on Arbitrum only: a term sheet on Robinhood Chain (a collateral chain) or delivering a stock is refused.
+    if (!templateOffered(entry)) return err(c, 400, 'This note can\'t be issued: notes are issued on Arbitrum Sepolia only (Robinhood Chain holds collateral), stock notes settle in cash, and no retired test token may appear.');
     let id: string;
     try { id = definitionId(compileTemplate(entry)); } catch (x) { return err(c, 400, `The workflow does not compile: ${x instanceof Error ? x.message : String(x)}`); }
     if (id !== e.definition) return err(c, 400, 'The workflow does not match the definition it names.');

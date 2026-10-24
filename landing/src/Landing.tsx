@@ -133,7 +133,7 @@ export default function Landing() {
             <div className="section-head" data-reveal>
               <span className="eyebrow">Why Arbitrum</span>
               <h2>Notes run on Arbitrum. The stocks stay on Robinhood Chain.</h2>
-              <p>Stock collateral and delivery stay on Robinhood Chain, where the stocks live, coordinated by Chainlink CCIP and CRE: live on testnet, with each lock or release delivered in about 20 minutes.</p>
+              <p>Every note is issued and paid on Arbitrum. Stock collateral stays locked on Robinhood Chain, where the stocks live, coordinated by Chainlink CCIP and CRE: live on testnet, with each lock or release delivered in about 20 minutes.</p>
             </div>
             <div className="cards3">
               <div className="card" data-reveal>

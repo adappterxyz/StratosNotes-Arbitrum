@@ -406,7 +406,7 @@ export class NoteScene {
       g2.fillStyle = hex(C.text); g2.fillRect(0, 0, 128, 128);
       g2.strokeStyle = 'rgba(255,255,255,.6)'; g2.lineWidth = 6; g2.strokeRect(8, 8, 112, 112);
       g2.fillStyle = '#ffffff'; g2.font = '700 38px "Geist Mono", ui-monospace, Menlo, monospace';
-      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('TSLA', 64, 66);
+      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('USDG', 64, 66); // cash-settled: stock notes repay final ÷ strike in USDG
       const tex = new CanvasTexture(cv); tex.colorSpace = SRGBColorSpace;
       this.tsla = new InstancedMesh(new BoxGeometry(0.95, 0.95, 0.95), new MeshBasicMaterial({ map: tex }), n);
       for (let i = 0; i < n; i++) {
@@ -415,7 +415,7 @@ export class NoteScene {
       }
       this.tsla.count = n;
       s.add(this.tsla);
-      this.tslaTag = label('HOLDERS RECEIVE TSLA TOKENS · ROBINHOOD CHAIN', hex(C.text), 0.58, 600);
+      this.tslaTag = label('HOLDERS REPAID FINAL ÷ STRIKE · USDG', hex(C.text), 0.58, 600);
       this.tslaTag.position.set(9.5, FLOOR_Y + 3.0, HOLDERS_Z + 0.8);
       (this.tslaTag.material as SpriteMaterial).opacity = 0;
       s.add(this.tslaTag);
@@ -645,7 +645,7 @@ export class NoteScene {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** The two endings: A, the price holds (principal back in USDG); B, knocked in (holders receive TSLA tokens). */
+  /** The two endings: A, the price holds (principal back in USDG); B, knocked in (holders repaid final ÷ strike in USDG). */
   private applyEndings(q: number) {
     const a = smoother(span(q, STORY_END + 0.02, STORY_END + 0.12));
     const b = smoother(span(q, ENDING_SPLIT, ENDING_SPLIT + 0.08));
@@ -663,7 +663,7 @@ export class NoteScene {
     }
     this.principal.instanceMatrix.needsUpdate = true;
     (this.principalTag.material as SpriteMaterial).opacity = a * (1 - b);
-    // B: the price falls through the knock-in at maturity: a red branch, then stock tokens to the holders.
+    // B: the price falls through the knock-in at maturity: a red branch, then the reduced cash repayment to the holders.
     this.branchGeo.setDrawRange(0, Math.floor(b * this.branchSegs) * this.pathRadial * 6);
     this.branch.visible = b > 0.001;
     (this.knockTag.material as SpriteMaterial).opacity = b;

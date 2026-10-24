@@ -1,6 +1,6 @@
 # Deploy runbook: Arbitrum Sepolia, Robinhood Chain testnet, notes.markets
 
-> **Networks: testnets only.** notes.markets runs on Robinhood Chain testnet and Arbitrum Sepolia. Chainlink runs
+> **Networks: testnets only.** notes.markets issues every note on Arbitrum Sepolia; Robinhood Chain testnet is the collateral chain (its vault, and the legacy notes issued there earlier). Chainlink runs
 > through the CRE simulator (`cre workflow simulate --broadcast` against the mock forwarders), so there is no mainnet
 > deployment: Arbitrum One and Robinhood Chain mainnet wait on CRE production (DON) access and an audit
 > (docs/MILESTONES.md). Mainnets are only read, for Chainlink prices: crypto on Ethereum, equities on Robinhood Chain

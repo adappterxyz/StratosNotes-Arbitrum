@@ -11,9 +11,9 @@ import {
   ArrowLeft, ArrowLeftRight, ArrowRight, Check, Flame, Layers, Repeat, ShieldCheck, Snowflake, Workflow,
 } from 'lucide-react';
 import {
-  check, COLLATERAL_SYMBOLS, collateralTokenOf, compileTemplate, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS, HOME_CHAIN,
-  instantiateProduct, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, NOTE_CHAINS, noteChainOf, parseBpmn, PRODUCT_LABELS, productUses, UNPRICED_STOCKS,
-  validateProductParams, type CollateralSymbol, type DefaultRule, type NoteChain, type ProductParams, type ProductType,
+  check, COLLATERAL_SYMBOLS, collateralTokenOf, compileTemplate, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS,
+  instantiateProduct, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, parseBpmn, PRODUCT_LABELS, productUses, toIssuanceTerms, UNPRICED_STOCKS,
+  validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from '../components/PayoffChart';
 import { IssuePanel, TemplatePanel, type Built, type DocInfo, type IssuePreset } from '../components/Stages';
@@ -21,7 +21,7 @@ import ReadyMadeList from '../components/issue/ReadyMadeList';
 import DescribeIt from '../components/issue/DescribeIt';
 import { AI_DRAFT_KEY, exampleOf, kindOf, loadAiReading, readyMade, saveAiReading, type AiReading, type NoteKind, type ReadyMade } from '../lib/readymade';
 import { Asset, AssetIcon, AssetStack } from '../components/AssetIcon';
-import { PREFERRED_CHAIN, useChains } from '../lib/chains';
+import { issueChains, PREFERRED_CHAIN, useChains } from '../lib/chains';
 import { fmtMoney, lockedAsset } from '../lib/format';
 
 type Kind = NoteKind;
@@ -82,15 +82,24 @@ export default function IssueWizard() {
     if (demoTsla) return { p: DEMO_TSLA, from: null, ai: null, shown: key };
     return { p: start(kind ?? 'phoenix'), from: null, ai: null, shown: kind && !ready ? key : null };
   });
-  const [p, setP] = useState<ProductParams>(init.p);
+  // Every note is issued on Arbitrum: terms opened from elsewhere (an old saved note on Robinhood Chain, a physically
+  // settled stock note) are moved there as they load (toIssuanceTerms), and the issuer is told.
+  const [p, setPRaw] = useState<ProductParams>(() => toIssuanceTerms(init.p));
+  const [moved, setMoved] = useState(() => toIssuanceTerms(init.p) !== init.p);
+  const setP = (next: ProductParams | ((prev: ProductParams) => ProductParams)) => {
+    if (typeof next === 'function') { setPRaw(prev => toIssuanceTerms(next(prev))); return; }
+    const q = toIssuanceTerms(next); // terms loaded from elsewhere
+    setMoved(q !== next);
+    setPRaw(q);
+  };
   const [from, setFrom] = useState<ReadyMade | null>(init.from); // the ready-made note it started from
   const [aiNotes, setAiNotes] = useState<string[]>(init.ai?.notes ?? []);
   const [shown, setShown] = useState<string | null>(init.shown); // the key whose terms are in p
   const [lost, setLost] = useState('');
-  // The network is part of the note's terms (`chain`): it decides which real tokens it delivers and takes as
-  // collateral. Arbitrum Sepolia, the default, is left implicit so its definitions stay as they were.
-  const defaultChain = config.chains.find(c => c.key === PREFERRED_CHAIN)?.key ?? config.chains[0]?.key ?? '';
-  const chainKey = p.chain && config.chains.some(c => c.key === p.chain) ? p.chain : defaultChain;
+  // The network: Arbitrum Sepolia, always (left implicit in the terms so its definitions stay as they were). Robinhood
+  // Chain is a collateral chain only: stock collateral is locked there (step 4), no note is issued there.
+  const issuable = issueChains(config);
+  const chainKey = issuable.find(c => c.key === PREFERRED_CHAIN)?.key ?? issuable[0]?.key ?? '';
   const [size, setSize] = useState(demoTsla ? 20 : init.ai?.schedule?.size ?? 10_000);
   const [strikeIn, setStrikeIn] = useState(5);
   const [every, setEvery] = useState<{ n: number; unit: 'minutes' | 'days' | 'months' }>(init.ai?.schedule ? { n: init.ai.schedule.every, unit: init.ai.schedule.unit } : { n: 3, unit: 'minutes' });
@@ -124,13 +133,6 @@ export default function IssueWizard() {
   const setStep = (s: number) => go(kind, s);
   const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(demoTsla ? { lag: 60, grace: 120 } : null);
   const set = (patch: Partial<ProductParams>) => setP(prev => ({ ...prev, ...patch }));
-  /** Another network: its own tokens, so collateral it doesn't have is dropped (the stablecoin always stays). */
-  const setChainKey = (k: string) => setP(prev => {
-    const chain = (NOTE_CHAINS as readonly string[]).includes(k) && k !== HOME_CHAIN ? k as NoteChain : undefined;
-    const next: ProductParams = { ...prev, chain, collateralChain: chain ? undefined : prev.collateralChain };
-    const kept = economicsOf(prev).collateral.filter(c => !!collateralTokenOf(next, c.symbol));
-    return { ...next, collateral: kept.length ? kept : [{ symbol: 'USD', haircutPct: 100 }] };
-  });
 
   useEffect(() => { window.scrollTo({ top: 0 }); }, [step, kind]);
   // What the issue panel publishes: the product's workflow, compiled as the engine will run it.
@@ -160,7 +162,6 @@ export default function IssueWizard() {
   const syms = p.underlyings.map(u => u.symbol);
   const remote = p.collateralChain === 'robinhood';
   const chainCfg = config.chains.find(c => c.key === chainKey);
-  const onHome = noteChainOf(p) === HOME_CHAIN;
   const colToken = (c: CollateralSymbol) => collateralTokenOf(p, c)?.token ?? null;
   /** A receipt (TSLA.rh…) is offered only when the chain's config lists it (the gateway registered it). */
   const colLive = (tok: string | null) => !!tok && (!tok.endsWith('.rh') || !!chainCfg?.tokens?.[tok]);
@@ -281,21 +282,16 @@ export default function IssueWizard() {
                 </div>
                 <span className="hint">Fixed by Chainlink on each asset's own chain: crypto on Ethereum, stocks on Robinhood Chain. {UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet.</span>
               </div>
-              {config.chains.length > 1 && (
-                <div className="field">
-                  <label htmlFor="iw-chain">Network</label>
-                  <select id="iw-chain" value={chainKey} onChange={e => setChainKey(e.target.value)}>
-                    {config.chains.map(c => <option key={c.key} value={c.key}>{c.name}{c.key === 'robinhood-testnet' ? ' (asset chain)' : ''}</option>)}
-                  </select>
-                  <span className="hint">{onHome
-                    ? 'Delivers and takes WETH; stocks and BTC settle in cash here (stocks stay on Robinhood Chain).'
-                    : 'Delivers and takes Robinhood Chain\'s own stock tokens (TSLA, AMZN, AMD, PLTR) and WETH.'}</span>
-                </div>
-              )}
+              <div className="field" data-issue-network>
+                <span className="lbl">Network</span>
+                <strong>{chainCfg?.name ?? 'Arbitrum Sepolia'}</strong>
+                <span className="hint">Every note is issued and paid on Arbitrum. It can deliver WETH; stocks and BTC settle in cash. Stock collateral (TSLA, AMZN, AMD, PLTR) is locked on Robinhood Chain in the Collateral step.</span>
+              </div>
+              {moved && <div className="notice info" role="note" data-moved-to-arbitrum>These terms named Robinhood Chain or delivered a stock. Notes are now issued on Arbitrum only, so they were moved there: stock settles in cash, and stock collateral is locked on Robinhood Chain.</div>}
               {kind === 'worst-of' && (
                 <div className="field">
                   <label htmlFor="iw-base">Payoff</label>
-                  <select id="iw-base" value={p.productType} onChange={e => set({ ...EXAMPLE_PRODUCTS[e.target.value as ProductType], name: p.name, underlyings: p.underlyings, chain: p.chain, collateralChain: p.collateralChain })}>
+                  <select id="iw-base" value={p.productType} onChange={e => set({ ...EXAMPLE_PRODUCTS[e.target.value as ProductType], name: p.name, underlyings: p.underlyings, collateralChain: p.collateralChain })}>
                     {(Object.keys(PRODUCT_LABELS) as ProductType[]).map(x => <option key={x} value={x}>{PRODUCT_LABELS[x]}</option>)}
                   </select>
                 </div>
@@ -309,8 +305,8 @@ export default function IssueWizard() {
                   </div>
                   <span className="hint">{physicalOk
                     ? `The asset itself: ${syms.map(s => delivered(s)).join(', ')} on ${chainCfg?.name ?? 'the note\'s network'}.`
-                    : `No ${syms.filter(s => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'this network'}: cash only.`}</span>
-                  {p.settlement === 'physical' && !physicalOk && <div className="notice warn">This network has no token to deliver for {syms.filter(s => !delivered(s)).join(', ')}: settle in cash, or pick another network or underlying.</div>}
+                    : `No ${syms.filter(s => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'Arbitrum'}: cash only (stocks stay on Robinhood Chain).`}</span>
+                  {p.settlement === 'physical' && !physicalOk && <div className="notice warn">This network has no token to deliver for {syms.filter(s => !delivered(s)).join(', ')}: settle in cash (stock notes are cash-settled), or pick another underlying.</div>}
                 </div>
               )}
               <div className="field">
@@ -371,7 +367,7 @@ export default function IssueWizard() {
                   </div>
                 </div>
               </div>
-              <p className="small muted">On {chainCfg?.name ?? chainKey} (set on the first step). Strike {fmtT(strikeAt)}, then {Array.from({ length: p.observations }, (_, i) => fmtT(dateOf(i + 1))).join(' · ')}.{demo ? ' Minutes apart runs a whole lifecycle while you watch.' : ''}</p>
+              <p className="small muted">On {chainCfg?.name ?? chainKey}, where every note is issued. Strike {fmtT(strikeAt)}, then {Array.from({ length: p.observations }, (_, i) => fmtT(dateOf(i + 1))).join(' · ')}.{demo ? ' Minutes apart runs a whole lifecycle while you watch.' : ''}</p>
             </>
           )}
 
@@ -379,20 +375,18 @@ export default function IssueWizard() {
             <>
               <h2>Collateral</h2>
               <p className="small muted">You lock collateral for the note's whole life. Investors' USDG comes to you; if you miss a payment, holders take what they're owed from the collateral.</p>
-              {onHome && (
-                <div className="field">
-                  <span className="lbl">Held on</span>
-                  <div className="seg" role="radiogroup" aria-label="Collateral held on">
-                    <button role="radio" aria-checked={!remote} className={!remote ? 'active' : ''} onClick={() => set({ collateralChain: 'note', collateral: keepCol({ ...p, collateralChain: 'note' }) })}>The note's chain</button>
-                    <button role="radio" aria-checked={remote} className={remote ? 'active' : ''} onClick={() => set({ collateralChain: 'robinhood', collateral: keepCol({ ...p, collateralChain: 'robinhood' }) })}>
-                      <img src={`${import.meta.env.BASE_URL}assets/robinhood-feather.svg`} alt="" width={14} height={14} />Robinhood Chain
-                    </button>
-                  </div>
-                  <span className="hint">{remote
-                    ? 'USDG, TSLA, AMZN, AMD or PLTR stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes), and the note sends them back there when it lets them go. Nothing is bridged.'
-                    : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA, AMZN, AMD or PLTR, lock them on Robinhood Chain.'}</span>
+              <div className="field">
+                <span className="lbl">Held on</span>
+                <div className="seg" role="radiogroup" aria-label="Collateral held on">
+                  <button role="radio" aria-checked={!remote} className={!remote ? 'active' : ''} onClick={() => set({ collateralChain: 'note', collateral: keepCol({ ...p, collateralChain: 'note' }) })}>Arbitrum (the note's chain)</button>
+                  <button role="radio" aria-checked={remote} className={remote ? 'active' : ''} onClick={() => set({ collateralChain: 'robinhood', collateral: keepCol({ ...p, collateralChain: 'robinhood' }) })}>
+                    <img src={`${import.meta.env.BASE_URL}assets/robinhood-feather.svg`} alt="" width={14} height={14} />Robinhood Chain
+                  </button>
                 </div>
-              )}
+                <span className="hint">{remote
+                  ? 'USDG, TSLA, AMZN, AMD or PLTR stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes), and the note sends them back there when it lets them go. Nothing is bridged.'
+                  : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA, AMZN, AMD or PLTR, lock them on Robinhood Chain.'}</span>
+              </div>
               <div className="field">
                 <span className="lbl">Assets you lock (up to {MAX_COLLATERAL})</span>
                 <div className="row iw-unds" role="group" aria-label="Collateral">
@@ -406,11 +400,11 @@ export default function IssueWizard() {
                       </button>
                     );
                   })}
-                  {(remote || !onHome) && UNPRICED_STOCKS.map(k => (
+                  {remote && UNPRICED_STOCKS.map(k => (
                     <button key={k} type="button" className="chip" disabled title={`${k}: held on Robinhood Chain, no Chainlink price yet`}><AssetIcon sym={k} size={18} />{k}</button>
                   ))}
                 </div>
-                {(remote || !onHome) && <span className="hint">{UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet, so they can't be pledged.</span>}
+                {remote && <span className="hint">{UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet, so they can't be pledged.</span>}
               </div>
               <div className="form-grid">
                 <Num id="iw-ratio" label="Collateral ratio (of size)" suffix="%" value={eco.collateralRatioPct} onChange={v => set({ collateralRatioPct: v })} hint={`${fmtMoney((eco.collateralRatioPct / 100) * size)} ${sym} of value required.`} />

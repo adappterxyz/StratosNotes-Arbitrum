@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyPatch, check, compile, draftToIR, EXAMPLE_PRODUCTS, instantiateProduct, irToBpmn, irToDraft, parseBpmn, type ProductType } from '../src';
+import { applyPatch, check, compile, draftToIR, EXAMPLE_PRODUCTS, instantiateProduct, irToBpmn, irToDraft, parseBpmn, validateProductParams, type ProductType } from '../src';
 import { runAi } from '../src/ai/pipeline';
 import type { AiRunner, DecisionAnswers } from '../src/ai/runner';
 
@@ -96,6 +96,24 @@ describe('AI pipeline (scripted models)', () => {
     // Collateral as stated; the haircut, lag and grace defaults are said out loud.
     expect(r.params).toMatchObject({ collateral: [{ symbol: 'ETH', haircutPct: 70 }], collateralRatioPct: 50, settlementLagDays: 2, gracePeriodDays: 2 });
     expect(r.notes.join(' ')).toMatch(/ETH collateral haircut not stated: 70%/);
+  });
+  it('puts a stock note on Arbitrum, cash-settled, with its stock collateral locked on Robinhood Chain', async () => {
+    const prompt = 'Reverse convertible on TSLA, 2.5% a quarter, knock-in 70%, one year, secured by TSLA and USDG at 100%, on Robinhood Chain';
+    const ai = fake({ intent: { choice: 'product', confidence: 0.9 }, product: { choice: 'reverse-convertible', confidence: 0.9 } }, [{
+      productType: 'reverse-convertible', name: '12M Reverse Convertible on TSLA', size: null, issuePricePct: null, underlyingSymbols: ['TSLA'], observationEveryMonths: 3, observationCount: 4,
+      couponRatePct: 2.5, couponAsStated: '2.5% a quarter', couponRateBasis: 'per-period', couponBarrierPct: null, memory: null, autocallLevelPct: null, autocallFromPeriod: null, knockInBarrierPct: 70, protectionPct: null, participationPct: null,
+      collateralSymbols: ['TSLA', 'USDG', 'ETH'], collateralRatioPct: 100, haircutPcts: null, settlementLagDays: null, gracePeriodDays: null,
+      chain: 'robinhood-testnet', settlement: 'physical',
+    }]);
+    const r = await runAi(ai, { prompt, today: '2026-10-06' });
+    expect(r.kind).toBe('product');
+    if (r.kind !== 'product') return;
+    expect(r.params.chain).toBeUndefined();
+    expect(r.params.settlement ?? 'cash').toBe('cash');
+    expect(r.params.collateralChain).toBe('robinhood');
+    expect(r.params.collateral?.map(c => c.symbol)).toEqual(['TSLA', 'USD']);
+    expect(validateProductParams(r.params)).toEqual([]);
+    expect(r.notes.join(' ')).toMatch(/locked in the vault on Robinhood Chain; the note itself is issued and paid on Arbitrum/);
   });
   it('refuses an underlying with no Chainlink feed here', async () => {
     const ai = fake({ intent: { choice: 'product', confidence: 0.9 }, product: { choice: 'fcn', confidence: 0.9 } }, [{

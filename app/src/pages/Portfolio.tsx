@@ -11,7 +11,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isAddress } from 'viem';
 import { BadgeCheck, Coins, FileText, Landmark, Lock, RefreshCw, Wallet } from 'lucide-react';
 import { CASH_ASSET, type NoteView } from '@sn/sdk';
-import { entryFor, useAddress, useChains, useSigner } from '../lib/chains';
+import { entryFor, onRobinhoodChain, ROBINHOOD_LEGACY_LABEL, useAddress, useChains, useSigner } from '../lib/chains';
 import { errText, fmtMoney, fmtPct, nextEvent } from '../lib/format';
 import { useNotes, usePortfolio } from '../lib/live';
 import { useClaimable, useWalletBalances } from '../lib/balances';
@@ -65,7 +65,12 @@ export default function Portfolio() {
 
   const open = (id: string) => nav(`/note/${encodeURIComponent(id)}`);
   // Notes on an earlier engine (v3): shown and settled as before, labelled so the different mechanics are clear.
-  const earlier = (id: string) => (entryFor(byKey, { id })?.legacy ? <span title="On an earlier engine: payouts wait in the note until you claim them (no receipt); units are not an ERC-20."> · earlier engine</span> : null);
+  const earlier = (id: string) => (
+    <>
+      {onRobinhoodChain({ id }) && <span data-robinhood-legacy title="Notes are now issued on Arbitrum only; this one runs to maturity on Robinhood Chain."> · {ROBINHOOD_LEGACY_LABEL}</span>}
+      {entryFor(byKey, { id })?.legacy && <span title="On an earlier engine: payouts wait in the note until you claim them (no receipt); units are not an ERC-20."> · earlier engine</span>}
+    </>
+  );
   const rowProps = (id: string, name: string) => ({
     className: 'link', tabIndex: 0, role: 'link', 'aria-label': `Open ${name}`,
     onClick: () => open(id),

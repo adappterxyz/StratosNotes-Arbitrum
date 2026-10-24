@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppConfig, ChainConfig } from './api';
-import { engineOf, entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
+import { engineOf, entryFor, issueChains, legacyConfig, marketplaceNotes, onRobinhoodChain, type ByKey, type EngineEntry } from './engines';
 
 const V3 = '0xaf8425a4b2d8994796e019d9b42cd99d40297e10';
 const V4 = '0x7d36da43724b09bb03ed98a4574685070073020b';
@@ -44,5 +44,31 @@ describe('engines per chain', () => {
     expect(entryFor(byKey, { id: 'arbitrum-sepolia:0x0000000000000000000000000000000000000bad:1' })).toBeUndefined();
     expect(entryFor(byKey, { chain: 'arbitrum-sepolia' })?.legacy).toBe(false);
     expect(entryFor(byKey, { chain: 'robinhood-testnet', engine: V4 })).toBeUndefined();
+  });
+});
+
+describe('Robinhood Chain: a collateral chain, its notes legacy', () => {
+  const RH_V4 = '0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244';
+  const RH_V3 = '0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D';
+  it('tells notes issued on Robinhood Chain by chain or engine', () => {
+    expect(onRobinhoodChain({ id: `robinhood-testnet:${RH_V4.toLowerCase()}:3` })).toBe(true);
+    expect(onRobinhoodChain({ id: `robinhood-testnet:${RH_V3.toLowerCase()}:1` })).toBe(true);
+    expect(onRobinhoodChain({ chain: 'somewhere', engine: RH_V4 })).toBe(true);
+    expect(onRobinhoodChain({ id: `arbitrum-sepolia:${V4}:2` })).toBe(false);
+    expect(onRobinhoodChain({ chain: 'local', engine: V4 })).toBe(false);
+  });
+  it('lists no Robinhood Chain note in the marketplace (nor as open now)', () => {
+    const notes = [
+      { id: `arbitrum-sepolia:${V4}:2`, chain: 'arbitrum-sepolia' },
+      { id: `robinhood-testnet:${RH_V4.toLowerCase()}:3`, chain: 'robinhood-testnet' },
+      { id: `robinhood-testnet:${RH_V3.toLowerCase()}:1`, chain: 'robinhood-testnet' },
+      { id: `arbitrum-sepolia:${V3}:5`, chain: 'arbitrum-sepolia' },
+    ];
+    expect(marketplaceNotes(notes).map(n => n.id)).toEqual([`arbitrum-sepolia:${V4}:2`, `arbitrum-sepolia:${V3}:5`]);
+  });
+  it('issues only on chains other than Robinhood Chain', () => {
+    const rh = { ...cfg, key: 'robinhood-testnet', name: 'Robinhood Chain testnet' } as ChainConfig;
+    expect(issueChains({ chains: [rh, cfg], ai: false }).map(c => c.key)).toEqual(['arbitrum-sepolia']);
+    expect(issueChains({ chains: [{ ...cfg, key: 'local' }], ai: false }).map(c => c.key)).toEqual(['local']);
   });
 });

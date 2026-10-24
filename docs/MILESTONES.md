@@ -5,10 +5,13 @@ Prizes pay 50% upfront and 50% on milestones. This plan covers about six months 
 
 ## Where we start (October 2026)
 
-- Live on **Robinhood Chain testnet** and **Arbitrum Sepolia**: notes.markets (landing and app), the API, and the
-  Chainlink CRE keeper.
+- Live on testnet: every note is issued and runs on **Arbitrum Sepolia**, with the collateral vault on **Robinhood
+  Chain testnet** (TSLA, AMZN, AMD, PLTR locked there back Arbitrum notes): notes.markets (landing and app), the API,
+  and the Chainlink CRE keeper.
 - Two notes ran start to finish on testnet, with every strike, observation and payment written by Chainlink CRE:
-  TSLA/NVDA on Robinhood paid 630 and 420 tUSD; ETH/BTC on Arbitrum Sepolia paid 645 and 430 tUSD
+  TSLA/NVDA (on an early engine on Robinhood, now retired) paid 630 and 420 tUSD; ETH/BTC on Arbitrum Sepolia paid
+  645 and 430 tUSD. Since then 3 TSLA locked on Robinhood Chain backed an Arbitrum note start to finish
+  ([CROSS-CHAIN.md](CROSS-CHAIN.md), "Live v2 proof")
   ([SUBMISSION.md](SUBMISSION.md#evidence)).
 - Engine v3: collateral escrow, per-period funding with a grace period, default to holders, a verified email
   bound on-chain as a salted hash, and the fixes from the security pass ([SECURITY.md](SECURITY.md)).
@@ -22,12 +25,12 @@ Prizes pay 50% upfront and 50% on milestones. This plan covers about six months 
 | Acceptance | Audit report published. A note issued with test USDC on Arbitrum Sepolia, run to redemption by CRE, with payouts equal to the reference payoff. |
 | Dependencies | Audit firm `[[auditor, date]]`; audit budget `[[cost]]`. |
 
-## M2: Stock notes on Robinhood Chain testnet (month 2–3)
+## M2: Stock-collateralised notes on Arbitrum, stocks locked on Robinhood Chain (month 2–3)
 
 | | |
 |---|---|
-| Deliverables | Notes that deliver and take as collateral Robinhood Chain's own testnet stock tokens (TSLA, AMZN, NFLX), not our mintable stand-ins. Equity prices from Chainlink's TSLA/NVDA/AAPL/SPY feeds. A pilot with issuers on testnet. |
-| Acceptance | `[[n]]` stock notes issued by pilot issuers on Robinhood Chain testnet and run on schedule by CRE. |
+| Deliverables | Arbitrum notes on stocks, cash-settled, secured by Robinhood Chain's own testnet stock tokens (TSLA, AMZN, AMD, PLTR) locked in the vault there, not our mintable stand-ins. Equity prices from Chainlink's feeds on Robinhood Chain. A pilot with issuers on testnet. |
+| Acceptance | `[[n]]` stock notes issued by pilot issuers on Arbitrum Sepolia with stock collateral locked on Robinhood Chain testnet, run on schedule by CRE. |
 | Dependencies | Robinhood Chain testnet stock-token access; pilot issuers `[[names]]`. |
 
 ## M3: First issuers (month 3–5)

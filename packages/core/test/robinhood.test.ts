@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CASH_TOKENS, CHAIN_TOKENS, collateralChoices, collateralSymbolOfAsset, collateralTokenOf, compileTemplate, deliverableToken, EXAMPLE_PRODUCTS,
   EXAMPLE_WORST_OF, EXTERNAL_TOKENS, FEEDS, instantiateProduct, isRetiredTestToken, normalizeParams, NOTE_CHAINS, RETIRED_TEST_TOKENS,
-  SEED_TEMPLATES, templateOffered, UNPRICED_STOCKS, validateProductParams, type ProductParams,
+  HOME_CHAIN, ISSUANCE_CHAINS, isLegacyChainTerms, SEED_TEMPLATES, toIssuanceTerms, templateOffered, UNPRICED_STOCKS, validateProductParams, validateTermSheet, type ProductParams,
 } from '../src';
 
 const rc: ProductParams = {
@@ -74,19 +74,19 @@ describe('real tokens per chain', () => {
 
   it('refuses tokens a chain does not have, and an unknown chain', () => {
     const amzn: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, collateral: [{ symbol: 'AMZN', haircutPct: 60 }] };
-    expect(validateProductParams(amzn).join(' ')).toMatch(/no AMZN token to pledge on Arbitrum Sepolia.*lock TSLA or AMZN on Robinhood Chain/);
-    expect(validateProductParams({ ...amzn, chain: 'robinhood-testnet' })).toEqual([]);
+    expect(validateProductParams(amzn).join(' ')).toMatch(/no AMZN token to pledge on Arbitrum Sepolia.*lock TSLA, AMZN, AMD or PLTR on Robinhood Chain/);
+    expect(validateTermSheet({ ...amzn, chain: 'robinhood-testnet' })).toEqual([]); // a legacy Robinhood Chain note still reads
     expect(validateProductParams({ ...amzn, collateralChain: 'robinhood' })).toEqual([]);
     expect(validateProductParams({ ...amzn, chain: 'nasdaq' as never }).join(' ')).toMatch(/chain must be one of/);
     // BTC is synthetic: never collateral, on either chain.
     const btc = { ...EXAMPLE_PRODUCTS.phoenix, collateral: [{ symbol: 'BTC', haircutPct: 70 }] } as unknown as ProductParams;
-    for (const chain of NOTE_CHAINS) expect(validateProductParams({ ...btc, chain }).join(' ')).toMatch(/'BTC' cannot be pledged/);
+    for (const chain of NOTE_CHAINS) expect(validateTermSheet({ ...btc, chain }).join(' ')).toMatch(/'BTC' cannot be pledged/);
     const eth: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, collateral: [{ symbol: 'ETH', haircutPct: 70 }] };
-    for (const chain of NOTE_CHAINS) expect(validateProductParams({ ...eth, chain })).toEqual([]);
+    for (const chain of NOTE_CHAINS) expect(validateTermSheet({ ...eth, chain })).toEqual([]);
     const solPhysical: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, underlyings: [FEEDS.SOL], settlement: 'physical' };
     expect(validateProductParams(solPhysical).join(' ')).toMatch(/no SOL token to deliver on Arbitrum Sepolia/);
     expect(validateProductParams({ ...solPhysical, settlement: 'cash' })).toEqual([]);
-    expect(validateProductParams({ ...EXAMPLE_PRODUCTS.phoenix, chain: 'robinhood-testnet', collateralChain: 'robinhood' }).join(' ')).toMatch(/holds its collateral there already/);
+    expect(validateTermSheet({ ...EXAMPLE_PRODUCTS.phoenix, chain: 'robinhood-testnet', collateralChain: 'robinhood' }).join(' ')).toMatch(/holds its collateral there already/);
   });
 
   it('settles in USDG on both testnets', () => {
@@ -132,12 +132,26 @@ describe('the ready-made library', () => {
     }
   });
 
-  it('ships the two Robinhood Chain templates, valid and compiled', () => {
-    const rh = SEED_TEMPLATES.filter(t => t.source.product?.chain === 'robinhood-testnet');
-    expect(rh.map(t => t.name)).toEqual(['12M Worst-of Phoenix on TSLA, AMZN', '12M Reverse Convertible on TSLA, physical']);
-    for (const t of rh) expect(compileTemplate(t.source).hash.length).toBe(32);
-    expect(tokensOf(rh[1].source.product!)).toContain('TSLA');
-    expect(tokensOf(rh[0].source.product!)).toContain('TSLA');
+  it('puts every note on Arbitrum: stock notes cash-settled, stock collateral locked on Robinhood Chain', () => {
+    for (const t of SEED_TEMPLATES) {
+      const p = t.source.product ?? t.source.basis!;
+      expect(p.chain ?? HOME_CHAIN, t.name).toBe('arbitrum-sepolia');
+      expect(isLegacyChainTerms(p), t.name).toBe(false);
+      const tokens = t.source.assets?.map(a => a.token ?? '') ?? tokensOf(p);
+      // No Robinhood stock token itself (only its .rh receipt on Arbitrum), and no physical stock delivery.
+      for (const tok of tokens) expect(!!CHAIN_TOKENS['robinhood-testnet'][tok] && !CHAIN_TOKENS['arbitrum-sepolia'][tok], `${t.name}: ${tok}`).toBe(false);
+      if (p.settlement === 'physical') for (const u of p.underlyings) expect(deliverableToken({}, u.symbol), `${t.name}: ${u.symbol}`).toBeDefined();
+      expect(t.name, t.name).not.toMatch(/physical/i);
+    }
+    const stock = SEED_TEMPLATES.filter(t => t.source.product?.underlyings.some(u => u.symbol === 'TSLA'));
+    expect(stock.map(t => t.name)).toEqual(['12M Worst-of Phoenix on TSLA, AMZN', '12M Reverse Convertible on TSLA', '12M Worst-of Phoenix on TSLA, NVDA']);
+    for (const t of stock) {
+      const p = t.source.product!;
+      expect(p.settlement ?? 'cash').toBe('cash');
+      expect(p.collateralChain).toBe('robinhood');
+      expect(tokensOf(p)).toContain('TSLA.rh');
+      expect(compileTemplate(t.source).hash.length).toBe(32);
+    }
   });
 
   it('stops listing saved templates that name a retired test token or no longer validate', () => {
@@ -149,6 +163,56 @@ describe('the ready-made library', () => {
     expect(RETIRED_TEST_TOKENS).toContain('tTSLA');
     expect(isRetiredTestToken('tTSLA.rh')).toBe(true);
     expect(isRetiredTestToken('tUSD')).toBe(false);
+  });
+});
+
+describe('issuance is Arbitrum-only', () => {
+  const legacy: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, underlyings: [FEEDS.TSLA], chain: 'robinhood-testnet', collateral: [{ symbol: 'TSLA', haircutPct: 60 }] };
+  it('issues on Arbitrum Sepolia only', () => {
+    expect(ISSUANCE_CHAINS).toEqual(['arbitrum-sepolia']);
+    expect(validateProductParams(legacy).join(' ')).toMatch(/Notes are issued on Arbitrum Sepolia only: Robinhood Chain testnet is a collateral chain/);
+    expect(validateProductParams({ ...EXAMPLE_PRODUCTS.phoenix, chain: 'robinhood-testnet' }).join(' ')).toMatch(/issued on Arbitrum Sepolia only/);
+    expect(validateProductParams({ ...EXAMPLE_PRODUCTS.phoenix, chain: 'arbitrum-sepolia' })).toEqual([]);
+    expect(validateProductParams(EXAMPLE_PRODUCTS.phoenix)).toEqual([]);
+    expect(isLegacyChainTerms(legacy)).toBe(true);
+    expect(isLegacyChainTerms(EXAMPLE_PRODUCTS.phoenix)).toBe(false);
+    // The Arbitrum way to the same exposure: cash-settled, TSLA locked on Robinhood Chain.
+    expect(validateProductParams({ ...legacy, chain: undefined, collateralChain: 'robinhood' })).toEqual([]);
+  });
+  it('refuses physical stock delivery (no stock token exists on Arbitrum)', () => {
+    expect(validateProductParams(rc).join(' ')).toMatch(/no TSLA token to deliver on Arbitrum Sepolia.*settle in cash/);
+    expect(validateProductParams({ ...rc, chain: 'robinhood-testnet' }).join(' ')).toMatch(/issued on Arbitrum Sepolia only/);
+  });
+  it('still reads and rebuilds a legacy Robinhood Chain note for display', () => {
+    expect(validateTermSheet(legacy)).toEqual([]);
+    expect(instantiateProduct(legacy).assets.find(a => a.id === 'col_TSLA')).toMatchObject({ token: 'TSLA' });
+    expect(normalizeParams({ ...legacy, chain: undefined, stockTokens: 'robinhood' } as ProductParams).chain).toBe('robinhood-testnet');
+  });
+  it('moves an old term sheet to Arbitrum for the issue forms', () => {
+    const moved = toIssuanceTerms(legacy);
+    expect(moved.chain).toBeUndefined();
+    expect(moved.collateralChain).toBe('robinhood');
+    expect(moved.collateral).toEqual([{ symbol: 'TSLA', haircutPct: 60 }]);
+    expect(validateProductParams(moved)).toEqual([]);
+    const physical = toIssuanceTerms({ ...rc, chain: 'robinhood-testnet', collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'ETH', haircutPct: 70 }] });
+    expect(physical).toMatchObject({ settlement: 'cash', collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'ETH', haircutPct: 70 }] });
+    expect(physical.collateralChain).toBeUndefined();
+    expect(validateProductParams(physical)).toEqual([]);
+    const ok = { ...EXAMPLE_PRODUCTS.phoenix, settlement: 'physical' as const };
+    expect(toIssuanceTerms(ok)).toBe(ok); // ETH is delivered as WETH on Arbitrum
+  });
+  it('hides stored templates that put the note on Robinhood Chain or deliver a stock', () => {
+    expect(templateOffered({ product: legacy })).toBe(false);
+    expect(templateOffered({ product: { ...rc, chain: 'robinhood-testnet' } })).toBe(false);
+    expect(templateOffered({ product: { ...rc, stockTokens: 'robinhood' } as ProductParams })).toBe(false);
+    expect(templateOffered({ product: rc })).toBe(false);
+    // A custom workflow edited from a Robinhood Chain term sheet, or moving a stock token itself.
+    const { bpmnXml, assets } = instantiateProduct(legacy);
+    expect(templateOffered({ bpmnXml, assets, basis: legacy })).toBe(false);
+    expect(templateOffered({ bpmnXml, assets })).toBe(false);
+    const arb = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
+    expect(templateOffered({ bpmnXml: arb.bpmnXml, assets: arb.assets, basis: EXAMPLE_PRODUCTS.phoenix })).toBe(true);
+    expect(templateOffered({ product: { ...legacy, chain: undefined, collateralChain: 'robinhood' } })).toBe(true);
   });
 });
 

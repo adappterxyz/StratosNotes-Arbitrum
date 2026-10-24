@@ -6,7 +6,7 @@ import { cashSymbol } from '../lib/chains';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { engineOf, useChains, PREFERRED_CHAIN } from '../lib/chains';
+import { engineOf, marketplaceNotes, useChains, PREFERRED_CHAIN } from '../lib/chains';
 import { listingOf } from '../lib/listing';
 import { useNotes, useNow } from '../lib/live';
 import { ListingRow } from '../components/Listing';
@@ -31,7 +31,8 @@ export default function Marketplace() {
   const earlier = (id: string) => !!engineOf(config, id)?.legacy;
 
   const shown = useMemo(() => {
-    const items = (notes ?? [])
+    // Notes issued on Robinhood Chain (a collateral chain only) are legacy: never listed, reachable by link.
+    const items = marketplaceNotes(notes ?? [])
       .filter(n => !openOnly || (n.view.phase === 'book' && !earlier(n.id)))
       .map(n => ({ n, l: listingOf(n.view.params, { strikeDate: n.view.strikeDate, obsDates: n.view.obsDates }, cashOf(n.chain, n.view.cashToken)) }))
       .filter(({ l }) => {

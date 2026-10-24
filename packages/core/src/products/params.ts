@@ -91,9 +91,10 @@ export interface ProductParams {
    */
   defaultRule?: DefaultRule;
   /**
-   * The chain the note is issued on (default: Arbitrum Sepolia, HOME_CHAIN). It decides which real tokens a
-   * physically settled note delivers and which the issuer can pledge (CHAIN_TOKENS): token symbols and decimals are
-   * compiled into the definition, so the chain is part of the note's design, not just a network choice.
+   * The chain the note is issued on (default and, for new issuance, the only choice: Arbitrum Sepolia, HOME_CHAIN).
+   * It decides which real tokens a physically settled note delivers and which the issuer can pledge (CHAIN_TOKENS):
+   * token symbols and decimals are compiled into the definition. 'robinhood-testnet' appears only in legacy term
+   * sheets (notes issued on Robinhood Chain before it became a collateral-only chain); validateProductParams refuses it.
    */
   chain?: NoteChain;
   /**
@@ -123,11 +124,21 @@ export const payoutMethodOf = (p: Pick<ProductParams, 'payouts'> | null | undefi
 
 export type CollateralChain = 'note' | 'robinhood';
 
-/** The chains notes are issued on: Arbitrum Sepolia (home: notes run there) and Robinhood Chain testnet (asset chain). */
+/**
+ * The chains a term sheet can name: Arbitrum Sepolia (home: every note's lifecycle runs there) and Robinhood Chain
+ * testnet (the asset chain: a collateral chain only, where TSLA, AMZN, AMD, PLTR and USDG are locked in the vault
+ * behind an Arbitrum note, collateralChain 'robinhood'). Notes issued on Robinhood Chain before 2026-10-24 are
+ * legacy: their term sheets still read and display, but nothing new is issued there (ISSUANCE_CHAINS).
+ */
 export type NoteChain = 'arbitrum-sepolia' | 'robinhood-testnet';
 export const HOME_CHAIN: NoteChain = 'arbitrum-sepolia';
 export const ASSET_CHAIN: NoteChain = 'robinhood-testnet';
+/** Every chain a stored term sheet may name (for reading old notes). */
 export const NOTE_CHAINS: readonly NoteChain[] = [HOME_CHAIN, ASSET_CHAIN];
+/** Where new notes are issued: Arbitrum Sepolia only. */
+export const ISSUANCE_CHAINS: readonly NoteChain[] = [HOME_CHAIN];
+/** A term sheet that names a chain notes are no longer issued on (a legacy Robinhood Chain note). */
+export const isLegacyChainTerms = (p: Pick<ProductParams, 'chain'> | null | undefined) => !ISSUANCE_CHAINS.includes(noteChainOf(p));
 export const NOTE_CHAIN_LABELS: Record<NoteChain, string> = { 'arbitrum-sepolia': 'Arbitrum Sepolia', 'robinhood-testnet': 'Robinhood Chain testnet' };
 /** The note's chain: its terms' `chain`, else the home chain. */
 export const noteChainOf = (p: Pick<ProductParams, 'chain'> | null | undefined): NoteChain => (p?.chain && NOTE_CHAINS.includes(p.chain) ? p.chain : HOME_CHAIN);
@@ -304,7 +315,46 @@ export const underlyingLabel = (p: ProductParams) =>
   p.underlyings.length > 1 ? `worst of ${p.underlyings.map(u => u.symbol).join(', ')}` : p.underlyings[0]?.symbol ?? '';
 const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
+/**
+ * Whether a term sheet can be issued now: its terms hold together (validateTermSheet) and it names the issuance
+ * chain, Arbitrum Sepolia. A term sheet with `chain: 'robinhood-testnet'` (a legacy Robinhood Chain note) is refused:
+ * Robinhood Chain is a collateral chain only (lock stock tokens there with collateralChain 'robinhood').
+ */
 export function validateProductParams(p: ProductParams): string[] {
+  const e: string[] = [];
+  if (p.chain !== undefined && NOTE_CHAINS.includes(p.chain) && !ISSUANCE_CHAINS.includes(p.chain)) {
+    e.push(`Notes are issued on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} only: ${NOTE_CHAIN_LABELS[p.chain]} is a collateral chain. Issue on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} and lock TSLA, AMZN, AMD, PLTR or USDG on Robinhood Chain as collateral; stock notes settle in cash.`);
+  }
+  return [...e, ...validateTermSheet(p)];
+}
+
+/**
+ * A term sheet moved to where notes are issued, for a form that opens an old one (a legacy Robinhood Chain note, a
+ * physically settled stock note): the note goes on Arbitrum Sepolia, an undeliverable underlying settles in cash,
+ * and stock collateral is locked on Robinhood Chain instead (its receipts pledged; ETH can't be locked there, so it
+ * is dropped). Terms already issuable come back unchanged (the same object).
+ */
+export function toIssuanceTerms(p: ProductParams): ProductParams {
+  const undeliverable = p.settlement === 'physical' && (p.underlyings ?? []).some(u => !deliverableToken({}, u.symbol));
+  if (!isLegacyChainTerms(p) && !undeliverable) return p;
+  const { chain: _legacy, ...rest } = p;
+  const q: ProductParams = { ...rest, ...(undeliverable ? { settlement: 'cash' as const } : {}) };
+  const col = economicsOf(p).collateral;
+  if (col.some(c => !collateralTokenOf(q, c.symbol))) {
+    const remote: ProductParams = { ...q, collateralChain: 'robinhood' };
+    const kept = col.filter(c => !!collateralTokenOf(remote, c.symbol));
+    if (kept.some(c => c.symbol !== 'USD')) return { ...remote, collateral: kept };
+    const local = col.filter(c => !!collateralTokenOf(q, c.symbol));
+    return { ...q, collateral: local.length ? local : DEFAULT_COLLATERAL };
+  }
+  return q;
+}
+
+/**
+ * Whether a term sheet's terms hold together, whatever chain it names: the check behind validateProductParams, also
+ * used to rebuild the workflow of a legacy note (a Robinhood Chain one) for display.
+ */
+export function validateTermSheet(p: ProductParams): string[] {
   const e: string[] = [];
   const use = productUses(p.productType);
   if (!PRODUCT_LABELS[p.productType]) e.push(`Unknown product type '${p.productType}'.`);
@@ -334,7 +384,7 @@ export function validateProductParams(p: ProductParams): string[] {
   }
   if (p.settlement === 'physical') {
     if (!use.knockIn) e.push('Physical delivery applies below a knock-in barrier: this payoff has none.');
-    for (const u of unds) if (!deliverableToken(p, u.symbol)) e.push(`There is no ${u.symbol} token to deliver on ${NOTE_CHAIN_LABELS[noteChainOf(p)]} (${deliverableList(p)}): settle in cash, or pick another underlying.`);
+    for (const u of unds) if (!deliverableToken(p, u.symbol)) e.push(`There is no ${u.symbol} token to deliver on ${NOTE_CHAIN_LABELS[noteChainOf(p)]} (${deliverableList(p)}): settle in cash (stock notes are cash-settled), or pick another underlying.`);
   }
   if (use.protection) {
     if (!(Number(p.protectionPct) > 0 && Number(p.protectionPct) <= 100)) e.push('Protection must be between 0 and 100% of face.');
@@ -346,8 +396,8 @@ export function validateProductParams(p: ProductParams): string[] {
   for (const c of eco.collateral) {
     if (!COLLATERAL_SYMBOLS.includes(c.symbol)) e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
     else if (!collateralTokenOf(p, c.symbol)) e.push(p.collateralChain === 'robinhood' && noteChainOf(p) === HOME_CHAIN
-      ? `${c.symbol} can't be locked on Robinhood Chain for an Arbitrum note: lock USD (USDG), TSLA or AMZN there.`
-      : `There is no ${c.symbol} token to pledge on ${NOTE_CHAIN_LABELS[noteChainOf(p)]}: pledge ${collateralChoices(p).filter(x => x.token).map(x => `${x.symbol}${x.token !== x.symbol ? ` (${x.token})` : ''}`).join(', ')}${noteChainOf(p) === HOME_CHAIN ? ', or lock TSLA or AMZN on Robinhood Chain' : ''}.`);
+      ? `${c.symbol} can't be locked on Robinhood Chain for an Arbitrum note: lock USD (USDG), TSLA, AMZN, AMD or PLTR there.`
+      : `There is no ${c.symbol} token to pledge on ${NOTE_CHAIN_LABELS[noteChainOf(p)]}: pledge ${collateralChoices(p).filter(x => x.token).map(x => `${x.symbol}${x.token !== x.symbol ? ` (${x.token})` : ''}`).join(', ')}${noteChainOf(p) === HOME_CHAIN ? ', or lock TSLA, AMZN, AMD or PLTR on Robinhood Chain (collateral held there)' : ''}.`);
     if (!(c.haircutPct >= 0 && c.haircutPct <= 100)) e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
   }
   if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');

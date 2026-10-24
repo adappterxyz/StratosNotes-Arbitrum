@@ -2,7 +2,7 @@
   "name": "stratosnotes-arbitrum",
   "private": true,
   "version": "0.1.0",
-  "description": "Structured notes as BPMN workflows on Arbitrum Sepolia and Robinhood Chain testnet, observed and paid by Chainlink CRE",
+  "description": "Structured notes as BPMN workflows on Arbitrum Sepolia (collateral vault on Robinhood Chain testnet), observed and paid by Chainlink CRE",
   "type": "module",
   "workspaces": [
     "packages/*",

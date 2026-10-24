@@ -18,6 +18,12 @@
  *                stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS) under the same
  *                policy, funding nothing: any funded account will do, since pushing is permissionless.
  *
+ * Robinhood Chain testnet (legacy notes). Every note is issued on Arbitrum Sepolia; Robinhood Chain testnet is a
+ * collateral chain only (the vault behind Arbitrum notes). The bot instance pointed at Robinhood Chain's FlowEngine v4
+ * (0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244) keeps running only to finish the notes already issued there (fund
+ * their payments, push opted-in payouts, fund deliveries) until each has matured; it never issues, and nothing new
+ * is issued there. Stop it once those notes are all redeemed or defaulted. The marketplace no longer lists them.
+ *
  * Cross-chain collateral (HomeGateway v2, docs/CROSS-CHAIN.md). Collateral stays on its own chain; Arbitrum is only
  * the anchor, so receipts never wait inside the engine: they burn and queue a release on the asset chain only when
  * they LEAVE the engine, and this bot makes them leave (RECEIPTS=0 turns both off):

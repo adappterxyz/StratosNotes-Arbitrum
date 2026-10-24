@@ -14,7 +14,7 @@ testnet on 2026-10-24. Nothing here claims users or revenue we don't have yet.
 | **Solution** | One engine on Arbitrum runs every note. Collateral stays on its own chain (CCIP). Chainlink CRE automates strike, observations, collateral checks and releases. Notes are ERC-20s. |
 | **Unfair advantage** | Founder involved in the MAS Project Guardian tokenized structured note pilot at Marketnode. Best Use of Chainlink CRE at TOKEN2049. Cross-chain collateral live on testnet today. Canton Network validators (Canton accelerator): a later path to institutions. |
 | **Channels** | Direct issuer BD; Arbitrum DeFi integrations; Robinhood Chain ecosystem; in-house notes as the showcase. |
-| **Beachhead** | Crypto-native issuers selling to crypto-native investors, notes on Robinhood's tokenized stocks and on ETH/BTC. |
+| **Beachhead** | Crypto-native issuers selling to crypto-native investors, notes on Arbitrum on Robinhood's tokenized stocks (the stock locked on Robinhood Chain as collateral) and on ETH/BTC. |
 | **Pricing** | Issuance 50 bps of notional sold. Servicing 25 bps a year on outstanding notional, per period, min USD 50 per period. In-house issuance pays no platform fee. |
 | **Key metrics** | Notional issued, notes issued, repeat issuers, subscribers per note, on-time funding rate, CRE report success. |
 | **Costs** | Audits, engineering, CRE and gas, Cloudflare, compliance. |
@@ -99,7 +99,7 @@ stablecoins. Neither needs a retail distribution licence. Notes on tokenized sto
 | In-house issuance | We issue the first notes ourselves, so the marketplace has supply on day one and a track record. |
 | Direct issuer BD | Treasuries, market makers, funds, tokenized-stock holders. First external notes issued with us. |
 | Arbitrum DeFi | Note units as ERC-20s in wallets, dashboards, lending. |
-| Robinhood Chain ecosystem | Notes on Robinhood's stock tokens; co-marketing. |
+| Robinhood Chain ecosystem | Arbitrum notes backed by Robinhood's stock tokens, locked on Robinhood Chain; co-marketing. |
 | Licensed distribution partner | Retail access once the compliance layer exists. |
 | Content | The explorer on notes.markets shows any note along any price path. |
 

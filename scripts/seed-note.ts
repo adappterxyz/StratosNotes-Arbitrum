@@ -2,11 +2,13 @@
  * Issue one short-dated demo note on a real testnet and fill part of its book, so the marketplace has something
  * live and CRE has something to run:
  *
- *   CHAIN=arbitrum-sepolia NOTE=crypto STRIKE_IN=900 OBS_EVERY=300 npx tsx scripts/seed-note.ts
- *   CHAIN=robinhood-testnet NOTE=equity npx tsx scripts/seed-note.ts
+ *   NOTE=crypto STRIKE_IN=900 OBS_EVERY=300 npx tsx scripts/seed-note.ts
+ *   NOTE=equity npx tsx scripts/seed-note.ts
  *
- * NOTE=crypto: a worst-of phoenix on ETH and BTC; NOTE=equity: on TSLA and NVDA (Chainlink feeds on Robinhood Chain
- * mainnet, market hours: outside them the observations see the last close).
+ * Every note is issued on Arbitrum Sepolia (CHAIN defaults to it; Robinhood Chain testnet is refused: it is a
+ * collateral chain only, see docs/CROSS-CHAIN.md). NOTE=crypto: a worst-of phoenix on ETH and BTC; NOTE=equity: on
+ * TSLA and NVDA, cash-settled (Chainlink feeds on Robinhood Chain mainnet, market hours: outside them the
+ * observations see the last close). CHAIN=<other key> only for a local fork named in DEPLOY_DIR.
  * Cash and collateral are Paxos's testnet USDG on both chains (notes.markets mints nothing): the deployer key
  * (.keys/deployer.json), issuer and paying agent, must already hold enough of it (faucet.paxos.com). It pledges USDG
  * collateral covering 100% of the notional into the note's escrow at Approve Terms. Two demo investors
@@ -30,9 +32,9 @@ import { engineAbi, flowEngineAbi, lensAbi } from '@sn/sdk';
 
 const RPCS: Record<string, { rpc: string; id: number }> = {
   'arbitrum-sepolia': { rpc: process.env.RPC ?? 'https://sepolia-rollup.arbitrum.io/rpc', id: 421614 },
-  'robinhood-testnet': { rpc: process.env.RPC ?? 'https://rpc.testnet.chain.robinhood.com', id: 46630 },
 };
 const chainKey = process.env.CHAIN ?? 'arbitrum-sepolia';
+if (chainKey === 'robinhood-testnet') throw new Error('Notes are issued on Arbitrum Sepolia only: Robinhood Chain testnet is a collateral chain (lock stock tokens there for an Arbitrum note).');
 const net = RPCS[chainKey];
 if (!net) throw new Error(`CHAIN: ${Object.keys(RPCS).join(' | ')}`);
 const DIR = process.env.DEPLOY_DIR ?? 'deployments';
@@ -68,7 +70,7 @@ async function send(a: typeof deployer, req: Record<string, unknown>) {
 }
 
 const product: ProductParams = process.env.NOTE === 'equity'
-  ? { ...EXAMPLE_PRODUCTS.phoenix, name: 'Demo Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], observations: 3 }
+  ? { ...EXAMPLE_PRODUCTS.phoenix, name: 'Demo Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], observations: 3, settlement: 'cash' }
   : { ...EXAMPLE_PRODUCTS.phoenix, name: 'Demo Worst-of Phoenix on ETH, BTC', underlyings: [FEEDS.ETH, FEEDS.BTC], observations: 3 };
 const prod = instantiateProduct(product);
 const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });

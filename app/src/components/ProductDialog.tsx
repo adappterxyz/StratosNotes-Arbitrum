@@ -7,9 +7,9 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
-  COLLATERAL_SYMBOLS, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS, HOME_CHAIN, MAX_COLLATERAL, MAX_GRACE_DAYS,
-  MAX_UNDERLYINGS, NOTE_CHAIN_LABELS, NOTE_CHAINS, noteChainOf, PRODUCT_LABELS, productUses, simulatePerf, STOCK_TOKEN_FAUCETS, totalPerUnit, UNPRICED_STOCKS,
-  validateProductParams, type CollateralSymbol, type DefaultRule, type NoteChain, type ProductParams, type ProductType,
+  COLLATERAL_SYMBOLS, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS,
+  MAX_UNDERLYINGS, PRODUCT_LABELS, productUses, simulatePerf, toIssuanceTerms, totalPerUnit, UNPRICED_STOCKS,
+  validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from './PayoffChart';
 
@@ -26,9 +26,7 @@ function NumField({ id, label, value, onChange, hint, step = 'any' }: { id: stri
 
 export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial<ProductParams>) => void }) {
   const use = productUses(p.productType);
-  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, chain: p.chain, collateralChain: p.collateralChain });
-  const chain = noteChainOf(p);
-  const onHome = chain === HOME_CHAIN;
+  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, collateralChain: p.collateralChain });
   /** The token a collateral chip pledges, or null when the note's chain has none. */
   const colToken = (c: CollateralSymbol) => collateralTokenOf(p, c)?.token ?? null;
   const delivered = p.underlyings.map(u => deliverableToken(p, u.symbol)?.token ?? `no ${u.symbol} token`).join('/');
@@ -37,10 +35,6 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
   const keepCol = (q: ProductParams) => {
     const kept = eco.collateral.filter(c => !!collateralTokenOf(q, c.symbol));
     return kept.length ? kept : [{ symbol: 'USD' as const, haircutPct: 100 }];
-  };
-  const setChain = (k: NoteChain) => {
-    const q: ProductParams = { ...p, chain: k === HOME_CHAIN ? undefined : k, collateralChain: k === HOME_CHAIN ? p.collateralChain : undefined };
-    set({ chain: q.chain, collateralChain: q.collateralChain, collateral: keepCol(q) });
   };
   const colSyms = eco.collateral.map(c => c.symbol);
   const toggleCol = (c: CollateralSymbol) => {
@@ -99,34 +93,28 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
             <option value="physical">Physical delivery</option>
           </select>
           <span className="hint">{p.settlement === 'physical'
-            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (${delivered}, on ${NOTE_CHAIN_LABELS[chain]}); the issuer funds the delivery before maturity.`
+            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (${delivered}, on Arbitrum); the issuer funds the delivery before maturity.`
             : 'Holders receive final ÷ strike in USDG.'}</span>
         </div>
       )}
-      <div className="field wide">
-        <label htmlFor="pd-chain">Network</label>
-        <select id="pd-chain" value={chain} onChange={e => setChain(e.target.value as NoteChain)}>
-          {NOTE_CHAINS.map(c => <option key={c} value={c}>{NOTE_CHAIN_LABELS[c]}{c === HOME_CHAIN ? '' : ' (asset chain)'}</option>)}
-        </select>
-        <span className="hint">{onHome
-          ? 'Physical delivery and collateral in WETH on Arbitrum; stocks and BTC settle in cash here.'
-          : <>Robinhood Chain's own stock tokens (TSLA, AMZN, AMD, PLTR) and WETH: from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a>.</>}</span>
+      <div className="field wide" data-issue-network>
+        <span className="lbl">Network</span>
+        <strong>Arbitrum Sepolia</strong>
+        <span className="hint">Every note is issued and paid on Arbitrum: it can deliver WETH; stocks and BTC settle in cash. Stock collateral is locked on Robinhood Chain (below).</span>
       </div>
-      {onHome && (
-        <div className="field wide">
-          <label htmlFor="pd-colchain">Collateral held on</label>
-          <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
-            const v = e.target.value as 'note' | 'robinhood';
-            set({ collateralChain: v, collateral: keepCol({ ...p, collateralChain: v }) });
-          }}>
-            <option value="note">Arbitrum: pledged into the note</option>
-            <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>
-          </select>
-          <span className="hint">{p.collateralChain === 'robinhood'
-            ? 'You lock USDG, TSLA or AMZN in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes per message). The tokens never leave Robinhood Chain; on a default holders redeem their share there.'
-            : 'USDG or WETH, pledged straight into the note.'}</span>
-        </div>
-      )}
+      <div className="field wide">
+        <label htmlFor="pd-colchain">Collateral held on</label>
+        <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
+          const v = e.target.value as 'note' | 'robinhood';
+          set({ collateralChain: v, collateral: keepCol({ ...p, collateralChain: v }) });
+        }}>
+          <option value="note">Arbitrum: pledged into the note</option>
+          <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>
+        </select>
+        <span className="hint">{p.collateralChain === 'robinhood'
+          ? 'You lock USDG, TSLA, AMZN, AMD or PLTR in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes per message). The tokens never leave Robinhood Chain; on a default holders redeem their share there.'
+          : 'USDG or WETH, pledged straight into the note.'}</span>
+      </div>
       {use.protection && <NumField id="pd-prot" label="Protection %" value={p.protectionPct} onChange={v => set({ protectionPct: v })} />}
       {use.protection && <NumField id="pd-part" label="Participation %" value={p.participationPct} onChange={v => set({ participationPct: v })} />}
       <div className="field wide">
@@ -138,7 +126,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
               {colToken(c)}
             </button>
           ))}
-          {!onHome && UNPRICED_STOCKS.map(k => <button key={k} type="button" className="chip" disabled title={`${k}: held on Robinhood Chain, no Chainlink price yet`}>{k}</button>)}
+          {p.collateralChain === 'robinhood' && UNPRICED_STOCKS.map(k => <button key={k} type="button" className="chip" disabled title={`${k}: held on Robinhood Chain, no Chainlink price yet`}>{k}</button>)}
         </div>
         <span className="hint">Locked in the note's escrow until the final payment; on a default the holders are paid from it (see the default rule). Tokens count at {eco.collateral.filter(c => c.symbol !== 'USD').map(c => `${c.haircutPct}% (${colToken(c.symbol) ?? c.symbol})`).join(', ') || 'their Chainlink price after a haircut'} of their Chainlink value.</span>
       </div>
@@ -161,8 +149,9 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
 }
 
 export default function ProductDialog({ initial, onClose, onCreate }: { initial: ProductParams | null; onClose: () => void; onCreate: (p: ProductParams) => void }) {
-  const [p, setP] = useState<ProductParams>(initial ?? EXAMPLE_PRODUCTS.phoenix);
-  useEffect(() => { if (initial) setP(initial); }, [initial]);
+  // Notes are issued on Arbitrum only: an old term sheet (on Robinhood Chain, or delivering a stock) opens moved there.
+  const [p, setP] = useState<ProductParams>(toIssuanceTerms(initial ?? EXAMPLE_PRODUCTS.phoenix));
+  useEffect(() => { if (initial) setP(toIssuanceTerms(initial)); }, [initial]);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', esc);

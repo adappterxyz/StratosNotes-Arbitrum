@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy StratosNotes to the testnets: FlowEngine (CRE MockKeystoneForwarder, fallback reporter OFF) and NotesLens.
-# Notes use real tokens only (USDG, WETH, Robinhood's stock tokens: packages/core CHAIN_TOKENS), so the retired test
+# Notes use real tokens only (USDG, WETH, Robinhood's stock tokens as collateral receipts: packages/core CHAIN_TOKENS), so the retired test
 # tokens and their TokenFaucet are no longer deployed (TEST_TOKENS=1 brings them back, e.g. for a rehearsal that seeds
 # with CASH=tUSD; rehearsals default to it). Writes deployments/<chain>.json, then the CRE staging config and the
 # server configs (scripts/server-config.ts).
@@ -8,7 +8,10 @@
 #   bash scripts/deploy-testnets.sh                          # both chains
 #   CHAINS=robinhood-testnet bash scripts/deploy-testnets.sh # one chain
 #   REHEARSAL=1 bash scripts/deploy-testnets.sh              # against local anvil forks; writes deployments/local/rehearsal/
-#   REHEARSAL=1 SEED=1 bash scripts/deploy-testnets.sh       # ... and issue a demo note per chain on them
+#   REHEARSAL=1 SEED=1 bash scripts/deploy-testnets.sh       # ... and issue the demo notes on the Arbitrum fork
+#
+# Robinhood Chain testnet is deployed to as the collateral chain (its engine serves the legacy notes issued there
+# before 2026-10-24); new notes are issued on Arbitrum Sepolia only.
 #   KEEP_TOKENS=deployments/archive/v3 bash scripts/deploy-testnets.sh  # new engine; keep the old tUSD for its notes
 #
 # The deployer key is read from .keys/deployer.json (never printed) and is OWNER of the engine, tokens and faucet.
@@ -67,11 +70,15 @@ for c in $CHAINS; do
   echo "   $(python3 -c "import json;d=json.load(open('$OUTDIR/$c.json'));print('engine',d['engine'],'lens',d['lens'],'faucet',d['faucet'])")"
 done
 
-# Rehearsal only: also issue a demo note per chain on the forks (scripts/seed-note.ts), as scripts/seed.sh would.
+# Rehearsal only: also issue the demo notes on the Arbitrum fork (scripts/seed-note.ts), as scripts/seed.sh would.
+# Notes are issued on Arbitrum only: Robinhood Chain is a collateral chain and gets none.
 if [ "${REHEARSAL:-0}" = "1" ] && [ "${SEED:-0}" = "1" ]; then
   for c in $CHAINS; do
-    echo "== seed: $c"
-    CHAIN="$c" RPC="${RPC[$c]}" DEPLOY_DIR="$OUTDIR" CASH="${CASH:-tUSD}" NOTE="$([ "$c" = robinhood-testnet ] && echo equity || echo crypto)" npx tsx scripts/seed-note.ts
+    [ "$c" = robinhood-testnet ] && continue
+    for n in crypto equity; do
+      echo "== seed: $c ($n)"
+      CHAIN="$c" RPC="${RPC[$c]}" DEPLOY_DIR="$OUTDIR" CASH="${CASH:-tUSD}" NOTE="$n" npx tsx scripts/seed-note.ts
+    done
   done
 fi
 

@@ -16,7 +16,7 @@ export const BEAT_COPY: ReadonlyArray<{ k: string; t: string; n?: string }> = [
   { k: 'Fix and observe', t: 'Chainlink fixes the strike, then prices every observation date.' },
   { k: 'Pay', t: 'Coupons paid in USDG on the payment date, ready to claim.' },
   { k: 'Held to maturity', t: 'Every coupon, then full principal back in USDG.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
-  { k: 'Barrier breached', t: 'Below the knock-in, holders receive the stock: TSLA tokens on Robinhood Chain.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders.' },
+  { k: 'Barrier breached', t: 'Below the knock-in, holders are repaid final ÷ strike in USDG: the loss follows TSLA.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders; TSLA locked on Robinhood Chain is released to them there.' },
 ];
 
 function prefersReducedMotion() {

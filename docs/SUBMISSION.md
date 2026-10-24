@@ -27,13 +27,14 @@ Arbitrum Sepolia**, with collateral vaults on **Robinhood Chain testnet**.
 
 | Track | Why we fit |
 |---|---|
-| **Robinhood Chain Founder-in-Residence** | Notes on tokenized stocks need the stocks and their prices on one chain; Robinhood Chain has both. We're building a company on it: plan in [MILESTONES.md](MILESTONES.md), go-to-market in [GTM-CANVAS.md](GTM-CANVAS.md). |
-| **Robinhood Chain Innovation Award** | Deployed on Robinhood Chain testnet; a TSLA/NVDA note ran start to finish there, with every price and payment by Chainlink CRE. |
-| **General track** (Robinhood Chain slot) | Deployed on Robinhood Chain testnet and Arbitrum Sepolia. |
-| **Arbitrum Foundation grants** | Milestones tied to an audit, stock notes on Robinhood Chain, the first issuers and a compliance layer; mainnet once Chainlink CRE production access and the audit are in place. |
+| **Robinhood Chain Founder-in-Residence** | Robinhood Chain holds the tokenized stocks and their Chainlink prices; we make them work as collateral without moving them. We're building a company on it: plan in [MILESTONES.md](MILESTONES.md), go-to-market in [GTM-CANVAS.md](GTM-CANVAS.md). |
+| **Robinhood Chain Innovation Award** | Robinhood's TSLA locked in our vault on Robinhood Chain testnet backed an Arbitrum note start to finish: credited over Chainlink CCIP, strike from Robinhood Chain's Chainlink TSLA feed, redeemed, and the TSLA released home automatically ([CROSS-CHAIN.md](CROSS-CHAIN.md), "Live v2 proof"). |
+| **General track** (Robinhood Chain slot) | Notes on Arbitrum Sepolia; collateral vault (RemoteVault) on Robinhood Chain testnet. |
+| **Arbitrum Foundation grants** | Milestones tied to an audit, stock-collateralised notes on Arbitrum (stocks locked on Robinhood Chain), the first issuers and a compliance layer; mainnet once Chainlink CRE production access and the audit are in place. |
 
-**Eligibility:** deployed on Robinhood Chain testnet (chain 46630) and Arbitrum Sepolia (chain 421614); addresses
-below. We stay on testnets for now: Chainlink runs through the CRE simulator, and mainnet waits on production CRE
+**Eligibility:** notes on Arbitrum Sepolia (chain 421614), FlowEngine v4 `0x7d36Da43724b09Bb03ED98a4574685070073020b`;
+collateral vault on Robinhood Chain testnet (chain 46630), RemoteVault `0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2`
+(gateway v2 `0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89` on Arbitrum); addresses below. We stay on testnets for now: Chainlink runs through the CRE simulator, and mainnet waits on production CRE
 access and an audit.
 
 ## How we meet the criteria
@@ -41,7 +42,7 @@ access and an audit.
 | Criterion | Where to look |
 |---|---|
 | **Smart contract quality** | `packages/evm-engine`: one engine (`FlowEngine.sol`, v4) runs every note from a content-addressed definition. Note units are ERC-20s (`NoteToken`, verified-only transfers). Payouts through one accumulator: claim by default with a hash receipt per claim, push opt-in; a coupon report costs about 393k gas for 10 or 1,000 holders. Cross-chain collateral (`HomeGateway`, `RemoteVault`, `RemoteReceipt`) over Chainlink CCIP. Custom errors, `ReentrancyGuard`, `SafeERC20`, `Ownable2Step`, `Pausable`. Reports accepted only from the forwarder, every oracle value bounds-checked. 344 automated tests (252 unit, 92 contract), every product timeline checked against the reference payoff. Not audited yet (milestone 1). |
-| **Product-market fit** | Two sides with a clear job each (see the canvas): issuers raise funding against collateral; investors get defined outcomes on stocks and crypto. Beachhead: crypto-native issuers and investors, then retail on Robinhood Chain through a licensed partner. |
+| **Product-market fit** | Two sides with a clear job each (see the canvas): issuers raise funding against collateral; investors get defined outcomes on stocks and crypto. Beachhead: crypto-native issuers and investors, then Robinhood Chain's stock holders (raising against their stock without selling) through a licensed partner. |
 | **Innovation and creativity** | Notes as BPMN workflows compiled to one on-chain engine; collateral that stays on its own chain (Robinhood's TSLA locked on Robinhood Chain backs a note on Arbitrum, released home automatically); Chainlink CRE as calculation agent and automation; payments enforced by escrow, funding deadlines, grace and default; a verified email bound on-chain as a salted hash. |
 | **Real problem solving** | Bank-only issuance, a calculation agent you have to trust, and notes locked to one venue. |
 | **Pitch quality** | [PITCH.md](PITCH.md) (1:50 pitch video, each beat tagged with its criterion), [DEMO-SCRIPT.md](DEMO-SCRIPT.md) (1:50 demo video). |
@@ -56,13 +57,13 @@ products are mostly vaults with rolling strategies, with no fixed term sheet or 
 
 ## What it does
 
-1. **Design** (Issue workspace): a template (eight seeded, two of them on stocks), a term sheet (fixed coupon note,
-   reverse convertible, phoenix with memory, snowball, principal-protected; one underlying or a worst-of basket; cash
-   or physical settlement), a sentence to the AI, or a blank BPMN canvas. Every edit passes the validator and
+1. **Design** (Issue workspace): a template (ten seeded, four of them on stocks, all issued on Arbitrum), a term sheet
+   (fixed coupon note, reverse convertible, phoenix with memory, snowball, principal-protected; one underlying or a
+   worst-of basket; cash settlement, or physical delivery of WETH), a sentence to the AI, or a blank BPMN canvas. Every edit passes the validator and
    compiler.
 2. **Issue**: this issuance's size, dates, settlement lag and grace period (0-7 days), the collateral ratio and
-   haircuts, and the collateral itself: stablecoin, or tokens valued by Chainlink (ETH, BTC, SOL, TSLA, NVDA, AAPL,
-   SPY) after a haircut, locked in the note's escrow. The book opens on the marketplace.
+   haircuts, and the collateral itself: USDG or WETH locked in the note's escrow on Arbitrum, or USDG, TSLA, AMZN,
+   AMD or PLTR locked on Robinhood Chain (their receipts pledged), valued by Chainlink after a haircut. The book opens on the marketplace.
 3. **Sell**: anyone swaps stablecoins for units in one transaction until the strike date; the stablecoin is the
    issuer's at once (the funds the note raises). Holders transfer units.
 4. **Observe, fund and pay**: CRE fixes the strike and observes every date, pricing the collateral too (margin call
@@ -82,7 +83,7 @@ and AI drafts can't create an unfunded payment. Worked example: [NOTE-ECONOMICS.
 ```
 template / term sheet / AI / canvas -> BPMN -> compiler -> definition (bytes, content-addressed)
                                                                   |
-                FlowEngine on Robinhood Chain testnet and Arbitrum Sepolia (one contract, every note)
+                FlowEngine on Arbitrum Sepolia (one contract, every note); RemoteVault on Robinhood Chain (collateral)
    issuer: pledge, fund, top up -> escrow (engine-held) -> pay holders | default: escrow to holders | release
    verified email -> salted-hash attestation (EIP-712, verifier) -> required to issue, subscribe, receive units
                                    ^ onReport via KeystoneForwarder
@@ -94,7 +95,10 @@ notes.markets = one Cloudflare Worker: landing, app, AI, email (Cloudflare Email
 
 ## Evidence
 
-**Live contracts (v3: collateral, funding calls, email requirement on, security fixes from [SECURITY.md](SECURITY.md))**
+**Earlier contracts (v3: collateral, funding calls, email requirement on, security fixes from [SECURITY.md](SECURITY.md)).**
+Notes are now issued on Arbitrum Sepolia only (FlowEngine v4 `0x7d36Da43724b09Bb03ED98a4574685070073020b`). The
+engines on Robinhood Chain testnet (v3 below, and v4 `0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244`) are legacy: the
+notes issued on them run to maturity there and are no longer listed; nothing new is issued there.
 
 | Network | FlowEngine | NotesLens | TokenFaucet | Forwarder |
 |---|---|---|---|---|
@@ -117,13 +121,15 @@ temporary demo issuer.
 Earlier engines are archived in `deployments/archive/` (v1: the two completed CRE runs below; v2: before the
 security fixes).
 
-Email verifier (both chains): `0xBbAb30Cf49862BAfEb37a405D08949E81045093f`. One open demo note per chain (TSLA/NVDA on
-Robinhood, ETH/BTC on Arbitrum Sepolia; strike 26 Oct 2026).
+Email verifier (both chains): `0xBbAb30Cf49862BAfEb37a405D08949E81045093f`. Demo notes are seeded on Arbitrum Sepolia
+only (ETH/BTC and TSLA/NVDA, cash-settled).
 
 **Two notes run start to finish on the live testnets, every price and payment by Chainlink CRE** (v1 engines, before
-the email requirement; records in `deployments/archive/`):
+the email requirement and before notes became Arbitrum-only; records in `deployments/archive/`). The first ran on
+an early, now-retired engine on Robinhood Chain testnet; today the same TSLA exposure is an Arbitrum note with TSLA
+locked on Robinhood Chain as collateral ([CROSS-CHAIN.md](CROSS-CHAIN.md), "Live v2 proof"):
 
-**Demo Worst-of Phoenix on TSLA, NVDA on Robinhood Chain testnet: autocalled at observation 2, 1.050 per unit** (engine v1 `0x4532fca7aa4dd54fc981d62836d3852ce7bdb7b2`, pid 1)
+**Demo Worst-of Phoenix on TSLA, NVDA on Robinhood Chain testnet (legacy v1 engine, retired): autocalled at observation 2, 1.050 per unit** (engine v1 `0x4532fca7aa4dd54fc981d62836d3852ce7bdb7b2`, pid 1)
 
 | Step | Detail | Transaction | Gas |
 |---|---|---|---|
@@ -167,7 +173,7 @@ MockKeystoneForwarders; `scripts/e2e-cre-evm.sh`):
 |---|---|---|
 | Worst-of phoenix on ETH, BTC, CRE simulator | strike ETH 2,406.36 / BTC 81,852.64 (206k gas), observations (366k, 388k gas) | 630 and 420 for 600 and 400 units = 1.05 per unit: match |
 | Worst-of phoenix on TSLA, NVDA, CRE simulator, prices from Arbitrum One | strike TSLA 374.93 / NVDA 212.54 (206k gas), observations (366k, 388k gas) | 630 and 420: match |
-| Same ETH/BTC note on a Robinhood Chain testnet fork, fallback keeper | strike (160k gas), observations (320k, 342k gas), reported by the fallback reporter | 630 and 420: match |
+| Same ETH/BTC note on a Robinhood Chain testnet fork, fallback keeper (engine rehearsal; notes are now issued on Arbitrum only) | strike (160k gas), observations (320k, 342k gas), reported by the fallback reporter | 630 and 420: match |
 
 **Issuer behaviour, on the engine** (`forge test`; each timeline replayed and every holder's cash, delivered
 tokens and collateral checked against the reference `simulateNote`):
@@ -198,11 +204,13 @@ verify email and attest on-chain, then issue, subscribe, fund and get paid throu
 - **CRE in the simulator.** CRE runs in Chainlink's simulator with `--broadcast`, writing real testnet transactions
   through the MockKeystoneForwarder, until we have DON deploy access. On public testnet RPCs the keeper reads note
   state at the latest block; the engine re-checks every step on-chain.
-- **No CRE on Robinhood mainnet** yet; a fallback keeper (off by default, labelled on every report) covers it until
-  CRE supports it.
+- **No CRE on Robinhood mainnet** yet; it matters only for the collateral leg there (CRE reads Robinhood Chain's
+  feeds and checks the vault); a fallback keeper (off by default, labelled on every report) exists for chains CRE
+  doesn't reach.
 - **Testnet assets.** Only real tokens: cash is Paxos testnet USDG; ETH collateral and delivery is each chain's
-  canonical WETH; on Robinhood Chain its own TSLA, AMZN, AMD and PLTR are collateral and delivery tokens (NFLX is held
-  only: no feed). BTC is synthetic (priced, cash-settled). Our own test tokens and faucet are retired.
+  canonical WETH (the only physically deliverable underlying on Arbitrum); Robinhood's TSLA, AMZN, AMD and PLTR are
+  collateral locked on Robinhood Chain (NFLX is held only: no feed); stock notes settle in cash. BTC is synthetic
+  (priced, cash-settled). Our own test tokens and faucet are retired.
 - **Equity feeds** follow NYSE hours with a 24 h heartbeat; notes accept a 4-day-old round so weekends don't block
   them.
 - **Margin** is checked at each observation, not continuously.
@@ -216,8 +224,8 @@ verify email and attest on-chain, then issue, subscribe, fund and get paid throu
 
 [MILESTONES.md](MILESTONES.md):
 1. Audit and hardening on testnet.
-2. Stock notes on Robinhood Chain testnet with its own stock tokens.
+2. Stock-collateralised notes on Arbitrum at scale: Robinhood's stock tokens locked on Robinhood Chain.
 3. First issuers.
 4. Compliance layer and distribution partners.
 
-Mainnet (Arbitrum One, Robinhood Chain) comes after, once Chainlink CRE production access and the audit are in place.
+Mainnet (notes on Arbitrum One, collateral vault on Robinhood Chain) comes after, once Chainlink CRE production access and the audit are in place.

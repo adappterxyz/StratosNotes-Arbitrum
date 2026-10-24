@@ -12,7 +12,7 @@ import { useVerifiedEmail } from '../components/VerifiedEmail';
 import PayoffChart from '../components/PayoffChart';
 import { Addr, Steps, When, type StepState } from '../components/ui';
 import { plainTerms } from '../lib/plain';
-import { useAddress, useChains, useSigner, cashSymbol, entryFor } from '../lib/chains';
+import { useAddress, useChains, useSigner, cashSymbol, entryFor, onRobinhoodChain, ROBINHOOD_LEGACY_LABEL } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
 import { CurrentState } from '../components/NoteState';
@@ -55,6 +55,8 @@ export default function OfferingPage() {
   // The engine that runs this note: the chain's current one, or an earlier one (v3) its notes stay on.
   const chain = entryFor(byKey, s);
   const legacy = !!chain?.legacy;
+  // Issued on Robinhood Chain, a collateral chain only: it runs to maturity there, takes no new subscriptions.
+  const rhLegacy = onRobinhoodChain(s);
   const adapter = () => { if (!chain) throw new Error('This app does not serve the engine this note runs on.'); return chain.adapter; };
   const sym = cashSymbol(chain?.cfg, s.assetTokens?.[1]);
   const explorer = chain?.cfg.explorer;
@@ -69,7 +71,7 @@ export default function OfferingPage() {
   const units = unitsIn ?? String(Math.max(0, Math.min(100, Math.floor(remaining))));
   const cost = (Number(units) || 0) * o.params.issuePricePct / 100;
   // Notes on an earlier engine take no new subscriptions (their holders still withdraw and settle there).
-  const subscribable = !!def && !!chain && !legacy && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
+  const subscribable = !!def && !!chain && !legacy && !rhLegacy && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
   const run = async (what: string, f: () => Promise<{ tx: string[] }>) => {
     setBusy(true); setMsg(null);
     try { const r = await f(); setMsg({ kind: 'ok', text: what, tx: r.tx[r.tx.length - 1] }); refresh(); setClaimTick(t => t + 1); }
@@ -143,7 +145,7 @@ export default function OfferingPage() {
       <div className="page-head">
         <div className="stack" style={{ gap: 6 }}>
           <span className="label row" style={{ gap: 8 }}><AssetStack syms={o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol)} size={18} label={false} />{listingOf(o.params, {}, sym).assets} · {chain?.cfg.name ?? s.chain}</span>
-          <div className="row"><h1>{o.name}</h1><span className={`pill ${o.phase}`} data-phase={o.phase}><span className="dot" />{PHASE_LABEL[o.phase]}</span>{legacy && <span className="pill plain" data-earlier-engine title={`Issued on an earlier engine (v${chain?.version}). Your units are in that engine's ledger, not an ERC-20.`}>Earlier engine</span>}</div>
+          <div className="row"><h1>{o.name}</h1><span className={`pill ${o.phase}`} data-phase={o.phase}><span className="dot" />{PHASE_LABEL[o.phase]}</span>{legacy && <span className="pill plain" data-earlier-engine title={`Issued on an earlier engine (v${chain?.version}). Your units are in that engine's ledger, not an ERC-20.`}>Earlier engine</span>}{rhLegacy && <span className="pill plain" data-robinhood-legacy title="Notes are now issued on Arbitrum only; Robinhood Chain holds collateral.">{ROBINHOOD_LEGACY_LABEL}</span>}</div>
         </div>
         <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
           <span className="pill plain" title="This page updates when the indexer sees anything happen to the note: a report, a subscription, a transfer.">
@@ -163,6 +165,11 @@ export default function OfferingPage() {
 
       <CurrentState o={o} now={now} sym={sym} units={mine && mine.units > 0 ? mine.units : null} />
 
+      {rhLegacy && (
+        <div className="notice info" role="note" data-robinhood-legacy-note>
+          {ROBINHOOD_LEGACY_LABEL}. Notes are now issued on Arbitrum only, with Robinhood Chain as a collateral chain (stock tokens locked in its vault). This one keeps running to maturity on Robinhood Chain: holders claim coupons, the redemption and anything delivered from this page or the portfolio. It is not listed and takes no new subscriptions.
+        </div>
+      )}
       {legacy && (
         <div className="notice info" role="note" data-earlier-engine-note>
           This note runs on an earlier version of the engine (v{chain?.version}). It keeps running to maturity there: holders withdraw coupons, the redemption and anything delivered from this page or the portfolio. It takes no new subscriptions; new notes are issued on the current engine.

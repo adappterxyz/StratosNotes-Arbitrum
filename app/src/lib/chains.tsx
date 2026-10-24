@@ -17,12 +17,13 @@ import { CASH_TOKEN, CASH_TOKENS, EXTERNAL_TOKENS, TEST_CASH_TOKEN } from '@sn/c
 import type { AppConfig, ChainConfig } from './api';
 import { entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
 
-export { engineOf, entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
+export { COLLATERAL_CHAIN, engineOf, entryFor, issueChains, legacyConfig, marketplaceNotes, onRobinhoodChain, ROBINHOOD_LEGACY_LABEL, type ByKey, type EngineEntry } from './engines';
 import '@rainbow-me/rainbowkit/styles.css';
 
 /**
- * The network the app leads with: Arbitrum (Sepolia), where a note's lifecycle runs. Robinhood Chain is the asset
- * chain, where the stock tokens live (STOCK_CHAIN); its notes stay selectable until the cross-chain vaults exist.
+ * The network the app leads with and issues on: Arbitrum (Sepolia), where every note's lifecycle runs. Robinhood
+ * Chain is the asset chain, where the stock tokens live (STOCK_CHAIN): a collateral chain only (the vault behind
+ * Arbitrum notes). Notes issued there earlier are legacy (onRobinhoodChain): reachable, never listed or issued.
  */
 export const PREFERRED_CHAIN = 'arbitrum-sepolia';
 export const STOCK_CHAIN = 'robinhood-testnet';

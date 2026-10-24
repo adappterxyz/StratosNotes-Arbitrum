@@ -158,7 +158,7 @@ export function Shelf() {
             </div>
           ))}
         </div>
-        <p className="underlyings" data-reveal><span className="built-label">Underlyings</span>BTC · ETH · SOL (Chainlink on Ethereum) · US stocks TSLA, AMZN, AMD, PLTR, NVDA, AAPL, SPY, META, MSFT, GOOGL and COIN (Chainlink on Robinhood Chain) · Robinhood Chain's own TSLA, AMZN, AMD and PLTR tokens for delivery and collateral</p>
+        <p className="underlyings" data-reveal><span className="built-label">Underlyings</span>BTC · ETH · SOL (Chainlink on Ethereum) · US stocks TSLA, AMZN, AMD, PLTR, NVDA, AAPL, SPY, META, MSFT, GOOGL and COIN (Chainlink on Robinhood Chain) · Robinhood Chain's own TSLA, AMZN, AMD and PLTR tokens as collateral, locked there (stock notes settle in cash; WETH is delivered on Arbitrum)</p>
       </div>
     </section>
   );

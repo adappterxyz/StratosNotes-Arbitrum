@@ -9,14 +9,14 @@ import { signMessage } from 'wagmi/actions';
 import { AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import WrapEth from './WrapEth';
 import {
-  CASH_FAUCET, CHAIN_TOKENS, collateralTokenOf, dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, noteChainOf, NOTE_CHAIN_LABELS, PRODUCT_LABELS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
+  CASH_FAUCET, CHAIN_TOKENS, collateralTokenOf, dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, isLegacyChainTerms, PRODUCT_LABELS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
   templateMessage, totalPerUnit, underlyingLabel,
   type CollateralSymbol, type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
 import { FIELD_LABEL, fieldLabel, headline, noteTokenMeta, obsIndex, planIssuance, type InputValue } from '@sn/sdk';
 import PayoffChart from './PayoffChart';
 import { api } from '../lib/api';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { issueChains, PREFERRED_CHAIN, useAddress, useChains, useSigner } from '../lib/chains';
 import { Steps } from './ui';
 import { useVerifiedEmail } from './VerifiedEmail';
 import { LockOnRobinhood } from './CrossChainCollateral';
@@ -248,11 +248,11 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
   const { config, byKey } = useChains();
   const signer = useSigner();
   const plan = useMemo(() => { try { return built ? planIssuance(built.ir, built.c) : null; } catch (e) { return e instanceof Error ? e.message : String(e); } }, [built]);
-  const [pickedChain, setChainKey] = useState(preset?.chainKey ?? config.chains[0]?.key ?? '');
-  // A product's terms name its network (the real tokens it delivers and takes come from there): issue it there.
-  const basisChain = doc.basis ? noteChainOf(doc.basis) : null;
-  const locked = !!basisChain && config.chains.some(c => c.key === basisChain);
-  const chainKey = locked ? basisChain! : pickedChain;
+  // Every note is issued on Arbitrum (the deployment's issuance chain); Robinhood Chain holds collateral only. A term
+  // sheet that still names Robinhood Chain (a legacy note) can't be issued.
+  const issuable = issueChains(config);
+  const chainKey = issuable.find(c => c.key === PREFERRED_CHAIN)?.key ?? issuable.find(c => c.key === preset?.chainKey)?.key ?? issuable[0]?.key ?? '';
+  const legacyTerms = !!doc.basis && isLegacyChainTerms(doc.basis);
   const emailGate = useVerifiedEmail(); // a verified email before issuing
   const [values, setValues] = useState<Record<string, string>>({});
   const [size, setSize] = useState(preset?.size ?? doc.hint?.size ?? 10_000);
@@ -273,6 +273,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
   const tokOf = (c: string) => collateralTokenOf(doc.basis ?? {}, c as CollateralSymbol)?.token ?? (c === 'USD' ? (chain?.cfg.stablecoin.symbol ?? 'USDG') : c);
 
   if (!built) return <><Head title="Issue" /><div className="section"><p className="small muted">Fix the errors in Validate first.</p></div></>;
+  if (legacyTerms) return <><Head title="Issue" /><div className="section"><div className="notice err" data-robinhood-terms>These terms put the note on Robinhood Chain. Notes are issued on Arbitrum only; Robinhood Chain is where stock collateral is locked. Edit the terms (the note moves to Arbitrum, stock settles in cash) and issue there.</div></div></>;
   if (typeof plan === 'string' || !plan) return <><Head title="Issue" /><div className="section"><div className="notice err">{plan}</div></div></>;
 
   const all = [plan.start, ...plan.steps];
@@ -324,7 +325,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
     const step = (s: string) => setProgress(x => [...x, s]);
     try {
       if (hasSchedule && strikeAt < Date.now() / 1000 + 60) throw new Error('The strike date must be at least a minute away.');
-      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.${unsupported.some(t => !!CHAIN_TOKENS['robinhood-testnet'][t]) ? ' This note uses Robinhood Chain\'s own tokens: set its network to Robinhood Chain testnet.' : ''}`);
+      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.${unsupported.some(t => !!CHAIN_TOKENS['robinhood-testnet'][t]) ? ' Robinhood Chain\'s stock tokens stay on Robinhood Chain: settle in cash, and lock stock collateral there (its .rh receipt is pledged on Arbitrum).' : ''}`);
       if (timingBad) throw new Error(timingBad);
       const value = (f: { name: string; kind: number }): InputValue => {
         const raw = valueOf(f.name).trim();
@@ -362,13 +363,11 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
       {!compact && <Head title="Issue this note" sub="Four steps. Publishing opens the book: investors subscribe until the strike date and their USDG is yours. Chainlink CRE then checks prices on each date, and you fund each payment before it falls due." />}
       <div className="section">
         {!compact && <div className="step-h"><span className="n">1</span><h3>Network and size</h3></div>}
-        {config.chains.length > 1 && !compact && (
-          <div className="field">
-            <label htmlFor="is-chain">Network</label>
-            <select id="is-chain" value={chainKey} disabled={locked} onChange={e => setChainKey(e.target.value)}>
-              {config.chains.map(c => <option key={c.key} value={c.key}>{c.name}{c.key === 'robinhood-testnet' ? ' (asset chain: stock tokens)' : ''}{c.cre ? '' : ' (fallback keeper)'}</option>)}
-            </select>
-            {locked && <span className="hint">Set by the term sheet ({NOTE_CHAIN_LABELS[basisChain!]}): the tokens it delivers and takes live there.</span>}
+        {!compact && (
+          <div className="field" data-issue-network>
+            <span className="lbl">Network</span>
+            <strong>{byKey[chainKey]?.cfg.name ?? chainKey}{byKey[chainKey]?.cfg.cre === false ? ' (fallback keeper)' : ''}</strong>
+            <span className="hint">Every note is issued and paid on Arbitrum. Robinhood Chain holds collateral only (stock tokens locked in its vault).</span>
           </div>
         )}
         <div className="form-grid" hidden={compact}>
@@ -420,7 +419,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
             })}
           </div>
           {remote && <LockOnRobinhood needed={collateralSyms.map(c => ({ receipt: tokOf(c), amount: Number(pledgeOf(c)) || 0 }))} />}
-          {remote && chain?.cfg.crossChain?.role !== 'home' && <p className="xs err">Collateral locked on Robinhood Chain backs notes on Arbitrum Sepolia: pick that network above.</p>}
+          {remote && chain?.cfg.crossChain?.role !== 'home' && <p className="xs err">Collateral locked on Robinhood Chain needs this deployment's Arbitrum cross-chain gateway, which it does not configure.</p>}
           {collateralSyms.every(c => c === 'USD') && <p className={`xs ${usdCoverage + 1e-9 >= required ? 'muted' : 'err'}`}>Coverage at the strike: {fmtMoney(usdCoverage)} {sym} of {fmtMoney(required)} required{usdCoverage + 1e-9 >= required ? '.' : ': top it up, or the note goes into a margin call at the strike.'}</p>}
         </div>
       )}

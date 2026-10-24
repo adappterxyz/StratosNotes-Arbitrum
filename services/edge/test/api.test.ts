@@ -50,7 +50,7 @@ let ing: D1Ingestor;
 const config = ApiConfig.parse({
   allowedOrigins: [ORIGIN],
   chains: [{ key: 'local', rpc: 'http://127.0.0.1:1', engine: ENGINE, lens: ENGINE, stablecoin: { symbol: 'USDC', address: '0x00000000000000000000000000000000000000c1', decimals: 6 } }],
-  limits: { templatesPerHour: 4 },
+  limits: { templatesPerHour: 5 },
 });
 let app: ReturnType<typeof createEdgeApp>;
 const get = (path: string, headers: Record<string, string> = {}) => app.request(path, { headers });
@@ -145,6 +145,16 @@ describe('templates', () => {
     expect((await (await get(`/api/templates/${definition}`)).json()).product.productType).toBe('snowball');
   });
 
+  it('refuses a note on Robinhood Chain: notes are issued on Arbitrum only', async () => {
+    const rh = { ...product, chain: 'robinhood-testnet' as const };
+    const def = definitionId(compileTemplate({ product: rh }));
+    const signature = await author.signMessage({ message: templateMessage(def) });
+    const r = await post('/api/templates', { entry: { ...entry, definition: def, product: rh }, signature });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/issued on Arbitrum Sepolia only/);
+    expect((await (await get('/api/templates')).json()).map((t: { definition: string }) => t.definition)).not.toContain(def);
+  });
+
   it('refuses a wrong signature, a mismatched workflow, a foreign origin, and too many saves (D1 counter)', async () => {
     const other = privateKeyToAccount(generatePrivateKey());
     const bad = await other.signMessage({ message: templateMessage(definition) });
@@ -153,7 +163,7 @@ describe('templates', () => {
     const sig = await author.signMessage({ message: templateMessage(wrong) });
     expect((await post('/api/templates', { entry: { ...entry, definition: wrong }, signature: sig })).status).toBe(400);
     expect((await post('/api/templates', { entry, signature: sig }, 'https://evil.example')).status).toBe(403);
-    expect((await post('/api/templates', { entry, signature: sig })).status).toBe(429); // 4 per hour in this config
+    expect((await post('/api/templates', { entry, signature: sig })).status).toBe(429); // 5 per hour in this config
   });
 });
 

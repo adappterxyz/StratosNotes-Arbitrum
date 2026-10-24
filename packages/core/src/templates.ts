@@ -9,7 +9,7 @@
 import { parseBpmn } from './bpmn';
 import { compile, type Compiled } from './compile';
 import { instantiateProduct } from './products/instantiate';
-import { isRetiredTestToken, normalizeParams, PRODUCT_LABELS, underlyingLabel, validateProductParams, type ProductParams } from './products/params';
+import { CHAIN_TOKENS, deliverableToken, isLegacyChainTerms, isRetiredTestToken, normalizeParams, PRODUCT_LABELS, underlyingLabel, validateProductParams, type ProductParams } from './products/params';
 import type { AssetDefinition } from './types';
 
 export interface TemplateSource {
@@ -52,12 +52,22 @@ export const templateMessage = (definition: string) => `StratosNotes: publish te
 
 /**
  * Whether the library still offers a saved template: not when its workflow names one of notes.markets' retired test
- * tokens (tETH, tAAPL…), nor when its term sheet no longer validates (e.g. physical delivery of a stock with no real
- * token on any chain).
+ * tokens (tETH, tAAPL…), nor when its term sheet can't be issued now: it names Robinhood Chain as the note's chain
+ * (notes are issued on Arbitrum only; Robinhood Chain holds collateral), delivers a stock physically (no stock token
+ * exists on Arbitrum: stock notes are cash-settled), or otherwise no longer validates. A custom workflow is judged by
+ * the term sheet it was edited from.
  */
 export function templateOffered(t: TemplateSource): boolean {
   if (t.assets?.some(a => !!a.token && isRetiredTestToken(a.token))) return false;
+  // A workflow that moves a Robinhood Chain stock token itself (not its .rh receipt) runs on Robinhood Chain.
+  if (t.assets?.some(a => !!a.token && !!CHAIN_TOKENS['robinhood-testnet'][a.token] && !CHAIN_TOKENS['arbitrum-sepolia'][a.token])) return false;
   const p = t.product ?? t.basis;
+  if (p) {
+    let q: ProductParams;
+    try { q = normalizeParams(p); } catch { return false; }
+    if (isLegacyChainTerms(q)) return false;
+    if (q.settlement === 'physical' && (q.underlyings ?? []).some(u => !deliverableToken(q, u.symbol))) return false;
+  }
   if (p && t.product && !t.bpmnXml) {
     try { return validateProductParams(normalizeParams(p)).length === 0; } catch { return false; }
   }

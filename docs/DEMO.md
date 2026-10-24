@@ -29,8 +29,8 @@ a second is issued live.
 "Banks sell these with a calculation agent and a paying agent. Here the contract is the note and Chainlink CRE is
 the agent."
 
-**0:30 Why Arbitrum (20 s).** "Robinhood Chain, built on Arbitrum, has the stocks; Chainlink prices them on Arbitrum
-One. So notes on Tesla or NVIDIA belong here."
+**0:30 Why Arbitrum (20 s).** "Every note lives on Arbitrum. Robinhood Chain, built on Arbitrum, has the stocks and
+their Chainlink prices; the stocks stay locked there as collateral. So notes on Tesla or NVIDIA belong here."
 
 **0:50 Marketplace and subscribe (50 s).** Tab 2, then tab 3: underlyings and feeds, the schedule, the collateral
 panel (ratio, coverage, the payment schedule), the workflow with its current step lit. Subscribe 100 units and
@@ -40,7 +40,7 @@ issuer's collateral sits in escrow, and it must fund every payment before its da
 **1:40 Issue (60 s).** Tab 4: open **12M Worst-of Phoenix on TSLA, NVDA** under Published templates: the BPMN
 canvas with the issuer's "Fund Payment" windows and each period's "Funded?" gateway, its default branch to "Default:
 Collateral to Holders"; Validate. Payoff: the issuer's funding calls along a what-if path, and what holders get on a
-default. Issue stage: network Robinhood Chain testnet, collateral ratio and pledge, lag and grace, strike in 5
+default. Issue stage: network Arbitrum Sepolia (the only one), TSLA collateral locked on Robinhood Chain, ratio and pledge, lag and grace, strike in 5
 minutes, observations every 3 minutes. Publish only if time allows (approvals).
 
 **2:40 CRE fixes the strikes (50 s).** Tab 5: `… Task_FixStrike [ETH, BTC] -> written 0x…`. Back on tab 3, without
@@ -50,8 +50,8 @@ forwarder; the page shows it as reported by Chainlink CRE."
 **3:15 The issuer pays, or defaults (30 s).** Note A: the schedule shows period 1 *Paid*. Note B: *Payment 1 in
 grace*, then **Defaulted**: holders hold their share of the collateral and withdraw it.
 
-**3:45 Close (15 s).** "One contract runs every note as a workflow on Arbitrum and Robinhood Chain; the issuer's
-collateral and funding are part of it; one CRE workflow observes them all, on stocks and crypto."
+**3:45 Close (15 s).** "One contract on Arbitrum runs every note as a workflow; the issuer's collateral (stock tokens
+stay locked on Robinhood Chain) and funding are part of it; one CRE workflow observes them all, on stocks and crypto."
 
 ## If something goes wrong
 

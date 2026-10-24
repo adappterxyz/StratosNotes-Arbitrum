@@ -5,7 +5,7 @@
  */
 import { simulatePerf, simulateWorstOf, totalPerUnit, type PayoffResult } from '../../../packages/core/src/products/payoff';
 import {
-  ASSET_CHAIN, deliverableToken, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, HOME_CHAIN, PRODUCT_LABELS, productUses,
+  deliverableToken, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, HOME_CHAIN, PRODUCT_LABELS, productUses,
   type ProductParams, type ProductType,
 } from '../../../packages/core/src/products/params';
 
@@ -17,11 +17,10 @@ export type Sym = keyof typeof FEEDS;
 export const CRYPTO: Sym[] = ['ETH', 'BTC', 'SOL'];
 export const STOCKS: Sym[] = ['TSLA', 'AMZN', 'AMD', 'PLTR', 'NVDA', 'AAPL', 'SPY'];
 
-/** What a physically settled note delivers: the real token on the note's chain (WETH for ETH; Robinhood Chain's own
- * stock tokens there), or cash where neither chain has one. */
-export const deliveredToken = (sym: string) => (deliverableToken({ chain: HOME_CHAIN }, sym)?.token
-  ?? (deliverableToken({ chain: ASSET_CHAIN }, sym) ? `Robinhood Chain ${sym}` : null));
-/** Physical delivery needs a real token for every underlying (none for BTC, SOL or stocks without one). */
+/** What a physically settled note delivers: the real token on Arbitrum, where every note is issued (WETH for ETH), or
+ * null: BTC, SOL and stocks settle in cash (stock tokens stay on Robinhood Chain, as collateral only). */
+export const deliveredToken = (sym: string) => deliverableToken({ chain: HOME_CHAIN }, sym)?.token ?? null;
+/** Physical delivery needs a real token for every underlying (only ETH, as WETH). */
 export const physicalPossible = (syms: string[]) => syms.every(s => !!deliveredToken(s));
 export const PRODUCTS: ProductType[] = ['fcn', 'reverse-convertible', 'phoenix', 'snowball', 'ppn'];
 

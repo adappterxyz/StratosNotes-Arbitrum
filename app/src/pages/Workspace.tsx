@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import {
   buildWorkflow, chain, check, compileTemplate, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, field, instantiateProduct, irToDraft, normalizeParams, parseBpmn,
-  PRODUCT_LABELS, summarize, templateBpmn, underlyingLabel,
+  PRODUCT_LABELS, summarize, templateBpmn, templateOffered, toIssuanceTerms, underlyingLabel,
   type AssetDefinition, type Issue, type ProductParams, type ProductType, type TemplateEntry, type TemplateSummary,
 } from '@sn/core';
 import AiPanel, { type AiResult } from '../components/AiPanel';
@@ -96,7 +96,10 @@ export default function Workspace() {
     setVersion(v => v + 1);
   };
 
-  const openProduct = async (p: ProductParams, extra: Partial<Doc> = {}) => {
+  const openProduct = async (given: ProductParams, extra: Partial<Doc> = {}) => {
+    // Notes are issued on Arbitrum only: an old term sheet on Robinhood Chain (or delivering a stock) opens moved there.
+    const p = toIssuanceTerms(given);
+    if (p !== given) setNotice('These terms named Robinhood Chain or delivered a stock. Notes are now issued on Arbitrum only, so they were moved there: stock settles in cash, and stock collateral is locked on Robinhood Chain.');
     const prod = instantiateProduct(p);
     await load(prod.bpmnXml, { name: p.name, origin: 'product', basis: p, assets: prod.assets, ...extra });
     setStage('design');
@@ -107,6 +110,12 @@ export default function Workspace() {
       const r = await fetch(`/api/templates/${t.definition}`);
       if (!r.ok) throw new Error(`Template ${short(t.definition)} could not be read (${r.status}).`);
       const e = await r.json() as TemplateEntry;
+      // A saved note the library no longer offers (on Robinhood Chain, physical stock delivery): its terms open moved to
+      // Arbitrum; a custom workflow built for Robinhood Chain can't be issued at all.
+      if (!templateOffered(e)) {
+        if (e.product && !e.bpmnXml) { await openProduct(normalizeParams(e.product), { name: e.name }); return; }
+        throw new Error('This saved workflow was built for Robinhood Chain. Notes are now issued on Arbitrum only (Robinhood Chain holds collateral): start from a ready-made note instead.');
+      }
       const { bpmnXml, assets } = templateBpmn(e);
       const basis = e.product ? normalizeParams(e.product) : e.basis ? normalizeParams(e.basis) : null;
       await load(bpmnXml, { name: e.name, origin: e.product && !e.bpmnXml ? 'product' : 'custom', basis, assets, template: summarize(e) });

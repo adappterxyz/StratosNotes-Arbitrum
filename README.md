@@ -1,7 +1,8 @@
 # StratosNotes on Arbitrum
 
-Structured notes on stocks and crypto that anyone can issue and sell, on **Arbitrum Sepolia** and **Robinhood Chain
-testnet**, with **Chainlink CRE** as the calculation agent. A note raises funds for the issuer against collateral
+Structured notes on stocks and crypto that anyone can issue and sell. Every note is issued and runs on **Arbitrum
+Sepolia**; **Robinhood Chain testnet** is the collateral chain, where stock tokens (TSLA, AMZN, AMD, PLTR) stay locked
+in a vault backing Arbitrum notes ([docs/CROSS-CHAIN.md](docs/CROSS-CHAIN.md)). **Chainlink CRE** is the calculation agent. A note raises funds for the issuer against collateral
 locked in the note; the issuer funds each payment before it falls due, or the holders are paid what they are owed from the collateral
 ([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Chainlink CRE pays each coupon into the note on its payment date, and
 holders claim it from their portfolio whenever they like, with a receipt per claim (claim by default:

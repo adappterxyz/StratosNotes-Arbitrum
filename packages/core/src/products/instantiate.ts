@@ -37,7 +37,7 @@ import { productNotifications } from '../notify';
 import type { AssetDefinition, AssetOperation, NodeProps, TemplateField } from '../types';
 import {
   CASH_TOKEN, collateralTokenOf, deliverableToken, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
-  validateProductParams, type CollateralSymbol, type ProductParams, type Underlying,
+  validateTermSheet, type CollateralSymbol, type ProductParams, type Underlying,
 } from './params';
 
 export const ISSUER = 'Issuer';
@@ -71,7 +71,7 @@ export const topUpField = (c: CollateralSymbol) => `topUp_${c}`;
 export const deliverAsset = (sym: string) => `d_${sym}`;
 
 export function instantiateProduct(p: ProductParams): InstantiatedProduct {
-  const errs = validateProductParams(p);
+  const errs = validateTermSheet(p); // a legacy (Robinhood Chain) note still rebuilds for display; issuance checks validateProductParams
   if (errs.length) throw new Error('Invalid product parameters: ' + errs.join(' '));
   const use = productUses(p.productType);
   const eco = economicsOf(p);

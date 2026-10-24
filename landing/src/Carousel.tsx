@@ -116,7 +116,7 @@ const CARDS: Card[] = [
         { x: 16, y: 70, t: 'USDG coupons', tone: 'pay' },
       ],
     },
-    start: { role: 'investor', goal: 'hedge', type: 'reverse-convertible', syms: ['AAPL'], preset: 'Flat', physical: true },
+    start: { role: 'investor', goal: 'hedge', type: 'reverse-convertible', syms: ['AAPL'], preset: 'Flat' },
   },
   {
     side: 'Issuers', title: 'Raise funding', note: 'Fixed coupon note on ETH',

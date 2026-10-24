@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   check, compile, compileTemplate, decodeDef, dueReports, evalExpr, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, guardHolds, instantiateProduct,
   MILESTONES, OP, OP_BALANCE, OP_NOW, parseBpmn, parseExpr, parsePred, SEED_TEMPLATES, simulateNote, simulatePerf, totalPerUnit,
-  validateProductParams, type ProcessState, type ProductParams, type ProductType,
+  validateProductParams, validateTermSheet, type ProcessState, type ProductParams, type ProductType,
 } from '../src';
 
 const compiled = (p: ProductParams) => {
@@ -116,7 +116,9 @@ describe('term sheet economics', () => {
     // Assets: note + stablecoin + 3 deliverables + 3 collateral = 8 is the engine's limit; one more is refused.
     const basket: ProductParams = { ...p, chain: 'robinhood-testnet', settlement: 'physical', underlyings: [FEEDS.ETH, FEEDS.AMZN, FEEDS.TSLA],
       collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'ETH', haircutPct: 70 }, { symbol: 'TSLA', haircutPct: 60 }] };
-    expect(validateProductParams(basket)).toEqual([]);
+    // A legacy Robinhood Chain term sheet: its terms hold together (it still rebuilds for display) but it can't be issued.
+    expect(validateTermSheet(basket)).toEqual([]);
+    expect(validateProductParams(basket).join(' ')).toMatch(/issued on Arbitrum Sepolia only/);
   });
   it('checks the terms on-chain: grace above 7 days or a deadline after the next observation is refused', () => {
     const { ir } = compiled(EXAMPLE_PRODUCTS.fcn);
