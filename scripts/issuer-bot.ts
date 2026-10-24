@@ -3,14 +3,23 @@
  * fixed what a period owes) and the escrow does not hold it yet, fund the shortfall through that period's
  * "Fund Payment" window; fund deliveries for physical settlement; optionally top up collateral in a margin
  * call. Leave chosen payments unfunded (MISS) to show a default: the note then pays the holders from escrow.
- * After every payout (a coupon, the redemption, a delivery, a default's distribution) it pushes the money to the
- * holders' wallets in batches (FlowEngine v4 pushPayouts; anyone may, the caller pays gas): PUSH=0 turns that
- * off, PUSH_BATCH sets the holders per transaction (default 100), PUSH_ASSETS limits it to some assets (e.g. 1:
- * the stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS), funding nothing: any funded
- * account will do, since pushing is permissionless.
+ *
+ * Payouts are CLAIMED by default: Chainlink CRE pays each coupon and the redemption into the note on its payment
+ * date, and each holder claims from the portfolio when they like (pushTo for themselves, their own gas, a receipt
+ * per claim). This bot pushes payouts to holders' wallets only where that was chosen (packages/sdk payout-policy.ts):
+ *   PUSH unset   push only notes whose terms opt in (term sheet `payouts: 'push'`, chosen at issuance: "Paid to
+ *                your wallet automatically, issuer covers gas"); every other note stays claim-only
+ *   PUSH=1       push every note this bot looks after (or PIDS), opted in or not
+ *   PUSH=0       push nothing, not even opted-in notes
+ *   PUSH_MIN=x   when pushing, only holders owed at least x of the asset (e.g. 0.5 = 0.5 USDG), with pushTo in
+ *                batches; smaller amounts stay claimable. Without it, the round's cursor is walked (pushPayouts)
+ *                and anyone the cursor missed is swept with pushTo.
+ *   PUSH_BATCH   holders per transaction (default 100); PUSH_ASSETS limits pushing to some assets (e.g. 1: the
+ *                stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS) under the same
+ *                policy, funding nothing: any funded account will do, since pushing is permissionless.
  *
  *   RPC=... CHAIN_ID=421614 ENGINE=0x... LENS=0x... ISSUER_KEY_FILE=path [FROM_BLOCK=n] \
- *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
+ *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [PUSH=1|0] [PUSH_MIN=0.5] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
  *
  * PIDS: the notes to look after (default: every note whose Issuer role is this key). MISS: pid:period payments
  * to leave unfunded. MINT=1: mint test tokens the wallet lacks (the key must be the test token's owner, e.g.
@@ -21,7 +30,7 @@ import { readFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { dec, toBase } from '@sn/core';
-import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, type ChainInfo } from '@sn/sdk';
+import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, pushesNote, pushPolicyFromEnv, type ChainInfo } from '@sn/sdk';
 
 const env = (k: string, d?: string) => { const v = process.env[k] ?? d; if (v === undefined) throw new Error(`set ${k}`); return v; };
 const keyHex = (): Hex => {
@@ -44,17 +53,44 @@ const miss = new Set((process.env.MISS ?? '').split(',').map(s => s.trim()).filt
 const only = process.env.PIDS ? new Set(process.env.PIDS.split(',').map(s => s.trim())) : null;
 const mintAbi = parseAbi(['function mint(address to, uint256 amount)']);
 const log = (s: string) => console.log(`[issuer-bot] ${s}`);
-const pushOn = process.env.PUSH !== '0';
+const policy = pushPolicyFromEnv(process.env);
 const pushOnly = process.env.PUSH_ONLY === '1';
-const pushAssets = process.env.PUSH_ASSETS ? new Set(process.env.PUSH_ASSETS.split(',').map(s => s.trim())) : null;
-const pushBatch = BigInt(process.env.PUSH_BATCH ?? '100');
+const pushBatch = policy.batch;
 const MAX = 2n ** 256n - 1n;
 /** Push rounds not settled yet: `${pid}:${asset}` -> period, from DistributionRecorded / DistributionSettled. */
 const openRounds = new Map<string, bigint>();
 let pushFrom = BigInt(env('FROM_BLOCK', '0'));
 
-/** Push every open payout round of the notes this bot looks after, to the end of each holder set. */
-async function pushPayouts(mine: Set<string>) {
+/** Holders of a note's units, paged through the lens. */
+async function holdersOf(pid: bigint): Promise<readonly Address[]> {
+  const out: Address[] = [];
+  for (let start = 0n; ; start += 1000n) {
+    const [who, , total] = await client.readContract({ address: lens, abi: lensAbi, functionName: 'holders', args: [pid, 0n, start, 1000n] });
+    out.push(...who);
+    if (!who.length || start + 1000n >= total) return out;
+  }
+}
+
+/** pushTo every holder owed at least `min` (engine fixed point), PUSH_BATCH per transaction. */
+async function pushOwed(pid: bigint, asset: number, min: bigint, what: string) {
+  const who = await holdersOf(pid);
+  if (!who.length) return;
+  const owed = await client.readContract({ address: lens, abi: lensAbi, functionName: 'claimable', args: [pid, BigInt(asset), who] });
+  const due = who.filter((_, i) => owed[i] >= min);
+  for (let i = 0; i < due.length; i += Number(pushBatch)) {
+    const batch = due.slice(i, i + Number(pushBatch));
+    const hash = await wallet.writeContract({ address: engine, abi: engineAbi, functionName: 'pushTo', args: [pid, asset, batch], chain, account });
+    const r = await client.waitForTransactionReceipt({ hash });
+    log(`${noteId(info.key, engine, pid)}: ${what} ${batch.length} holder(s) on asset ${asset} (${r.gasUsed} gas)`);
+  }
+  if (due.length < who.length && min > 10_000n) log(`${noteId(info.key, engine, pid)}: ${who.length - due.length} holder(s) owed less than PUSH_MIN stay claimable`);
+}
+
+/**
+ * Push the open payout rounds of the notes this bot pushes for (`push`: its policy said yes for the note), to the
+ * end of each holder set; with PUSH_MIN, only to holders owed at least that.
+ */
+async function pushPayouts(push: Set<string>) {
   const head = await client.getBlockNumber();
   if (head >= pushFrom) {
     const [rec, settled] = await Promise.all([
@@ -73,7 +109,12 @@ async function pushPayouts(mine: Set<string>) {
   }
   for (const [key] of [...openRounds]) {
     const [pid, asset] = key.split(':');
-    if (!mine.has(pid) || (pushAssets && !pushAssets.has(asset))) continue;
+    if (!push.has(pid) || (policy.assets && !policy.assets.has(asset))) continue;
+    if (policy.min > 0n) {
+      openRounds.delete(key);
+      await pushOwed(BigInt(pid), Number(asset), policy.min, 'paid');
+      continue;
+    }
     let left = 1n;
     for (let n = 0; left > 0n && n < 50; n++) {
       const { result } = await client.simulateContract({ address: engine, abi: engineAbi, functionName: 'pushPayouts', args: [BigInt(pid), Number(asset), MAX, pushBatch], account });
@@ -86,14 +127,7 @@ async function pushPayouts(mine: Set<string>) {
     openRounds.delete(key);
     // The holder set can reorder mid-round (a holder selling out swaps the last one into its slot), and a
     // payment can be deferred: sweep once with pushTo for every holder still owed at least one base unit.
-    const [who] = await client.readContract({ address: lens, abi: lensAbi, functionName: 'holders', args: [BigInt(pid), 0n, 0n, 1000n] });
-    if (!who.length) continue;
-    const owed = await client.readContract({ address: lens, abi: lensAbi, functionName: 'claimable', args: [BigInt(pid), BigInt(asset), who] });
-    const late = who.filter((_, i) => owed[i] >= 10_000n);
-    if (!late.length) continue;
-    const hash = await wallet.writeContract({ address: engine, abi: engineAbi, functionName: 'pushTo', args: [BigInt(pid), Number(asset), late], chain, account });
-    await client.waitForTransactionReceipt({ hash });
-    log(`${noteId(info.key, engine, BigInt(pid))}: swept ${late.length} holder(s) still owed on asset ${asset}`);
+    await pushOwed(BigInt(pid), Number(asset), 10_000n, 'swept');
   }
 }
 
@@ -113,8 +147,9 @@ async function tick() {
   const count = await client.readContract({ address: engine, abi: engineAbi, functionName: 'processCount' });
   const mine = new Set<string>();
   if (pushOnly) {
+    if (policy.mode === 'off') return;
     for (let pid = 1n; pid <= count; pid++) if (!only || only.has(pid.toString())) mine.add(pid.toString());
-    return pushPayouts(mine);
+    return pushPayouts(await toPush(mine));
   }
   for (let pid = 1n; pid <= count; pid++) {
     if (only && !only.has(pid.toString())) continue;
@@ -168,7 +203,28 @@ async function tick() {
       if (t && need > 0) await run(t.step, `topUp_${c.symbol}`, Math.ceil(need * 1.01 * 1e6) / 1e6, c.symbol === 'USD' ? 'Collateral tUSD' : `Collateral t${c.symbol}`, `topped up ${c.symbol} collateral:`);
     }
   }
-  if (pushOn) await pushPayouts(mine);
+  if (policy.mode !== 'off') await pushPayouts(await toPush(mine));
+}
+
+/** Of these notes, the ones this bot pushes for: all of them with PUSH=1, else those whose terms opt in. */
+const pushChoice = new Map<string, boolean>();
+async function toPush(pids: Set<string>): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const pid of pids) {
+    let yes = pushChoice.get(pid);
+    if (yes === undefined) {
+      if (policy.mode === 'all') yes = true;
+      else {
+        const s = await adapter.getNote(noteId(info.key, engine, BigInt(pid)));
+        const def = s ? await adapter.getDefinition(s.definition) : null;
+        yes = !!def && pushesNote(policy, def);
+        if (yes) log(`${noteId(info.key, engine, BigInt(pid))}: its terms opt in to paying holders' wallets: pushing its payouts`);
+      }
+      pushChoice.set(pid, yes);
+    }
+    if (yes) out.add(pid);
+  }
+  return out;
 }
 
 const once = process.argv.includes('--once');

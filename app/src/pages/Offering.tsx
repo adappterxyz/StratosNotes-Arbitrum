@@ -40,7 +40,7 @@ export default function OfferingPage() {
   const [subStep, setSubStep] = useState<{ approve: StepState; swap: StepState } | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string; tx?: string } | null>(null);
   const [claimTick, setClaimTick] = useState(0);
-  // What I can withdraw, from the chain (payouts not pushed to my wallet yet, or deferred).
+  // What I can claim, from the chain (payouts accrue in the note until I claim them; an issuer's proceeds).
   const claim = useClaimable(me, note?.state ? [{ id: note.state.id, chain: note.state.chain }] : [], CASH_ASSET, claimTick + (note?.state.updatedAt ?? 0));
   // Stock products redraw from their term sheet; custom workflows from the definition.
   const xml = useMemo(() => (!o || !def ? '' : o.custom ? defToBpmn(def) : instantiateProduct(o.params).bpmnXml), [o?.custom, def]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,6 +103,13 @@ export default function OfferingPage() {
     return { tx: [] };
   });
   const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => adapter().withdraw(await signer(s.chain), s.id, asset, undefined, progress));
+  // A holder claims coupons and the redemption: one transaction for everything accrued so far, with a receipt.
+  const claimPayouts = () => run(legacy ? 'Withdrawn to your wallet.' : 'Claimed to your wallet. The receipt is in your portfolio under Paid to your wallet.', async () => {
+    const r = await adapter().claimPayouts(await signer(s.chain), s.id, CASH_ASSET, progress);
+    if (r.deferred) throw new Error(`${sym} refused the transfer to your wallet: it stays claimable here. Try again later.`);
+    return r;
+  });
+  const pay = listingOf(o.params, {}, sym).payout;
   // Delivered tokens (physical settlement) and collateral received on a default, withdrawable like cash.
   const delivered = mine?.other ?? [];
   // The economics panel runs the issuer's funding, top-up and delivery windows; the generic task list skips them.
@@ -236,6 +243,7 @@ export default function OfferingPage() {
                 <div><span className="label">You receive</span><span className="v">{fmtMoney(Number(units) || 0, 0)} units</span></div>
               </div>
               {Number(units) > remaining && <p className="xs err">Only {fmtMoney(remaining, 0)} units are left.</p>}
+              <p className="xs muted" data-how-paid style={{ margin: 0 }}><strong>How you get paid:</strong> {pay.detail}</p>
               <button className="btn primary lg" disabled={!me || busy || !(Number(units) > 0) || Number(units) > remaining} onClick={() => void emailGate.require(s.chain, subscribe)}>
                 {me ? (busy ? 'Confirm in your wallet…' : `Subscribe for ${fmtMoney(cost)} ${sym}`) : 'Connect a wallet to subscribe'}
               </button>
@@ -254,7 +262,7 @@ export default function OfferingPage() {
               <h3>Your position</h3>
               <div className="kv">
                 <div><span className="label">Note units</span><span className="v" data-units>{fmtMoney(mine.units)}</span></div>
-                <div><span className="label">{isIssuer ? 'Proceeds to withdraw' : 'Cash to withdraw'}</span><span className="v" data-cash>{fmtMoney(mine.cash)}</span></div>
+                <div><span className="label">{isIssuer ? 'Proceeds to withdraw' : 'Claimable'}</span><span className="v" data-cash>{fmtMoney(mine.cash)}</span></div>
               </div>
               {noteToken && mine.units > 0 && (
                 <div className="spread small" data-note-token>
@@ -262,8 +270,10 @@ export default function OfferingPage() {
                   <button className="btn sm" disabled={busy} onClick={addToWallet}><WalletCards className="i" />Add to wallet</button>
                 </div>
               )}
-              {!isIssuer && <span className="xs muted">{legacy ? 'On this engine, coupons and the redemption wait here until you withdraw them.' : 'Coupons and the redemption are paid straight to your wallet; anything that could not be sent waits here.'}</span>}
-              <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>{isIssuer ? `Withdraw proceeds (${sym})` : `Withdraw ${sym}`}</button>
+              {!isIssuer && <span className="xs muted" data-how-paid>{legacy ? 'On this engine, coupons and the redemption wait here until you claim them.' : pay.detail}</span>}
+              {isIssuer
+                ? <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>{`Withdraw proceeds (${sym})`}</button>
+                : <button className="btn primary" disabled={busy || !(mine.cash > 1e-6)} onClick={claimPayouts} data-claim>{`Claim ${mine.cash > 1e-6 ? `${fmtMoney(mine.cash)} ` : ''}${sym}`}</button>}
               {delivered.map(h => {
                 const name = h.name.replace(/^Collateral /, '');
                 const kind = h.name.startsWith('Collateral ') ? (isIssuer ? 'Collateral released' : 'Collateral received') : 'Delivered';
@@ -280,7 +290,7 @@ export default function OfferingPage() {
                   <div className="field"><label htmlFor="x-to">To wallet</label><input id="x-to" className="num" value={xfer.to} onChange={e => setXfer({ ...xfer, to: e.target.value })} placeholder="0x…" /></div>
                   <div className="field"><label htmlFor="x-units">Units (up to {fmtMoney(mine.units)})</label><input id="x-units" inputMode="decimal" value={xfer.units} onChange={e => setXfer({ ...xfer, units: e.target.value })} /></div>
                   <button className="btn" disabled={busy || !(Number(xfer.units) > 0) || Number(xfer.units) > mine.units} onClick={transfer}>Transfer</button>
-                  <span className="xs muted">In whole or in part, to a wallet with a verified email only. {legacy ? 'Cash already credited stays yours to withdraw' : 'Payouts already made stay yours'}; from now on they go to whoever holds the units.</span>
+                  <span className="xs muted">In whole or in part, to a wallet with a verified email only. {legacy ? 'Cash already credited stays yours to withdraw' : 'Payouts already made stay yours to claim'}; from now on they go to whoever holds the units.</span>
                 </div>
               )}
             </section>

@@ -11,7 +11,7 @@ export function WhyOnchain() {
   const rows: Array<[string, string, string]> = [
     ['Your exposure', "The issuer's balance sheet", 'Collateral pledged to the note, at a ratio shown on every note'],
     ['Who calculates', "The issuer's own calculation agent", 'Chainlink, from public price feeds'],
-    ["When you're paid", 'Days later, through a custodian', 'Automatically, on the payment date'],
+    ["When you're paid", 'Days later, through a custodian', 'On the payment date; claim any time, with a receipt'],
     ['What you can check', 'A PDF term sheet', 'Every term, fixing and payment'],
     ['Who can buy', 'Private-bank clients, six-figure tickets', 'Any wallet with a verified email · from 1 USDG'],
   ];
@@ -169,7 +169,7 @@ export function HowItWorks() {
     ['Issue', 'The issuer sets underlying, tenor, coupon and barriers, then pledges collateral into the note contract at the ratio shown on the note.'],
     ['Subscribe', 'Investors subscribe with USDG on Arbitrum. Collateral can stay on Robinhood Chain, credited through Chainlink CCIP.'],
     ['Fix and observe', 'Chainlink fixes the strike at launch, then reads the price on every observation date and checks each barrier.'],
-    ['Pay', 'The issuer funds each coupon, autocall and redemption, and Chainlink CRE pays holders automatically on the payment date. If the issuer misses a payment, the pledged collateral pays holders instead. No claim form. No calculation dispute.'],
+    ['Pay', 'The issuer funds each coupon, autocall and redemption, and Chainlink CRE pays it into the note automatically on the payment date. Holders claim from their portfolio whenever they like, with a receipt per claim. If the issuer misses a payment, the pledged collateral pays holders instead. No calculation dispute.'],
   ];
   return (
     <section id="how">

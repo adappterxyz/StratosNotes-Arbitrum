@@ -5,11 +5,11 @@
  */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarClock, Clock, Coins, LifeBuoy, ShieldCheck, Undo2 } from 'lucide-react';
-import { PRODUCT_LABELS } from '@sn/core';
+import { ArrowRight, CalendarClock, Clock, Coins, HandCoins, LifeBuoy, ShieldCheck, Undo2 } from 'lucide-react';
+import { payoutMethodOf, PRODUCT_LABELS } from '@sn/core';
 import type { NoteView } from '@sn/sdk';
 import { fmtMoney } from '../lib/format';
-import { inTime, listingOf, SIMPLE_STATUS_LABEL, simpleStatus } from '../lib/listing';
+import { inTime, listingOf, PAYOUT_TEXT, SIMPLE_STATUS_LABEL, simpleStatus } from '../lib/listing';
 import { AssetStack } from './AssetIcon';
 
 const symsOf = (o: NoteView) => (o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol));
@@ -56,6 +56,7 @@ export function Specs({ o, cash, now }: { o: NoteView; cash: string; now: number
       {l.protection && <Spec icon={<LifeBuoy />}>{l.protection}</Spec>}
       {l.early && <Spec icon={<Undo2 />}>{l.early}</Spec>}
       {col && <Spec icon={<ShieldCheck />}>{col}</Spec>}
+      {!o.custom && <Spec icon={<HandCoins />}><span data-payout-method={l.payout.method} title={l.payout.detail}>{l.payout.text}</span></Spec>}
       <Spec icon={<Coins />}>{`${fmtMoney(o.params.issuePricePct / 100)} ${cash} per unit`}</Spec>
       {o.phase === 'book' && <Spec icon={<Clock />}>{`${fmtMoney(left, 0)} of ${fmtMoney(o.notional, 0)} units left${o.strikeDate ? ` · book closes ${inTime(o.strikeDate, now)}` : ''}`}</Spec>}
     </ul>
@@ -103,6 +104,8 @@ export function FullTerms({ o, cash }: { o: NoteView; cash: string }) {
   if (p.protectionPct) rows.push(['Protection', `${p.protectionPct}%`, 'The share of your money you get back at the end whatever happens.']);
   if (p.participationPct) rows.push(['Participation', `${p.participationPct}%`, 'Your share of any rise in the price.']);
   rows.push(['Settlement', p.settlement === 'physical' ? 'Physical' : 'Cash', p.settlement === 'physical' ? 'Below the knock-in, holders receive the asset itself.' : `Everything is paid in ${cash}.`]);
+  const pay = PAYOUT_TEXT[payoutMethodOf(p)];
+  rows.push(['Payouts', pay.text, pay.detail]);
   if (o.isin) rows.push(['Reference (ISIN)', o.isin, 'The issuer\'s reference for this issuance.']);
   return (
     <details className="card adv full-terms">

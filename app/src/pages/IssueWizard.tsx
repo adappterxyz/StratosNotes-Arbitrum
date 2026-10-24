@@ -371,7 +371,7 @@ export default function IssueWizard() {
               </div>
               {timingBad && <div className="notice warn">{timingBad}</div>}
               <details className="adv">
-                <summary>More options: haircuts and the default rule</summary>
+                <summary>More options: haircuts, the default rule and how holders get paid</summary>
                 <div className="adv-body form-grid">
                   {eco.collateral.filter(c => c.symbol !== 'USD').map(c => (
                     <Num key={c.symbol} id={`iw-hc-${c.symbol}`} label={`${colToken(c.symbol) ?? c.symbol} counted at (of value)`} suffix="%" value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
@@ -382,6 +382,14 @@ export default function IssueWizard() {
                       <option value="cap-at-owed">What they're owed; the rest back to you</option>
                       <option value="all-to-holders">Everything in escrow</option>
                     </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="iw-payouts">Holders get their payouts</label>
+                    <select id="iw-payouts" value={p.payouts ?? 'claim'} onChange={e => set({ payouts: e.target.value === 'push' ? 'push' : undefined })}>
+                      <option value="claim">By claiming them, any time (they pay their own gas)</option>
+                      <option value="push">Sent to their wallets automatically (you pay the gas)</option>
+                    </select>
+                    <span className="hint">{p.payouts === 'push' ? 'Your bot sends every payment to every holder: about 55,000 gas per holder per payment, paid by you.' : 'Payments wait in the note until each holder claims; one claim collects everything, with a receipt.'}</span>
                   </div>
                 </div>
               </details>
@@ -396,12 +404,14 @@ export default function IssueWizard() {
                 <dt>Note</dt><dd><strong>{p.name}</strong> · {PRODUCT_LABELS[p.productType]} on <AssetStack syms={syms} size={16} /></dd>
                 <dt>Size</dt><dd>{fmtMoney(size, 0)} {sym}, book open until {fmtT(strikeAt)}; {p.observations} observations every {every.n} {every.unit}.</dd>
                 <dt>Investors get</dt><dd>{p.couponRatePct ? `${p.couponRatePct}% ${p.productType === 'snowball' ? 'added each period, paid when called' : 'coupon each period'} in USDG${p.couponBarrierPct ? ` while the worst price is at least ${p.couponBarrierPct}% of strike` : ''}. ` : ''}{p.autocallLevelPct ? `Repaid early at ${p.autocallLevelPct}% or more. ` : ''}{p.protectionPct ? `${p.protectionPct}% back at maturity plus ${p.participationPct}% of any rise. ` : ''}{p.knockInBarrierPct ? `Below ${p.knockInBarrierPct}% at maturity: ${p.settlement === 'physical' ? 'the stock instead of cash' : 'final ÷ strike in USDG'}.` : ''}</dd>
+                <dt>Payouts</dt><dd>{p.payouts === 'push' ? 'Paid to holders\' wallets automatically; you cover the gas.' : 'Holders claim any time from their portfolio; they pay their own gas.'}</dd>
                 <dt>You commit to</dt>
                 <dd>
                   <ul className="iw-list">
                     <li>Lock {eco.collateral.map(c => colToken(c.symbol) ?? c.symbol).join(' + ')} worth at least {eco.collateralRatioPct}% of what's sold{remote ? ', on Robinhood Chain' : ''}, until the last payment.</li>
                     <li>Fund each payment within {dur(t.lag)} of its observation; a {dur(t.grace)} grace period follows.</li>
                     <li>If a payment is still missing, holders take {eco.defaultRule === 'cap-at-owed' ? "what they're owed" : 'everything in escrow'} from the collateral.</li>
+                    {p.payouts === 'push' && <li>Send each payment to every holder's wallet and pay the gas (run the issuer bot).</li>}
                   </ul>
                 </dd>
               </dl>

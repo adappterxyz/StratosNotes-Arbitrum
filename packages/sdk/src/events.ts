@@ -30,9 +30,9 @@ export type EngineEvent =
    * here; `retire` redeems the units with it. `period` counts this asset's distributions on the note (1-based).
    */
   | { name: 'DistributionRecorded'; pid: string; asset: number; period: number; holding: number; step: number; payer: string; perUnit: string; total: string; supply: string; retire: boolean; hash: string }
-  /** A payout pushed to a holder's wallet: `amount` in the token's base units; `payoutId` is its receipt id. */
+  /** A payout sent to a holder's wallet (the holder's claim, or a push): `amount` in the token's base units; `payoutId` is its receipt id. */
   | { name: 'PayoutPaid'; pid: string; asset: number; period: number; holder: string; amount: string; payoutId: string }
-  /** A pushed payment that could not be sent (e.g. a frozen address): it stays withdrawable. */
+  /** A payment that could not be sent (e.g. a frozen address): it stays claimable. */
   | { name: 'PayoutDeferred'; pid: string; asset: number; period: number; holder: string; amount: string }
   /** A push round reached the last holder (or was superseded): its count, total and rolling hash of payoutIds. */
   | { name: 'DistributionSettled'; pid: string; asset: number; period: number; paidCount: number; paidTotal: string; rollingHash: string }

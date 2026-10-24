@@ -1,7 +1,8 @@
 /**
  * The portfolio, by category: wallet assets on each chain, notes you subscribed to, notes you issued, collateral
- * and receipts, payouts paid straight to the wallet (with their receipt ids), and payouts waiting to be withdrawn
- * (deferred or not pushed yet, read from the chain). Every note row opens that note's current state.
+ * and receipts, what you can claim now (read from the chain: coupons and redemptions accrue in the note until you
+ * claim them, one transaction per note, or Claim all), and the payouts already paid to your wallet with their
+ * receipt ids (each claim logs one). Issuers withdraw their proceeds here too. Every note row opens that note.
  * `?address=0x…` shows any wallet read-only (no actions), e.g. to look at a demo investor.
  */
 import { cashSymbol } from '../lib/chains';
@@ -19,7 +20,7 @@ import { Asset, AssetStack } from '../components/AssetIcon';
 import { StatePill, currentState } from '../components/NoteState';
 import { Addr } from '../components/ui';
 
-type Tab = 'wallet' | 'subscribed' | 'issued' | 'collateral' | 'paid' | 'withdraw';
+type Tab = 'wallet' | 'subscribed' | 'issued' | 'collateral' | 'paid' | 'claim';
 
 const symsOf = (o: NoteView) => (o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol));
 
@@ -41,8 +42,8 @@ export default function Portfolio() {
 
   const subscribed = useMemo(() => (positions ?? []).filter(p => p.position.units > 0 && p.view.issuer.toLowerCase() !== address), [positions, address]);
   const issued = useMemo(() => (notes ?? []).filter(n => n.view.issuer.toLowerCase() === address), [notes, address]);
-  // What is left to withdraw, from the chain: payouts are pushed to wallets, so only deferred or not-yet-pushed
-  // amounts (and an issuer's raised cash) remain. The read model's figure is the fallback while it loads.
+  // What can be claimed now, from the chain: payouts accrue in the note until the holder claims them (and an
+  // issuer's raised cash waits to be withdrawn). The read model's figure is the fallback while it loads.
   const [claimTick, setClaimTick] = useState(0);
   const claim = useClaimable(address, positions ?? [], CASH_ASSET, claimTick);
   const cashOf = (p: { id: string; position: { cash: number } }) => { const c = claim.get(p.id); return c === undefined ? p.position.cash : Number(c) / 1e10; };
@@ -55,7 +56,7 @@ export default function Portfolio() {
       <main className="page">
         <div className="empty">
           <strong>Connect a wallet to see your portfolio.</strong>
-          <span className="small">Your assets on Arbitrum and Robinhood Chain, the notes you hold or issued, and what you can withdraw.</span>
+          <span className="small">Your assets on Arbitrum and Robinhood Chain, the notes you hold or issued, and what you can claim.</span>
           <Link to="/" className="btn">Browse notes</Link>
         </div>
       </main>
@@ -64,31 +65,58 @@ export default function Portfolio() {
 
   const open = (id: string) => nav(`/note/${encodeURIComponent(id)}`);
   // Notes on an earlier engine (v3): shown and settled as before, labelled so the different mechanics are clear.
-  const earlier = (id: string) => (entryFor(byKey, { id })?.legacy ? <span title="On an earlier engine: payouts wait in the note until you withdraw them; units are not an ERC-20."> · earlier engine</span> : null);
+  const earlier = (id: string) => (entryFor(byKey, { id })?.legacy ? <span title="On an earlier engine: payouts wait in the note until you claim them (no receipt); units are not an ERC-20."> · earlier engine</span> : null);
   const rowProps = (id: string, name: string) => ({
     className: 'link', tabIndex: 0, role: 'link', 'aria-label': `Open ${name}`,
     onClick: () => open(id),
     onKeyDown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(id); } },
   });
 
-  const withdraw = async (id: string, chain: string, name: string, cash: number) => {
-    setBusy(id); setMsg(null);
+  const isIssuerOf = (p: { view: NoteView }) => p.view.issuer.toLowerCase() === address;
+  /**
+   * A holder claims its payouts (pushTo for itself: one transaction, a receipt, its own gas); an issuer withdraws
+   * the proceeds it raised (not a payout). Returns false when it failed.
+   */
+  const claimOne = async (p: { id: string; chain: string; view: NoteView }, cash: number, quiet = false) => {
+    const e = entryFor(byKey, { chain: p.chain, id: p.id }); // the note's own engine: v3 notes settle on the v3 engine
+    if (!e) throw new Error('This app does not serve the engine this note runs on.');
+    const w = await signer(p.chain);
+    const sym = cashSymbol(e.cfg, p.view.cashToken);
+    if (isIssuerOf(p)) {
+      const r = await e.adapter.withdraw(w, p.id, CASH_ASSET);
+      if (!quiet) setMsg({ kind: 'ok', text: `Withdrew ${fmtMoney(cash)} ${sym} of proceeds from ${p.view.name}.`, tx: r.tx[r.tx.length - 1], explorer: e.cfg.explorer });
+      return r.tx[r.tx.length - 1];
+    }
+    const r = await e.adapter.claimPayouts(w, p.id, CASH_ASSET);
+    if (r.deferred) throw new Error(`${sym} refused the transfer to your wallet: what ${p.view.name} owes you stays claimable. Try again later.`);
+    if (!quiet) setMsg({ kind: 'ok', text: `Claimed ${fmtMoney(cash)} ${sym} from ${p.view.name}${r.payoutIds.length ? ': receipt in Paid to your wallet' : ''}.`, tx: r.tx[r.tx.length - 1], explorer: e.cfg.explorer });
+    return r.tx[r.tx.length - 1];
+  };
+  const claim1 = async (p: { id: string; chain: string; view: NoteView }, cash: number) => {
+    setBusy(p.id); setMsg(null);
+    try { await claimOne(p, cash); } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
+    finally { setBusy(''); refresh(); refreshWallet(); setClaimTick(t => t + 1); }
+  };
+  /** Claim all: one claim per note in turn (each its own transaction to confirm), stopping at the first failure. */
+  const claimAll = async (rows: Array<{ id: string; chain: string; view: NoteView; position: { cash: number } }>) => {
+    setBusy('all'); setMsg(null);
+    let done = 0;
     try {
-      const e = entryFor(byKey, { chain, id }); // the note's own engine: v3 notes withdraw from the v3 engine
-      if (!e) throw new Error('This app does not serve the engine this note runs on.');
-      const w = await signer(chain);
-      const r = await e.adapter.withdraw(w, id, CASH_ASSET);
-      setMsg({ kind: 'ok', text: `Withdrew ${fmtMoney(cash)} ${e.cfg.stablecoin.symbol} from ${name}.`, tx: r.tx[r.tx.length - 1], explorer: e.cfg.explorer });
-      refresh(); refreshWallet(); setClaimTick(t => t + 1);
-    } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
-    finally { setBusy(''); }
+      for (const p of rows) {
+        setMsg({ kind: 'ok', text: `Claiming ${done + 1} of ${rows.length}: ${p.view.name}. Confirm in your wallet…` });
+        await claimOne(p, cashOf(p), true);
+        done++;
+      }
+      setMsg({ kind: 'ok', text: `Claimed from ${done} note${done === 1 ? '' : 's'}. Receipts are in Paid to your wallet.` });
+    } catch (e) { setMsg({ kind: 'err', text: `${done ? `Claimed ${done} of ${rows.length}. ` : ''}${errText(e)}` }); }
+    finally { setBusy(''); refresh(); refreshWallet(); setClaimTick(t => t + 1); }
   };
 
   const tabs: Array<{ id: Tab; label: string; icon: ReactNode; n?: number; flag?: boolean }> = [
     { id: 'subscribed', label: 'Subscribed notes', icon: <FileText className="i" />, n: subscribed.length },
     { id: 'issued', label: 'Issued notes', icon: <Landmark className="i" />, n: issued.length, flag: due.length > 0 },
     { id: 'paid', label: 'Paid to your wallet', icon: <BadgeCheck className="i" />, n: payouts?.length },
-    { id: 'withdraw', label: 'To withdraw', icon: <Coins className="i" />, n: withdrawable.length, flag: withdrawable.length > 0 },
+    { id: 'claim', label: 'Claimable', icon: <Coins className="i" />, n: withdrawable.length, flag: withdrawable.length > 0 },
     { id: 'collateral', label: 'Collateral & receipts', icon: <Lock className="i" /> },
     { id: 'wallet', label: 'Wallet assets', icon: <Wallet className="i" /> },
   ];
@@ -98,7 +126,7 @@ export default function Portfolio() {
       <div className="page-head">
         <div>
           <h1>Portfolio</h1>
-          <p>{readOnly ? <>Viewing <Addr value={address} /> read-only.</> : 'Your notes, your assets on each chain, and what you can withdraw.'}</p>
+          <p>{readOnly ? <>Viewing <Addr value={address} /> read-only.</> : 'Your notes, your assets on each chain, and what you can claim.'}</p>
         </div>
         <button className="btn" onClick={() => { refresh(); refreshWallet(); setClaimTick(t => t + 1); }}><RefreshCw className="i" />Refresh</button>
       </div>
@@ -180,7 +208,7 @@ export default function Portfolio() {
 
       {tab === 'paid' && (
         payouts === undefined ? <p className="muted">Loading…</p>
-          : payouts.length === 0 ? <Empty title="No payouts yet." body="Coupons, redemptions and deliveries are paid straight to your wallet, each with a receipt id you can check on-chain." />
+          : payouts.length === 0 ? <Empty title="No payouts yet." body="Each claim of a coupon or redemption shows here, with a receipt id you can check on-chain. Payouts wait in the note until you claim them under Claimable." />
           : (
             <div className="card scroll-x" style={{ padding: 0 }} data-paid>
               <table className="t">
@@ -213,36 +241,51 @@ export default function Portfolio() {
           )
       )}
 
-      {tab === 'withdraw' && (
+      {tab === 'claim' && (
         positions === undefined ? <p className="muted">Loading…</p>
-          : withdrawable.length === 0 ? <Empty title="Nothing to withdraw right now." body="Payouts go straight to your wallet (see Paid to your wallet). What could not be sent yet, delivered stock, and (for issuers) the USDG you raised appear here." />
-          : (
-            <div className="card scroll-x" style={{ padding: 0 }}>
-              <table className="t">
-                <thead><tr><th>Note</th><th className="r">Cash</th><th>Tokens</th><th /></tr></thead>
-                <tbody>
-                  {withdrawable.map(p => {
-                    const sym = cashSymbol(byKey[p.chain]?.cfg, p.view.cashToken);
-                    const tokens = p.position.holdings.filter(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n);
-                    const cash = cashOf(p);
-                    return (
-                      <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
-                        <td><strong>{p.view.name}</strong><div className="xs muted">{p.view.issuer.toLowerCase() === address ? 'Raised as issuer' : 'Paid to you'}{earlier(p.id)}</div></td>
-                        <td className="r num" data-cash><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{fmtMoney(cash)}</span><Asset sym={sym} size={16} /></span></td>
-                        <td className="small">{tokens.length ? <span className="muted">{tokens.length} token{tokens.length > 1 ? 's' : ''}: withdraw on the note page</span> : <span className="muted">—</span>}</td>
-                        <td className="r">
-                          <button className="btn primary sm" disabled={readOnly || !(cash > 0) || !!busy || !entryFor(byKey, { chain: p.chain, id: p.id })}
-                            onClick={e => { e.stopPropagation(); withdraw(p.id, p.chain, p.view.name, cash); }}>
-                            {busy === p.id ? 'Withdrawing…' : `Withdraw ${fmtMoney(cash)} ${sym}`}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )
+          : withdrawable.length === 0 ? <Empty title="Nothing to claim right now." body="Coupons and redemptions wait in the note until you claim them: they show here when a payment has been made. Delivered stock, and (for issuers) the USDG you raised, show here too." />
+          : (() => {
+            const claimRows = withdrawable.filter(p => cashOf(p) > 1e-6 && !isIssuerOf(p) && entryFor(byKey, { chain: p.chain, id: p.id }));
+            return (
+              <div className="stack">
+                <div className="spread">
+                  <p className="small muted" style={{ margin: 0 }}>Coupons and redemptions accrue in each note until you claim them. One claim collects everything a note owes you so far, with a receipt; you pay the network fee.</p>
+                  {!readOnly && claimRows.length > 1 && (
+                    <button className="btn primary sm" disabled={!!busy} onClick={() => claimAll(claimRows)} data-claim-all>
+                      {busy === 'all' ? 'Claiming…' : `Claim all (${claimRows.length} notes)`}
+                    </button>
+                  )}
+                </div>
+                <div className="card scroll-x" style={{ padding: 0 }}>
+                  <table className="t">
+                    <thead><tr><th>Note</th><th className="r">Claimable</th><th>Tokens</th><th /></tr></thead>
+                    <tbody>
+                      {withdrawable.map(p => {
+                        const sym = cashSymbol(byKey[p.chain]?.cfg, p.view.cashToken);
+                        const tokens = p.position.holdings.filter(h => h.asset > CASH_ASSET && BigInt(h.balance) > 0n);
+                        const cash = cashOf(p);
+                        const issuer = isIssuerOf(p);
+                        return (
+                          <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
+                            <td><strong>{p.view.name}</strong><div className="xs muted">{issuer ? 'Raised as issuer' : 'Paid to you, waiting to be claimed'}{earlier(p.id)}</div></td>
+                            <td className="r num" data-cash><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{fmtMoney(cash)}</span><Asset sym={sym} size={16} /></span></td>
+                            <td className="small">{tokens.length ? <span className="muted">{tokens.length} token{tokens.length > 1 ? 's' : ''}: withdraw on the note page</span> : <span className="muted">—</span>}</td>
+                            <td className="r">
+                              <button className="btn primary sm" disabled={readOnly || !(cash > 1e-6) || !!busy || !entryFor(byKey, { chain: p.chain, id: p.id })}
+                                data-claim={issuer ? undefined : p.id}
+                                onClick={e => { e.stopPropagation(); claim1(p, cash); }}>
+                                {busy === p.id ? (issuer ? 'Withdrawing…' : 'Claiming…') : `${issuer ? 'Withdraw' : 'Claim'} ${fmtMoney(cash)} ${sym}`}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()
       )}
 
       {tab === 'collateral' && (

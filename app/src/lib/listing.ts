@@ -8,7 +8,7 @@
  * that when its term is a month or more; demo notes run on compressed schedules (minutes or days apart), so for them
  * the rate comes from the product's design (its name's "12M" and number of periods) and says so.
  */
-import type { ProductParams } from '@sn/core';
+import { payoutMethodOf, type ProductParams } from '@sn/core';
 
 export const ASSET_NAME: Record<string, string> = {
   ETH: 'Ethereum', BTC: 'Bitcoin', SOL: 'Solana', TSLA: 'Tesla', NVDA: 'NVIDIA', AAPL: 'Apple', AMZN: 'Amazon', NFLX: 'Netflix', SPY: 'S&P 500',
@@ -46,7 +46,21 @@ export interface Listing {
   protection: string | null;
   /** "Can end early from month 6 if above 100%". */
   early: string | null;
+  /** How the money reaches the holder's wallet: claimed by default, or pushed when the issuer opted in. */
+  payout: { method: 'claim' | 'push'; text: string; detail: string };
 }
+
+/** The payout method line on the term sheet and listing (docs/ERC20-NOTES.md, "Why claim by default"). */
+export const PAYOUT_TEXT = {
+  claim: {
+    text: 'Claim any time from your portfolio',
+    detail: 'Claim your coupons and redemption any time from your portfolio: they accrue until you do. One claim at maturity collects everything, with a receipt per claim.',
+  },
+  push: {
+    text: 'Paid to your wallet automatically (issuer covers gas)',
+    detail: 'The issuer sends each coupon and the redemption to your wallet and pays the gas, with a receipt per payment. You can also claim yourself from your portfolio at any time.',
+  },
+} as const;
 
 const round = (x: number) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10);
 const pct = (x: number) => `${round(x)}%`;
@@ -129,6 +143,7 @@ export function listingOf(p: ProductParams, s: Schedule = {}, cash = 'USDG'): Li
     demo: per.demo,
     protection,
     early,
+    payout: { method: payoutMethodOf(p), ...PAYOUT_TEXT[payoutMethodOf(p)] },
   };
 }
 

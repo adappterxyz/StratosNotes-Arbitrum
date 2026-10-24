@@ -239,7 +239,7 @@ export function createApp(deps: AppDeps) {
       const pos = positionOf(s, address);
       out.push({ ...v, position: { units: pos.units, cash: pos.cash, holdings: s.holdings.filter(h => h.owner === address.toLowerCase()) } });
     }
-    // Payouts pushed to this wallet (FlowEngine v4), newest first, each with its receipt id and transaction.
+    // Payouts paid to this wallet (FlowEngine v4: its claims, or pushes), newest first, each with its receipt id and transaction.
     const paid = await db.query<{ note_id: string; tx: string; ts: string; data: Record<string, unknown> }>(
       "SELECT note_id, tx, ts, data FROM events WHERE name = 'PayoutPaid' AND data->>'holder' = $1 ORDER BY seq DESC LIMIT 200",
       [address.toLowerCase()]);

@@ -113,9 +113,10 @@ JSON
   KEEPER_CONFIG="$WORK/keeper.json" KEEPER_KEY_FILE="$WORK/fallback.key" npx tsx services/keeper-fallback/src/main.ts > "$WORK/keeper.log" 2>&1 & PIDS+=($!)
 fi
 
-# Payouts go straight to holders' wallets (FlowEngine v4): a keeper pushes each one in batches after it is made
-# (the issuer bot in PUSH_ONLY mode, anvil account 6; pushing is permissionless). Only the stablecoin: delivered
-# tokens and a default's collateral stay to be withdrawn from the note page, which the e2e checks.
+# Payouts are claimed by default (FlowEngine v4): holders claim from the portfolio or the note page, which the e2e
+# does. This keeper (the issuer bot in PUSH_ONLY mode, anvil account 6; pushing is permissionless) pushes only notes
+# whose terms opt in to paying wallets automatically. Only the stablecoin: delivered tokens and a default's
+# collateral are withdrawn from the note page.
 echo "== payout pusher"
 echo "$KEY6" > "$WORK/pusher.key"; chmod 600 "$WORK/pusher.key"
 RPC="$RPC" CHAIN_ID=421614 ENGINE="$ENGINE" LENS="$LENS" FROM_BLOCK="$BLOCK" ISSUER_KEY_FILE="$WORK/pusher.key" PUSH_ONLY=1 PUSH_ASSETS=1 INTERVAL=4 \

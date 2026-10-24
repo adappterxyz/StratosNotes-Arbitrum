@@ -14,7 +14,7 @@ export const BEAT_COPY: ReadonlyArray<{ k: string; t: string; n?: string }> = [
   { k: 'Issue', t: 'The issuer pledges collateral into the note.' },
   { k: 'Subscribe', t: 'USDG in, note units out, in one transaction on Arbitrum.' },
   { k: 'Fix and observe', t: 'Chainlink fixes the strike, then prices every observation date.' },
-  { k: 'Pay', t: 'Coupons paid in USDG to every holder, on the payment date.' },
+  { k: 'Pay', t: 'Coupons paid in USDG on the payment date, ready to claim.' },
   { k: 'Held to maturity', t: 'Every coupon, then full principal back in USDG.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
   { k: 'Barrier breached', t: 'Below the knock-in, holders receive the stock: TSLA tokens on Robinhood Chain.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders.' },
 ];

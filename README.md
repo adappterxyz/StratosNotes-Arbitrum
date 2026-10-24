@@ -3,7 +3,9 @@
 Structured notes on stocks and crypto that anyone can issue and sell, on **Arbitrum Sepolia** and **Robinhood Chain
 testnet**, with **Chainlink CRE** as the calculation agent. A note raises funds for the issuer against collateral
 locked in the note; the issuer funds each payment before it falls due, or the holders are paid what they are owed from the collateral
-([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Built for the Arbitrum Hackerhouse.
+([docs/NOTE-ECONOMICS.md](docs/NOTE-ECONOMICS.md)). Chainlink CRE pays each coupon into the note on its payment date, and
+holders claim it from their portfolio whenever they like, with a receipt per claim (claim by default:
+[docs/ERC20-NOTES.md](docs/ERC20-NOTES.md) §5). Built for the Arbitrum Hackerhouse.
 
 - Site: https://notes.markets · App: https://notes.markets/app
 - Submission: [docs/SUBMISSION.md](docs/SUBMISSION.md) · Demo: [docs/DEMO.md](docs/DEMO.md) · Deploy: [docs/DEPLOY.md](docs/DEPLOY.md)
@@ -16,7 +18,7 @@ locked in the note; the issuer funds each payment before it falls due, or the ho
 | `cre/notes-keeper-evm` | the Chainlink CRE workflow |
 | `services/indexer`, `services/api` | Postgres read model and the REST/SSE API |
 | `services/keeper-fallback` | the same keeper logic for chains without CRE (off by default) |
-| `scripts/issuer-bot.ts` | the issuer's side, automated for demos and tests: funds payments as they fall due (or leaves one unfunded) |
+| `scripts/issuer-bot.ts` | the issuer's side, automated for demos and tests: funds payments as they fall due (or leaves one unfunded); pushes payouts only for notes that opt in (`PUSH=1` for all) |
 | `app`, `landing`, `web` | the app, the landing page, and the Cloudflare Worker that serves both |
 
 ```bash

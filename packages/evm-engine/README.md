@@ -74,7 +74,7 @@ provides three generic mechanisms for it:
 | `fallbackReport(report)` | the fallback reporter only | the same report, from a signed keeper where CRE cannot write (services/keeper-fallback). Off by default |
 | `deposit` / `withdraw(pid, asset, base)` | holder | ERC-20 in and out of the process vault. `withdraw` works while paused |
 | `NoteToken.transfer` / `transferFrom` / `permit` | holder | move note units: a standard ERC-20 transfer, to verified recipients only while the note runs (the token asks `beforeNoteTransfer`) |
-| `pushPayouts(pid, asset, start, count)` / `pushTo(pid, asset, holders)` | anyone | pay accrued payouts straight to holders' wallets, in batches (`start = 2^256-1`: from the round's cursor). A failed transfer stays claimable (`PayoutDeferred`) |
+| `pushPayouts(pid, asset, start, count)` / `pushTo(pid, asset, holders)` | anyone | pay accrued payouts to holders' wallets: `pushTo(pid, asset, [self])` is a holder's claim, with a receipt (the default); batches (`start = 2^256-1`: from the round's cursor) are for notes whose issuer opts in to push. A failed transfer stays claimable (`PayoutDeferred`) |
 | `balanceOf` / `pendingOf(pid, owner, asset)`, `assetTokenOf(pid, asset)` | view | units (from the token) or cash (ledger + accrued); the accrued part; the ERC-20 behind an asset (the note token for issued units) |
 | `pause` / `unpause`, `setForwarderAddress`, `setExpectedWorkflowId/Author/Name`, `setFallbackReporter` | owner (two-step) | admin |
 | `ESCROW()` | view | the address the engine holds escrow roles at |
@@ -97,7 +97,7 @@ Inputs are `(uint8 tag, bytes32 data)`:
 | `HoldingChanged(pid, asset, owner, balance)` | after every balance change: cash on the ledger, or a holder's units (token balance × 1e4), holder transfers included |
 | `NoteTokenCreated(pid, asset, token)` | a note's ERC-20 is created (in `startProcess`) |
 | `DistributionRecorded(pid, asset, period, holding, step, payer, perUnit, total, supplyAtPayment, retire, distributionHash)` | a payout (coupon, redemption, delivery, a default's distribution): O(1), an accumulator |
-| `PayoutPaid(pid, asset, period, holder, amount, payoutId)` / `PayoutDeferred(…)` | a payout pushed to a wallet, with its receipt id / one that could not be sent |
+| `PayoutPaid(pid, asset, period, holder, amount, payoutId)` / `PayoutDeferred(…)` | a payout paid to a wallet (a claim or a push), with its receipt id / one that could not be sent |
 | `DistributionSettled(pid, asset, period, paidCount, paidTotal, rollingHash)` | a push round reached the last holder (or was superseded) |
 | `TokensUpdated(pid, status, stepsRun, tokens)` | once per transaction: the live BPMN tokens |
 | `Deposited` / `Withdrawn(pid, asset, account, base)` | ERC-20 in or out |
@@ -148,8 +148,9 @@ storage), 2026-10-24:
 | Default (all-to-holders), cash + USDC + ETH collateral to every holder | 717k | 718k |
 | Issuer funds a payment (deposit + move into escrow) | 266k | 266k |
 
-Pushing payouts to wallets costs about 55k gas per holder in batches of 100. A note-token transfer, which settles
-both sides, costs 176k–263k, and a claim 106k.
+Holders claim payouts with `pushTo(pid, asset, [self])`: 152k gas, with a receipt (the app's default; a plain
+`withdraw` is 106k, without one). Pushing payouts to wallets, for notes whose issuer opts in, costs about 55k gas per
+holder in batches of 100. A note-token transfer, which settles both sides, costs 176k–263k.
 
 Both target chains run Arbitrum Nitro (32M gas per transaction). The CRE workflow's write gas limit is 8M (CRE
 allows 10M per write).

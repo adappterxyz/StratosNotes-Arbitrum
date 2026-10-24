@@ -82,3 +82,18 @@ describe('helpers', () => {
     expect(inTime(900, 1000)).toBe('now');
   });
 });
+
+describe('listingOf: how holders get paid', () => {
+  it('claim by default: claim any time from the portfolio', () => {
+    const l = listingOf(EXAMPLE_PRODUCTS.phoenix);
+    expect(l.payout.method).toBe('claim');
+    expect(l.payout.text).toBe('Claim any time from your portfolio');
+    expect(l.payout.detail).toMatch(/one claim at maturity collects everything, with a receipt per claim/i);
+  });
+
+  it('a note whose issuer opted in to push: paid to the wallet, issuer covers gas', () => {
+    const l = listingOf({ ...EXAMPLE_PRODUCTS.phoenix, payouts: 'push' });
+    expect(l.payout.method).toBe('push');
+    expect(l.payout.text).toBe('Paid to your wallet automatically (issuer covers gas)');
+  });
+});

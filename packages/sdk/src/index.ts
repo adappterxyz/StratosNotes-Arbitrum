@@ -10,3 +10,4 @@ export * from './model';
 export * from './events';
 export * from './issue';
 export * from './adapter';
+export * from './payout-policy';

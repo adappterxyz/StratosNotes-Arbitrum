@@ -2,7 +2,7 @@
 
 Scope: `packages/evm-engine/src` (FlowEngine, its libraries Def / DefCheck / EmailAttest / SSTORE2 / Units,
 NoteToken, CreReceiver, NotesLens) and the testnet-only TestToken / TokenFaucet. Engine v4 (note units as ERC-20s,
-scale-free payouts pushed to wallets: docs/ERC20-NOTES.md) is reviewed in its own section below. Solidity 0.8.24, via-IR, optimizer 200 runs, EVM Paris.
+scale-free payouts, claimed by holders or pushed to wallets: docs/ERC20-NOTES.md) is reviewed in its own section below. Solidity 0.8.24, via-IR, optimizer 200 runs, EVM Paris.
 This is an internal review with static analysis, fuzzing and invariant testing. **It is not an audit**; an
 independent audit is required before any mainnet deployment that holds real value.
 
@@ -63,7 +63,8 @@ What changed (docs/ERC20-NOTES.md):
 - Each note's units are a NoteToken clone, and the token is the only record of units.
 - Payouts are an O(1) accumulator, settled whenever units move.
 - Holder transfers go through `beforeNoteTransfer`: verified recipients only, and only while the note runs.
-- Anyone may push payouts to wallets in batches, with a receipt id per payment.
+- Holders claim their payouts (`pushTo` for themselves, the default), and anyone may push payouts to wallets in
+  batches (for notes whose issuer opts in). Either way each payment carries a receipt id.
 - `MAX_HOLDERS`, `transferUnits` and `holdersOf` are gone.
 
 | ID | Severity | Finding | Status |

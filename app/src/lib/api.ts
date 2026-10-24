@@ -51,7 +51,7 @@ export interface NoteItem { id: string; chain: string; definition: string; view:
 export interface NoteDetail { state: NoteState; view: NoteView }
 export interface HistoryEvent { seq: number; name: string; block: number; tx: string; at: number; data: Record<string, unknown> }
 export interface PortfolioItem extends NoteItem { position: { units: number; cash: number; holdings: NoteState['holdings'] } }
-/** A payout pushed to the wallet (FlowEngine v4): `amount` in the cash token's base units, `payoutId` its receipt. */
+/** A payout paid to the wallet (FlowEngine v4: the holder's claim, or a push the issuer opted into): `amount` in the cash token's base units, `payoutId` its receipt. */
 export interface PayoutItem { noteId: string; asset: number; period: number; amount: string; payoutId: string; tx: string; at: number }
 
 export class ApiError extends Error {

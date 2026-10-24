@@ -74,8 +74,8 @@ export function useWalletBalances(address: string | null) {
 }
 
 /**
- * What `address` can withdraw of each note's cash asset, read from the chain (FlowEngine balanceOf: payouts not
- * pushed to the wallet yet, deferred ones, and other cash on the account). Undefined while loading or for a note
+ * What `address` can claim of each note's cash asset, read from the chain (FlowEngine balanceOf: payouts not
+ * claimed yet, and other cash on the account, e.g. an issuer's proceeds). Undefined while loading or for a note
  * whose chain is not configured; the read model's figure is the fallback.
  */
 export function useClaimable(address: string | null, notes: Array<{ id: string; chain: string }>, asset = 1, tick = 0) {

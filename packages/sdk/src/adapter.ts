@@ -31,6 +31,18 @@ export type Progress = (message: string) => void;
 
 export interface Submitted { tx: string[] }
 
+/** A claim's outcome: what reached the wallet with a receipt, and whether a payment could not be sent. */
+export interface Claimed extends Submitted {
+  /** Paid with a receipt, in the token's base units (0n on an engine without receipts). */
+  paid: bigint;
+  /** The receipts (PayoutPaid payoutIds) of this claim. */
+  payoutIds: string[];
+  /** Other cash withdrawn after the claim (base units): not a payout, so no receipt (e.g. a refund). */
+  withdrawn: bigint;
+  /** The token refused the transfer (a frozen or paused stablecoin): the amount stays claimable. */
+  deferred: boolean;
+}
+
 export interface ChainAdapter<Signer> {
   readonly chain: ChainInfo;
 
@@ -59,14 +71,21 @@ export interface ChainAdapter<Signer> {
    * transfer stay with the sender.
    */
   transferUnits(signer: Signer, id: NoteId, to: string, units: bigint, onProgress?: Progress): Promise<Submitted>;
+  /**
+   * Claim the holder's payouts of a cash asset (coupons, the redemption): everything accrued until now, in one
+   * transaction with a receipt (PayoutPaid), then any other cash left on the account. The holder pays the gas.
+   * On an engine without receipts (v3) it is a plain withdrawal.
+   */
+  claimPayouts(signer: Signer, id: NoteId, asset: number, onProgress?: Progress): Promise<Claimed>;
   /** Withdraw a cash or delivered-token balance to the holder's wallet (all of it by default). */
   withdraw(signer: Signer, id: NoteId, asset: number, amount?: bigint, onProgress?: Progress): Promise<Submitted>;
-  /** What `owner` can withdraw of an asset now: payouts not pushed yet (or deferred) plus other cash (fixed point). */
+  /** What `owner` can claim or withdraw of an asset now: payouts not claimed yet plus other cash (fixed point). */
   claimable(id: NoteId, owner: string, asset: number): Promise<bigint>;
   /** The ERC-20 of the note's units (null for notes from an engine without note tokens). */
   noteToken(id: NoteId): Promise<string | null>;
   /**
-   * Push the latest payout of `asset` to the next `count` holders' wallets (anyone may; the caller pays gas).
+   * Push the latest payout of `asset` to the next `count` holders' wallets (anyone may; the caller pays gas). Not
+   * the default: holders claim (claimPayouts). Used by issuers who chose to pay holders automatically.
    * Returns how many holders are still to push in this round.
    */
   pushPayouts(signer: Signer, id: NoteId, asset: number, count: number, onProgress?: Progress): Promise<Submitted & { left: number }>;

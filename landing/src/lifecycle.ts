@@ -97,12 +97,12 @@ ${c('// the validator refuses any payment without this check')}`,
   {
     id: 'redeem', type: 'end', x: 93, y: 50, label: 'Pay, release',
     tag: 'Settlement · every holder', title: 'Pay from escrow, release', actor: 'Holders, issuer',
-    desc: 'Every holder is paid units × per-unit amount from escrow, complete by construction. After the final payment the collateral is released to the issuer. Holders withdraw USDG (or delivered tokens, or collateral after a default) when they like.',
+    desc: 'Every holder is paid units × per-unit amount from escrow, complete by construction. After the final payment the collateral is released to the issuer. Holders claim their USDG when they like, with a receipt per claim (and withdraw delivered tokens, or collateral after a default).',
     code: {
       evm: `Task_Pay2Call    ${f('distribute')}(USDG per unit due, payer Escrow, retire)
 Task_Release     ${f('transfer')}(Escrow → Issuer, balance(Escrow, col_USD))
-${c('// then, by each holder, whenever they like:')}
-engine.${f('withdraw')}(pid, CASH, owed)`,
+${c('// then each holder claims, whenever they like (a receipt per claim):')}
+engine.${f('pushTo')}(pid, CASH, [holder])`,
     },
   },
 ];

@@ -101,7 +101,23 @@ export interface ProductParams {
    * Chainlink feed and haircut as the token itself. Only for notes on Arbitrum Sepolia.
    */
   collateralChain?: CollateralChain;
+  /**
+   * How holders receive their payouts once the note has been paid (docs/ERC20-NOTES.md, "Why claim by default").
+   * Either way Chainlink CRE pays each coupon and the redemption INTO the note on its payment date; this is only the
+   * last hop, from the note to the holder's wallet.
+   *  'claim' (default, also when absent): holders claim from their portfolio whenever they like and pay their own
+   *    gas. Payouts accrue until then; one claim collects everything, with a receipt (PayoutPaid) per claim.
+   *  'push': the issuer's bot sends each payout to every holder's wallet (pushPayouts), and the issuer pays the gas
+   *    (about 55k gas per holder per payment). Holders can still claim at any time.
+   * It is read by people and bots only (the term sheet travels in the definition's META), never by the engine.
+   */
+  payouts?: PayoutMethod;
 }
+
+export type PayoutMethod = 'claim' | 'push';
+export const PAYOUT_METHODS: readonly PayoutMethod[] = ['claim', 'push'];
+/** The note's payout method: 'claim' unless its terms opt in to 'push'. */
+export const payoutMethodOf = (p: Pick<ProductParams, 'payouts'> | null | undefined): PayoutMethod => (p?.payouts === 'push' ? 'push' : 'claim');
 
 export type StockTokens = 'test' | 'robinhood';
 export type CollateralChain = 'note' | 'robinhood';
@@ -232,6 +248,7 @@ export function validateProductParams(p: ProductParams): string[] {
   if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
   if (p.collateralChain !== undefined && !['note', 'robinhood'].includes(p.collateralChain)) e.push('Collateral must be held on the note\'s chain or on Robinhood Chain.');
   if (p.stockTokens !== undefined && !STOCK_TOKEN_SETS.includes(p.stockTokens)) e.push(`Stock tokens must be one of ${STOCK_TOKEN_SETS.join(', ')}.`);
+  if (p.payouts !== undefined && !PAYOUT_METHODS.includes(p.payouts)) e.push(`Payouts must be one of ${PAYOUT_METHODS.join(', ')}.`);
   if (!DEFAULT_RULES.includes(eco.defaultRule)) e.push(`The default rule must be one of ${DEFAULT_RULES.join(', ')}.`);
   if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
   // The engine holds 8 assets per note: the note, the stablecoin, deliverable tokens and collateral together.

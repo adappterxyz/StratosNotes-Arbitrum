@@ -8,9 +8,10 @@
  *   3. as the issuer, withdraw the subscriptions raised (they are the issuer's at once), then fund note 1's
  *      payments from its page as each falls due ("Payment due" -> Fund) and leave note 2's unfunded;
  *   4. let the keeper (fallback or CRE simulator) run both: note 1 reaches Redeemed, note 2 Defaulted, live;
- *   5. check note 1 against the reference payoff along the prices the reports carried: every payout reached the
- *      investors' wallets (pushed by the payout keeper), each PayoutPaid receipt and round hash recomputes from
- *      the logs, nothing is left to withdraw, and the portfolio lists the payouts with their receipt ids; note 2's
+ *   5. check note 1 against the reference payoff along the prices the reports carried; claim by default: Investor B
+ *      claims from the note page and Investor A from the portfolio (one claim each, at maturity, collecting every
+ *      coupon and the redemption), each PayoutPaid receipt recomputes from the logs, nothing is left to claim, and
+ *      the portfolio lists the payouts with their receipt ids; note 2's
  *      default (each holder holds its pro-rata share of the collateral, after the transfer, and withdraws it); and
  *      that every report came from the expected reporter.
  */
@@ -239,19 +240,31 @@ try {
   const agent = await page.locator('[data-agent]').getAttribute('data-agent');
   check(agent === (process.env.KEEPER === 'cre' ? 'cre' : 'fallback'), `note page shows the agent: ${agent}`);
   const chainNote = (await adapter.getNote(paidId))!;
-  // Payouts were pushed to the wallets: wait for the keeper to push the redemption, then nothing is left.
+  // Claim by default: nothing was pushed, so every coupon and the redemption wait in the note for each investor.
   const left = async () => Promise.all(PAID.map(inv => adapter.claimable(paidId, acct(inv.i).address, 1)));
-  for (let i = 0; i < 60 && (await left()).some(c => c >= 10_000n); i++) await new Promise(r => setTimeout(r, 2000));
+  const waiting = await left();
+  PAID.forEach((inv, k) => check(Math.abs(Number(waiting[k]) / 1e10 - inv.units * perUnit) <= inv.units * 5e-7 + 1e-6, `note 1 ${inv.role}: ${Number(waiting[k]) / 1e10} USDC waiting to be claimed, reference ${inv.units * perUnit}`));
+  // Investor B claims from the note page, Investor A from the portfolio: one transaction each, with a receipt.
+  await role(page, 'Investor B');
+  await page.goto(`${APP}/note/${encodeURIComponent(paidId)}`);
+  await page.locator('[data-position] [data-claim]').click({ timeout: 60_000 });
+  await page.getByText('Claimed to your wallet.').waitFor({ timeout: 120_000 });
+  await role(page, 'Investor A');
+  await page.goto(`${APP}/portfolio`);
+  await page.getByRole('tab', { name: /Claimable/ }).click();
+  await page.locator(`[data-claim="${paidId}"]`).click({ timeout: 60_000 });
+  await page.getByText(/^Claimed .* from /).waitFor({ timeout: 120_000 });
   const history = async (id: string) => ((await (await fetch(`${API}/api/notes/${encodeURIComponent(id)}/history?limit=500`)).json()) as { events: Array<{ name: string; tx: string; data: Record<string, unknown> }> }).events.slice().reverse();
+  const claimed = (ev: Awaited<ReturnType<typeof history>>) => PAID.every(inv => ev.some(e => e.name === 'PayoutPaid' && e.data.holder === acct(inv.i).address.toLowerCase()));
   let events1 = await history(paidId);
-  for (let i = 0; i < 30 && !events1.some(e => e.name === 'DistributionSettled'); i++) { await new Promise(r => setTimeout(r, 2000)); events1 = await history(paidId); }
+  for (let i = 0; i < 30 && !claimed(events1); i++) { await new Promise(r => setTimeout(r, 2000)); events1 = await history(paidId); }
   for (const [k, inv] of PAID.entries()) {
     const addr = acct(inv.i).address.toLowerCase();
     const paid = events1.filter(e => e.name === 'PayoutPaid' && e.data.holder === addr);
-    const pushed = paid.reduce((a, e) => a + Number(BigInt(String(e.data.amount))), 0) / 1e6;
-    check(Math.abs(pushed - inv.units * perUnit) <= inv.units * 5e-7 + paid.length * 1e-6, `note 1 ${inv.role} ${inv.units} units: ${paid.length} payouts pushed to the wallet, ${pushed} USDC, reference ${inv.units * perUnit}`);
+    const got = paid.reduce((a, e) => a + Number(BigInt(String(e.data.amount))), 0) / 1e6;
+    check(paid.length === 1 && Math.abs(got - inv.units * perUnit) <= inv.units * 5e-7 + 1e-6, `note 1 ${inv.role} ${inv.units} units: one claim, ${got} USDC to the wallet with a receipt, reference ${inv.units * perUnit}`);
     const rest = (await left())[k];
-    check(rest < 10_000n, `note 1 ${inv.role}: nothing left to withdraw (${Number(rest) / 1e10})`);
+    check(rest < 10_000n, `note 1 ${inv.role}: nothing left to claim (${Number(rest) / 1e10})`);
   }
   // Every receipt recomputes from the logs: payoutId per payment, the rolling hash and totals per round.
   const rounds = verifyPayouts({ chainId: 421614, engine: ENGINE }, events1.map(e => e.data as unknown as EngineEvent));
@@ -294,7 +307,7 @@ try {
   check(Math.abs(Number(after - before) / 1e6 - DEFAULTS[0].units * out2.perUnit.collateral.USD) < 0.01, `Investor A withdrew ${Number(after - before) / 1e6} USDC of collateral to the wallet`);
   await page.screenshot({ path: 'deployments/local/dev/e2e-default.png', fullPage: true });
 
-  // Portfolio: Investor A sees note 1's payouts paid to the wallet, each with its receipt, and nothing to withdraw.
+  // Portfolio: Investor A sees note 1's claim paid to the wallet, with its receipt, and nothing left to claim.
   await page.goto(`${APP}/portfolio`);
   await page.getByRole('tab', { name: /Paid to your wallet/ }).click();
   const paidRows = page.locator(`[data-paid] tr[data-payout]`);
@@ -302,12 +315,12 @@ try {
   const mine = events1.filter(e => e.name === 'PayoutPaid' && e.data.holder === acct(3).address.toLowerCase());
   let shownIds = 0;
   for (const e of mine) if (await page.locator(`tr[data-payout="${String(e.data.payoutId)}"]`).count()) shownIds++;
-  check(shownIds === mine.length && mine.length > 0, `portfolio "Paid to your wallet" lists note 1's ${mine.length} payouts by payout id`);
+  check(shownIds === mine.length && mine.length > 0, `portfolio "Paid to your wallet" lists note 1's ${mine.length} claim(s) by payout id`);
   const want = money(600 * perUnit);
   check(Math.abs(mine.reduce((a, e) => a + Number(BigInt(String(e.data.amount))), 0) / 1e6 - 600 * perUnit) < 0.01, `note 1 paid Investor A ${want} USDC in all`);
-  await page.getByRole('tab', { name: /To withdraw/ }).click();
+  await page.getByRole('tab', { name: /Claimable/ }).click();
   await page.waitForTimeout(3000); // the claimable amounts are read from the chain
-  check(!(await page.locator(`tr[data-note="${paidId}"]`).count()), 'portfolio "To withdraw": nothing left for note 1 (all pushed)');
+  check(!(await page.locator(`tr[data-note="${paidId}"]`).count()), 'portfolio "Claimable": nothing left for note 1 (all claimed)');
   await page.screenshot({ path: 'deployments/local/dev/e2e-portfolio.png' });
   await page.goto(`${APP}/note/${encodeURIComponent(paidId)}`);
   await page.locator('[data-economics]').waitFor();

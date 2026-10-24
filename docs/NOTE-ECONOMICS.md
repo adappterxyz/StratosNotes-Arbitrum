@@ -101,8 +101,9 @@ are an accumulator (docs/ERC20-NOTES.md), so the number of holders doesn't chang
 | Default, `all-to-holders`: cash, USDC and ETH collateral to every holder | 717k | 718k |
 | Issuer funding a payment (deposit + move into escrow) | 266k | 266k |
 
-The money then goes to wallets in batches pushed by a keeper, about 55k gas per holder. Anything that can't be sent
-stays claimable. The v3 engine (a loop over at most 62 holders) cost 2.34M for the coupon and 5.01M for the default.
+The money then waits in the note until each holder claims it (about 152k gas, paid by the holder, with a receipt;
+one claim at maturity collects everything). An issuer who opts a note in to push pays about 55k gas per holder per
+payment instead (docs/ERC20-NOTES.md, "Why claim by default"). The v3 engine (a loop over at most 62 holders) cost 2.34M for the coupon and 5.01M for the default.
 
 Both chains run Arbitrum Nitro, which caps a single transaction at 32M gas. The CRE workflow writes reports with
 an 8M limit, under CRE's 10M per write. Anyone can also move a note past a deadline with `poke(pid)`.

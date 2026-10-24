@@ -33,6 +33,17 @@ describe('payout receipts', () => {
     expect(t.ok).toBe(false);
     expect(t.problems.join(' ')).toMatch(/payoutId mismatch/);
   });
+
+  it('checks the receipts of holders\' claims in a round nobody pushed to the end (settled: false)', () => {
+    const events: EngineEvent[] = [
+      { name: 'DistributionRecorded', pid: '7', asset: 1, period: 3, holding: 0, step: 12, payer: '0x9', perUnit: '125000000', total: '1250000000000', supply: '10000000000000', retire: false, hash: DIST },
+      { name: 'PayoutPaid', pid: '7', asset: 1, period: 3, holder: A, amount: '1250000', payoutId: P1 },
+    ];
+    const [r] = verifyPayouts(scope, events);
+    expect(r).toMatchObject({ settled: false, ok: true, paidCount: 1, paidTotal: 1_250_000n, period: 3 });
+    const [t] = verifyPayouts(scope, [events[0], { ...events[1], amount: '1' } as EngineEvent]);
+    expect(t.ok).toBe(false);
+  });
 });
 
 describe('the read model follows the accumulator', () => {

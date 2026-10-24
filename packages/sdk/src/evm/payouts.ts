@@ -44,14 +44,21 @@ export interface RoundCheck {
   paidCount: number;
   paidTotal: bigint;
   rollingHash: Hex;
+  /**
+   * False for a round still open at the end of the events: nobody pushed it to the last holder and no later
+   * distribution superseded it yet (the usual case for the latest payment once holders claim). Its payoutIds are
+   * checked; its count, total and rolling hash are what was logged so far, with nothing settled to compare.
+   */
+  settled: boolean;
   /** Every payoutId recomputed matches the logged one, and the rolling hash and totals match DistributionSettled. */
   ok: boolean;
   problems: string[];
 }
 
 /**
- * Check every settled push round in a note's events (in chain order): each PayoutPaid's payoutId, each
- * DistributionRecorded's hash, and each DistributionSettled's count, total and rolling hash.
+ * Check every payout round in a note's events (in chain order): each PayoutPaid's payoutId (a holder's claim or a
+ * push), each DistributionRecorded's hash, and each DistributionSettled's count, total and rolling hash. Rounds not
+ * settled yet come last, with `settled: false`.
  */
 export function verifyPayouts(scope: PayoutScope, events: readonly EngineEvent[]): RoundCheck[] {
   const open = new Map<string, { ids: Hex[]; total: bigint; problems: string[] }>();
@@ -78,9 +85,13 @@ export function verifyPayouts(scope: PayoutScope, events: readonly EngineEvent[]
       if (rolling.toLowerCase() !== e.rollingHash.toLowerCase()) problems.push(`round ${key}: rolling hash mismatch`);
       if (r.ids.length !== e.paidCount) problems.push(`round ${key}: ${r.ids.length} payouts logged, ${e.paidCount} settled`);
       if (r.total !== BigInt(e.paidTotal)) problems.push(`round ${key}: total ${r.total} logged, ${e.paidTotal} settled`);
-      out.push({ pid: e.pid, asset: e.asset, period: e.period, paidCount: e.paidCount, paidTotal: BigInt(e.paidTotal), rollingHash: e.rollingHash as Hex, ok: !problems.length, problems });
+      out.push({ pid: e.pid, asset: e.asset, period: e.period, paidCount: e.paidCount, paidTotal: BigInt(e.paidTotal), rollingHash: e.rollingHash as Hex, settled: true, ok: !problems.length, problems });
       open.delete(key);
     }
+  }
+  for (const [key, r] of open) {
+    const [pid, asset, period] = key.split('|');
+    out.push({ pid, asset: Number(asset), period: Number(period), paidCount: r.ids.length, paidTotal: r.total, rollingHash: rollingHash(r.ids), settled: false, ok: !r.problems.length, problems: r.problems });
   }
   return out;
 }

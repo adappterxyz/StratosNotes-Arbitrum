@@ -7,7 +7,7 @@ import {
   erc20Abi, numberToHex, parseEventLogs, zeroAddress, type Address, type Hex, type PublicClient, type WalletClient,
 } from 'viem';
 import { decodeEvmDef, evmInput, toBase, type EvmInput, type WorkflowDef } from '@sn/core';
-import type { ChainAdapter, IssueRequest, Progress, Submitted } from '../adapter';
+import type { ChainAdapter, Claimed, IssueRequest, Progress, Submitted } from '../adapter';
 import { applyEvent, hasPid, type EngineEvent } from '../events';
 import { depositAmounts, type InputValue, type PlanStep } from '../issue';
 import { NOTE_ASSET } from '../model';
@@ -34,6 +34,16 @@ export interface EvmDeployment {
 
 export function toEvmInput(v: InputValue): EvmInput {
   return v.kind === 'number' ? evmInput.number(v.value) : v.kind === 'text' ? evmInput.text(v.value) : evmInput.party(v.value);
+}
+
+/**
+ * The call a holder makes to claim its own payouts of cash asset `asset` (FlowEngine v4): `pushTo(pid, asset,
+ * [holder])`. It is permissionless and pays only the holder's own accruals (plus payouts already settled to its
+ * account), never other cash, and it logs PayoutPaid with the payment's receipt id, which a plain `withdraw` does
+ * not. ~152k gas as a whole transaction, against ~106k for `withdraw`.
+ */
+export function claimPayoutsRequest(engine: Address, pid: bigint, asset: number, holder: Address) {
+  return { address: engine, abi: flowEngineAbi, functionName: 'pushTo' as const, args: [pid, asset, [holder]] as [bigint, number, Address[]] };
 }
 
 const numberOf = (v: FieldValue | undefined) => (v && v.tag === 1 ? BigInt(v.value) : null);
@@ -336,7 +346,10 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     return { tx: [r.transactionHash] };
   }
 
-  /** What `owner` can withdraw of `asset` now. On v3 the engine's ledger balance is all there is (claims, no pushes). */
+  /**
+   * What `owner` can claim of `asset` now (engine fixed point): payouts not claimed yet, plus other cash on the
+   * account (an issuer's proceeds, a refund). On v3 the engine's ledger balance is all there is.
+   */
   async claimable(id: NoteId, owner: string, asset: number): Promise<bigint> {
     return this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'balanceOf', args: [this.pidOf(id), owner as Address, BigInt(asset)] });
   }
@@ -349,6 +362,52 @@ export class EvmAdapter implements ChainAdapter<WalletClient> {
     const r = await this.send(w, { address: this.dep.engine, abi: flowEngineAbi, functionName: 'pushPayouts', args: [...args] }, 'Push payouts', onProgress);
     // `left` as of the simulation: what the transaction itself left (a holder joining meanwhile shows next time).
     return { tx: [r.transactionHash], left: Number(result) };
+  }
+
+  /**
+   * Claim the connected holder's payouts of `asset`: one `pushTo(pid, asset, [me])` (claimPayoutsRequest), which
+   * pays everything accrued so far with a receipt, then a plain withdrawal of any other cash still on the account
+   * (at least one token base unit; not a payout, so no receipt). v3 notes have no receipts: a plain withdrawal.
+   */
+  async claimPayouts(w: WalletClient, id: NoteId, asset: number, onProgress?: Progress): Promise<Claimed> {
+    const pid = this.pidOf(id);
+    const me = w.account?.address;
+    if (!me) throw new Error('Connect a wallet to claim.');
+    if (this.version === ENGINE_V3) {
+      const r = await this.withdraw(w, id, asset, undefined, onProgress);
+      return { ...r, paid: 0n, payoutIds: [], withdrawn: 0n, deferred: false };
+    }
+    const owed = await this.claimable(id, me, asset);
+    if (owed <= 0n) throw new Error('Nothing to claim.');
+    const r = await this.send(w, claimPayoutsRequest(this.dep.engine, pid, asset, me), 'Claim payouts', onProgress);
+    const mine = parseEventLogs({ abi: flowEngineAbi, logs: r.logs ?? [], eventName: ['PayoutPaid', 'PayoutDeferred'] })
+      .filter(l => (l.args as { holder: string }).holder.toLowerCase() === me.toLowerCase());
+    const paidLogs = mine.filter(l => l.eventName === 'PayoutPaid');
+    const out: Claimed = {
+      tx: [r.transactionHash],
+      paid: paidLogs.reduce((a, l) => a + (l.args as { amount: bigint }).amount, 0n),
+      payoutIds: paidLogs.map(l => (l.args as { payoutId: string }).payoutId),
+      withdrawn: 0n,
+      deferred: mine.some(l => l.eventName === 'PayoutDeferred'),
+    };
+    if (out.deferred) return out; // the token refused: withdrawing the rest would be refused too
+    // What is left is not a payout (pushTo never sweeps other cash): take it too when it is a whole base unit.
+    const left = await this.claimable(id, me, asset);
+    const decimals = await this.decimalsOf(pid, asset);
+    const base = left > 0n ? toBase(left, decimals) : 0n;
+    if (base > 0n) {
+      const wd = await this.withdraw(w, id, asset, undefined, onProgress);
+      out.tx.push(...wd.tx);
+      out.withdrawn = base;
+    }
+    return out;
+  }
+
+  private async decimalsOf(pid: bigint, asset: number): Promise<number> {
+    const s = await this.client.readContract({ address: this.dep.engine, abi: flowEngineAbi, functionName: 'processOf', args: [pid] });
+    const def = await this.getDefinition(s.definition);
+    if (!def) throw new Error(`unknown definition ${s.definition}`);
+    return def.assets[asset].decimals;
   }
 
   async withdraw(w: WalletClient, id: NoteId, asset: number, amount?: bigint, onProgress?: Progress): Promise<Submitted> {

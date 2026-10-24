@@ -25,7 +25,7 @@ export const TEMPLATES: Record<string, TemplateText> = {
   },
   'payment-made': {
     subject: 'You were paid {{amount}} on {{note}}',
-    body: 'Payment {{period}} on {{note}} has been paid: {{amount}} is now in your balance on the note.\n\nWithdraw it whenever you like: {{link}}',
+    body: 'Payment {{period}} on {{note}} has been paid: {{amount}} is now in your balance on the note.\n\nClaim it whenever you like: {{link}}',
   },
   'default-holder': {
     subject: '{{note}} defaulted: you received {{amount}}',
