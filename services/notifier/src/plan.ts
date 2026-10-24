@@ -83,22 +83,39 @@ export function money(amount: number, label: string): string {
   return `${amount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${label}`;
 }
 
-/** Balance changes per owner and asset made by one transaction (engine fixed point), from HoldingChanged. */
+/**
+ * Balance changes per owner and asset made by one transaction (engine fixed point): HoldingChanged, plus the
+ * payouts a DistributionRecorded credits every holder (FlowEngine v4 pays holders through an accumulator, so a
+ * coupon logs one event, not one balance per holder; pushes and withdrawals then log the balances).
+ */
 export function txDeltas(events: NoteEvent[], tx: string): Map<string, Map<number, number>> {
   const bal = new Map<string, number>();
   const before = new Map<string, number>();
   const out = new Map<string, Map<number, number>>();
-  for (const e of events) {
-    if (e.name !== 'HoldingChanged') continue;
-    const owner = String(e.data.owner).toLowerCase(), asset = Number(e.data.asset), key = `${owner}|${asset}`;
-    const v = Number(BigInt(String(e.data.balance))) / SCALE;
-    if (e.tx === tx && !before.has(key)) before.set(key, bal.get(key) ?? 0);
-    if (e.tx === tx) {
+  const set = (inTx: boolean, owner: string, asset: number, v: number) => {
+    const key = `${owner}|${asset}`;
+    if (inTx && !before.has(key)) before.set(key, bal.get(key) ?? 0);
+    if (inTx) {
       const m = out.get(owner) ?? new Map<number, number>();
       m.set(asset, v - (before.get(key) ?? 0));
       out.set(owner, m);
     }
     bal.set(key, v);
+  };
+  for (const e of events) {
+    const inTx = e.tx === tx;
+    if (e.name === 'HoldingChanged') {
+      set(inTx, String(e.data.owner).toLowerCase(), Number(e.data.asset), Number(BigInt(String(e.data.balance))) / SCALE);
+    } else if (e.name === 'DistributionRecorded' && BigInt(String(e.data.supply ?? '0')) > 0n) {
+      const holding = Number(e.data.holding), asset = Number(e.data.asset), payer = String(e.data.payer).toLowerCase();
+      const perUnit = Number(BigInt(String(e.data.perUnit))) / SCALE;
+      for (const [key, units] of [...bal]) {
+        const [owner, a] = key.split('|');
+        if (Number(a) !== holding || owner === payer || units <= 0) continue;
+        set(inTx, owner, asset, (bal.get(`${owner}|${asset}`) ?? 0) + units * perUnit);
+      }
+      if (e.data.retire) for (const key of [...bal.keys()]) if (key.endsWith(`|${holding}`)) set(inTx, key.split('|')[0], holding, 0);
+    }
   }
   return out;
 }

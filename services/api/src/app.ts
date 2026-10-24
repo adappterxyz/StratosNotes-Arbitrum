@@ -236,7 +236,12 @@ export function createApp(deps: AppDeps) {
       const pos = positionOf(s, address);
       out.push({ ...v, position: { units: pos.units, cash: pos.cash, holdings: s.holdings.filter(h => h.owner === address.toLowerCase()) } });
     }
-    return c.json({ positions: out });
+    // Payouts pushed to this wallet (FlowEngine v4), newest first, each with its receipt id and transaction.
+    const paid = await db.query<{ note_id: string; tx: string; ts: string; data: Record<string, unknown> }>(
+      "SELECT note_id, tx, ts, data FROM events WHERE name = 'PayoutPaid' AND data->>'holder' = $1 ORDER BY seq DESC LIMIT 200",
+      [address.toLowerCase()]);
+    const payouts = paid.map(r => ({ noteId: r.note_id, asset: Number(r.data.asset), period: Number(r.data.period), amount: String(r.data.amount), payoutId: String(r.data.payoutId), tx: r.tx, at: Number(r.ts) }));
+    return c.json({ positions: out, payouts });
   });
 
   // ---- templates ----------------------------------------------------------------------------------------------

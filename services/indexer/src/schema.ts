@@ -49,6 +49,7 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX events_note ON events (note_id, seq);
   CREATE INDEX events_chain_block ON events (chain, block);
+  CREATE INDEX events_payout_holder ON events ((data->>'holder'), seq) WHERE name = 'PayoutPaid';
   CREATE TABLE definitions (
     chain   text NOT NULL,
     id      text NOT NULL,

@@ -230,7 +230,12 @@ export function createEdgeApp(deps: EdgeAppDeps) {
       const pos = positionOf(s, address);
       out.push({ ...v, position: { units: pos.units, cash: pos.cash, holdings: s.holdings.filter(h => h.owner === address.toLowerCase()) } });
     }
-    return c.json({ positions: out });
+    // Payouts pushed to this wallet (FlowEngine v4), newest first, each with its receipt id and transaction.
+    const paid = await store.all<{ note_id: string; tx: string; ts: number; data: string }>(
+      "SELECT note_id, tx, ts, data FROM events WHERE name = 'PayoutPaid' AND json_extract(data, '$.holder') = ?1 ORDER BY seq DESC LIMIT 200",
+      [address.toLowerCase()]);
+    const payouts = paid.map(r => { const d = JSON.parse(r.data) as Record<string, unknown>; return { noteId: r.note_id, asset: Number(d.asset), period: Number(d.period), amount: String(d.amount), payoutId: String(d.payoutId), tx: r.tx, at: Number(r.ts) }; });
+    return c.json({ positions: out, payouts });
   });
 
   // ---- templates ----------------------------------------------------------------------------------------------

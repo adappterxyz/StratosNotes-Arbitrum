@@ -87,6 +87,19 @@ describe('planning (pure)', () => {
     expect(paid.map(p => [p.address, p.vars.amount])).toEqual([[ALICE, '$15.00'], [BOB, '$10.00']]);
   });
 
+  it('a payment made on an accumulator engine (v4): one DistributionRecorded tells each holder its share', () => {
+    const events = [
+      ev('0xt1', 'HoldingChanged', { asset: 0, owner: ALICE, balance: fx(600) }, NOW - DAY),
+      ev('0xt1', 'HoldingChanged', { asset: 0, owner: BOB, balance: fx(400) }, NOW - DAY),
+      ev('0xt2', 'StepRun', { step: step('Task_Pay1'), kind: 3, actor: ZERO }),
+      ev('0xt2', 'DistributionRecorded', { asset: CASH, period: 1, holding: 0, step: step('Task_Pay1'), payer: ESCROW, perUnit: fx(0.025), total: fx(25), supply: fx(1000), retire: false, hash: '0x' }),
+      ev('0xt2', 'HoldingChanged', { asset: CASH, owner: ESCROW, balance: fx(0) }),
+    ];
+    expect(txDeltas(events, '0xt2').get(ALICE)?.get(CASH)).toBeCloseTo(15);
+    const paid = plan(state(), view(), events).filter(p => p.template === 'payment-made');
+    expect(paid.map(p => [p.address, p.vars.amount])).toEqual([[ALICE, '$15.00'], [BOB, '$10.00']]);
+  });
+
   it('a default: holders get what they received, the issuer is told too', () => {
     const events = [
       ev('0xt3', 'StepRun', { step: step('Task_Default'), kind: 3, actor: ZERO }),
