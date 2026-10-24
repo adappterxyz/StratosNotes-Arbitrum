@@ -7,7 +7,9 @@
  * text is ever clipped). Each card has its own diagram: shapes in SVG on a fixed 200 x 100 grid, labels in
  * HTML positioned on the same grid, so the text stays readable however large the chart is drawn.
  *
- * Hover or focus pauses it; arrows, dots, swipe and the arrow keys turn it. With reduced motion the ring
+ * The ring turns continuously and slowly (about one card every 8 s, easing in after a pause). Hover, focus or a
+ * touch pauses it, and so does being offscreen or a hidden tab; arrows, dots, swipe and the arrow keys snap to a
+ * card and then the slow turn resumes. With reduced motion the ring
  * becomes a static grid. "See this note" opens the full explorer on that card's note and side.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -32,12 +34,12 @@ const baseline = <path d="M14 86H190" stroke="var(--c-axis)" {...thin} />;
 const CARDS: Card[] = [
   {
     side: 'Investors', title: 'Earn yield', note: 'Phoenix on ETH',
-    body: 'A coupon each quarter while the price stays in range.',
+    body: 'A USDG coupon each quarter while the price stays in range.',
     chart: {
       aria: 'A price path that stays between a floor at 70% and an early-repayment level at 100%, with a coupon paid at each of four dates.',
       shapes: <>
         {baseline}
-        <rect x="14" y="30" width="176" height="36" fill="rgba(76,141,255,.10)" />
+        <rect x="14" y="30" width="176" height="36" fill="rgba(31,95,214,.08)" />
         <path d="M14 30H190" stroke="var(--c-alt)" strokeDasharray="4 4" {...thin} />
         <path d="M14 66H190" stroke="var(--c-floor)" strokeDasharray="4 4" {...thin} />
         {[70, 110, 150, 190].map(x => <path key={x} d={`M${x} 18V86`} stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />)}
@@ -48,7 +50,7 @@ const CARDS: Card[] = [
       labels: [
         { x: 16, y: 21, t: 'early repayment 100%', tone: 'alt' },
         { x: 16, y: 74, t: 'floor 70%', tone: 'warn' },
-        { x: 14, y: 3, t: 'coupons', tone: 'pay' },
+        { x: 14, y: 3, t: 'USDG coupons', tone: 'pay' },
       ],
     },
     start: { role: 'investor', goal: 'yield', type: 'phoenix', syms: ['ETH'], preset: 'Dip & recover' },
@@ -62,7 +64,7 @@ const CARDS: Card[] = [
         {baseline}
         <path d="M102 10V86" stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />
         <polyline points="14,86 102,48 190,10" stroke="var(--c-out)" strokeDasharray="5 4" {...thin} />
-        <rect x="14" y="48" width="88" height="38" fill="rgba(47,179,122,.10)" />
+        <rect x="14" y="48" width="88" height="38" fill="rgba(21,128,90,.09)" />
         <polyline points="14,48 102,48 190,29" stroke="var(--c-line)" {...S} />
         <circle cx="102" cy="48" r="3.4" fill="var(--c-line)" />
       </>,
@@ -103,7 +105,7 @@ const CARDS: Card[] = [
       shapes: <>
         {baseline}
         <path d="M14 22H190" stroke="var(--c-axis)" strokeDasharray="2 4" {...thin} />
-        <polygon points="14,22 58,30 102,36 146,42 190,50 190,40 146,34 102,30 58,26" fill="rgba(76,141,255,.16)" />
+        <polygon points="14,22 58,30 102,36 146,42 190,50 190,40 146,34 102,30 58,26" fill="rgba(31,95,214,.12)" />
         <polyline points="14,22 58,30 102,36 146,42 190,50" stroke="var(--c-out)" strokeDasharray="5 4" {...thin} strokeWidth={1.5} />
         <polyline points="14,22 58,26 102,30 146,34 190,40" stroke="var(--c-line)" {...S} />
         {[58, 102, 146, 190].map(x => <rect key={x} x={x - 4} y="74" width="8" height="12" rx="1.5" fill="var(--c-pay)" />)}
@@ -111,7 +113,7 @@ const CARDS: Card[] = [
       labels: [
         { x: 188, y: 9, t: 'shares + coupons', a: 'end', tone: 'pay' },
         { x: 188, y: 56, t: 'shares alone', a: 'end', tone: 'soft' },
-        { x: 16, y: 70, t: 'coupons', tone: 'pay' },
+        { x: 16, y: 70, t: 'USDG coupons', tone: 'pay' },
       ],
     },
     start: { role: 'investor', goal: 'hedge', type: 'reverse-convertible', syms: ['AAPL'], preset: 'Flat', physical: true },
@@ -124,7 +126,7 @@ const CARDS: Card[] = [
       shapes: <>
         <path d="M14 50H190" stroke="var(--c-axis)" {...thin} />
         <rect x="18" y="12" width="20" height="38" rx="3" fill="var(--c-pay)" />
-        <rect x="14" y="62" width="160" height="16" rx="4" {...thin} fill="rgba(111,163,255,.14)" stroke="var(--c-alt)" />
+        <rect x="14" y="62" width="160" height="16" rx="4" {...thin} fill="rgba(31,95,214,.10)" stroke="var(--c-alt)" />
         <path d="M30 66v-3a4 4 0 0 1 8 0v3" stroke="var(--c-alt)" {...thin} strokeWidth={1.6} />
         <rect x="28" y="66" width="12" height="9" rx="1.5" fill="var(--c-alt)" />
         {[70, 110, 150].map(x => <rect key={x} x={x - 6} y="50" width="12" height="7" rx="1.5" fill="var(--c-out)" />)}
@@ -156,7 +158,7 @@ const CARDS: Card[] = [
         <rect x="159" y="12" width="18" height="16" rx="3" {...thin} fill="none" stroke="var(--c-floor)" strokeDasharray="3 3" />
         <circle cx="168" cy="34" r="6" {...thin} fill="none" stroke="var(--c-floor)" strokeWidth={1.6} />
         <path d="M168 40V58" stroke="var(--c-floor)" {...thin} strokeWidth={1.6} />
-        <rect x="104" y="60" width="86" height="28" rx="4" {...thin} fill="rgba(111,163,255,.14)" stroke="var(--c-alt)" />
+        <rect x="104" y="60" width="86" height="28" rx="4" {...thin} fill="rgba(31,95,214,.10)" stroke="var(--c-alt)" />
       </>,
       labels: [
         { x: 30, y: 46, t: 'funded', a: 'middle', tone: 'pay' },
@@ -173,7 +175,10 @@ const CARDS: Card[] = [
 
 const N = CARDS.length;
 const STEP = 360 / N;
-const AUTO_MS = 4600;
+/** Continuous turn: milliseconds per card, and the ease-in after a pause or a snap. */
+const CARD_MS = 8000;
+const RAMP_MS = 1200;
+const SNAP_MS = 900;
 
 interface Dims { w: number; r: number; persp: number; h: number }
 
@@ -189,14 +194,20 @@ function size(W: number): Omit<Dims, 'h'> {
 }
 
 export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => void }) {
-  const [idx, setIdx] = useState(0);
+  // `pos` is the ring's position in cards (continuous); `front` is the nearest card, the one that is active.
+  const pos = useRef(0);
+  const [front, setFront] = useState(0);
   const [paused, setPaused] = useState(false);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const snap = useRef<{ from: number; to: number; at: number } | null>(null);
+  const speed = useRef(0); // 0..1, eases in after a pause or a snap
+  const onScreen = useRef(true);
+  const touchHold = useRef<number | null>(null);
   const [reduced, setReduced] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [dims, setDims] = useState<Dims | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; id: number } | null>(null);
-  const front = ((idx % N) + N) % N;
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -224,14 +235,64 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
     return () => ro.disconnect();
   }, [reduced, measure]);
 
-  // Slow auto-rotation; stops while hovered or focused, and while the tab is hidden.
-  useEffect(() => {
-    if (reduced || paused) return;
-    const t = window.setInterval(() => { if (!document.hidden) setIdx(i => i + 1); }, AUTO_MS);
-    return () => clearInterval(t);
-  }, [reduced, paused]);
+  // Paint the ring at `pos` (no React render per frame), and keep `front` in step.
+  const paint = useCallback(() => {
+    const el = ringRef.current;
+    if (el) el.style.transform = `translateZ(calc(-1 * var(--cr-r))) rotateY(${-pos.current * STEP}deg)`;
+    const f = ((Math.round(pos.current) % N) + N) % N;
+    setFront(prev => (prev === f ? prev : f));
+  }, []);
 
-  const go = useCallback((d: number) => setIdx(i => i + d), []);
+  // Offscreen: no turning (and no frames).
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || reduced) return;
+    const io = new IntersectionObserver(([e]) => { onScreen.current = e.isIntersecting; }, { threshold: 0.05 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [reduced]);
+
+  // The slow continuous turn, and the eased snaps from arrows, dots, swipe and keys.
+  useEffect(() => {
+    if (reduced) return;
+    let raf = 0, last = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const tick = (now: number) => {
+      const dt = Math.min(64, now - last); last = now;
+      const sn = snap.current;
+      if (sn) {
+        const t = Math.min(1, (now - sn.at) / SNAP_MS);
+        pos.current = sn.from + (sn.to - sn.from) * ease(t);
+        if (t >= 1) { snap.current = null; speed.current = 0; }
+        paint();
+      } else if (!paused && onScreen.current && !document.hidden) {
+        speed.current = Math.min(1, speed.current + dt / RAMP_MS);
+        pos.current += (dt / CARD_MS) * ease(speed.current);
+        paint();
+      } else {
+        speed.current = 0;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reduced, paused, paint]);
+
+  /** Snap to a card (relative to the nearest one), then the slow turn resumes. */
+  const snapTo = useCallback((target: number) => {
+    snap.current = { from: pos.current, to: target, at: performance.now() };
+  }, []);
+  const hold = useCallback(() => {
+    setPaused(true);
+    if (touchHold.current) clearTimeout(touchHold.current);
+  }, []);
+  const release = useCallback((afterMs = 0) => {
+    if (touchHold.current) clearTimeout(touchHold.current);
+    touchHold.current = window.setTimeout(() => setPaused(false), afterMs);
+  }, []);
+  useEffect(() => () => { if (touchHold.current) clearTimeout(touchHold.current); }, []);
+
+  const go = useCallback((d: number) => snapTo(Math.round(pos.current) + d), [snapTo]);
 
   if (reduced) {
     return (
@@ -254,10 +315,10 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
       aria-roledescription="carousel"
       aria-label="What a note can do"
       tabIndex={0}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPaused(false); }}
+      onMouseEnter={hold}
+      onMouseLeave={() => release(0)}
+      onFocus={hold}
+      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) release(0); }}
       onKeyDown={e => {
         if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
@@ -269,14 +330,15 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
       </div>
       <div
         className="cr-stage"
-        onPointerDown={e => { drag.current = { x: e.clientX, id: e.pointerId }; }}
+        onPointerDown={e => { drag.current = { x: e.clientX, id: e.pointerId }; if (e.pointerType !== 'mouse') hold(); }}
         onPointerUp={e => {
           const d = drag.current; drag.current = null;
           if (d && d.id === e.pointerId && Math.abs(e.clientX - d.x) > 40) go(e.clientX < d.x ? 1 : -1);
+          if (e.pointerType !== 'mouse') release(2500);
         }}
-        onPointerCancel={() => { drag.current = null; }}
+        onPointerCancel={e => { drag.current = null; if (e.pointerType !== 'mouse') release(2500); }}
       >
-        <div className="cr-ring" style={{ transform: `translateZ(calc(-1 * var(--cr-r))) rotateY(${-idx * STEP}deg)` }}>
+        <div className="cr-ring" ref={ringRef} style={{ transform: 'translateZ(calc(-1 * var(--cr-r))) rotateY(0deg)' }}>
           {CARDS.map((c, i) => {
             // Angular distance from the front, in steps (0 = front).
             const dist = Math.min((i - front + N) % N, (front - i + N) % N);
@@ -305,7 +367,7 @@ export default function Carousel({ onOpen }: { onOpen: (s: ExplorerStart) => voi
             <button
               key={c.title} type="button" role="tab" aria-selected={i === front} aria-label={c.title}
               className={i === front ? 'on' : ''}
-              onClick={() => { const d = (i - front + N) % N; setIdx(idx + (d <= N / 2 ? d : d - N)); }}
+              onClick={() => { const d = (i - front + N) % N; snapTo(Math.round(pos.current) + (d <= N / 2 ? d : d - N)); }}
             ><span /></button>
           ))}
         </div>

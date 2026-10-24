@@ -10,19 +10,22 @@
  *    a slow camera sway, the oracle marks turning) uses the clock.
  *
  * Every material is unlit (basic / line), so the look is crisp line work and flat planes in the
- * navy-and-white palette, with fog for depth. No post-processing, no glow.
+ * white-and-navy palette, with fog towards white for depth. No post-processing, no glow.
  */
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
+  BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
   CylinderGeometry, DoubleSide, EdgesGeometry, Fog, Group, InstancedMesh, Line, LineBasicMaterial,
   LineDashedMaterial, LineLoop, LineSegments, LinearFilter, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
   PlaneGeometry, Points, PointsMaterial, RingGeometry, Scene, SphereGeometry, Sprite, SpriteMaterial, SRGBColorSpace,
   TubeGeometry, Vector3, WebGLRenderer,
 } from 'three';
+import { ENDING_SPLIT, STORY_END } from './beats';
 
+// Light theme: white ground and fog, navy and blue line work, tinted glass sheets, a navy collateral block,
+// green USDG coins. Every colour is dark enough to read on white.
 const C = {
-  bg: 0x0a1628, line: 0x22385c, lineStrong: 0x2e4a75, text: 0xf5f8fc, soft: 0xc3cfe0, muted: 0x8496b0,
-  blue: 0x4c8dff, blueHi: 0x6fa3ff, green: 0x2fb37a, red: 0xe5484d, amber: 0xf5a524, panel: 0x132849,
+  bg: 0xffffff, line: 0xdce3ee, lineStrong: 0xb3c1d6, text: 0x0a1628, soft: 0x3a4b66, muted: 0x5f6e85,
+  blue: 0x1f5fd6, blueHi: 0x1f5fd6, green: 0x15805a, red: 0xc9363b, amber: 0x9a6200, panel: 0x0a1628,
 };
 
 
@@ -84,6 +87,30 @@ function label(text: string, color: string, height = 0.9, weight = 500) {
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
+/** A coin face: a green disc with "USDG" on it, for the caps of every coupon and subscription coin. */
+function usdgFace() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = hex(C.green);
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = 'rgba(255,255,255,.75)';
+  ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(64, 64, 52, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 34px "IBM Plex Mono", ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('USDG', 64, 66);
+  const tex = new CanvasTexture(cv);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+/** Side, top and bottom materials for a cylinder coin: green rim, USDG faces. */
+function coinMaterials() {
+  const face = new MeshBasicMaterial({ map: usdgFace() });
+  return [new MeshBasicMaterial({ color: C.green }), face, face];
+}
+
 export interface SceneOptions { lowPower: boolean; reducedMotion: boolean }
 
 export class NoteScene {
@@ -106,8 +133,10 @@ export class NoteScene {
   private curve!: CatmullRomCurve3;
   private head!: Mesh;
   private preview!: Mesh;
-  private obs: Array<{ ring: Mesh; pulse: Mesh; hexMark: LineLoop; stem: Line; x: number; at: number }> = [];
+  private obs: Array<{ ring: Mesh; pulse: Mesh; hexMark: LineLoop; stem: Line; x: number; at: number; cre: Sprite }> = [];
   private strikeMark!: Group;
+  private strikeCre!: Sprite;
+  private marginCre!: Sprite;
   private coins!: InstancedMesh;
   private coinFrom: Vector3[] = [];
   private coinTo: Vector3[] = [];
@@ -122,6 +151,21 @@ export class NoteScene {
   private dust!: Points;
   private dustBase!: Float32Array;
   private holdersLabel!: Sprite;
+  private couponTags: Array<{ s: Sprite; at: number }> = [];
+  private principal!: InstancedMesh;
+  private principalFrom: Vector3[] = [];
+  private principalTo: Vector3[] = [];
+  private principalTag!: Sprite;
+  private branch!: Mesh;
+  private branchGeo!: TubeGeometry;
+  private branchSegs = 0;
+  private knockTag!: Sprite;
+  private tsla!: InstancedMesh;
+  private tslaFrom: Vector3[] = [];
+  private tslaTo: Vector3[] = [];
+  private tslaTag!: Sprite;
+  private swapMark!: Group;
+  private swapTag!: Sprite;
   private readonly tmp = new Object3D();
   private readonly v = new Vector3();
   private readonly look = new Vector3();
@@ -149,13 +193,13 @@ export class NoteScene {
       for (let z = -40; z <= 24; z += 2) pts.push(-48, FLOOR_Y, z, 48, FLOOR_Y, z);
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-      s.add(new LineSegments(g, new LineBasicMaterial({ color: C.line, transparent: true, opacity: 0.55 })));
+      s.add(new LineSegments(g, new LineBasicMaterial({ color: C.line, transparent: true, opacity: 0.9 })));
     }
 
     // Barrier sheets: horizontal glass at each level, with a crisp front edge and a label.
     const sheets: Array<[number, number, string, number]> = [
-      [LEVEL(1.0), C.blue, 'EARLY REPAYMENT 100%', 0.09],
-      [LEVEL(0.7), C.soft, 'COUPON FLOOR 70%', 0.05],
+      [LEVEL(1.0), C.blue, 'EARLY REPAYMENT 100%', 0.07],
+      [LEVEL(0.7), C.soft, 'COUPON FLOOR 70%', 0.04],
       [LEVEL(0.6), C.amber, 'KNOCK-IN 60%', 0.06],
     ];
     for (const [y, color, text, op] of sheets) {
@@ -177,7 +221,7 @@ export class NoteScene {
     this.curve = new CatmullRomCurve3(pts);
     {
       const ghost = new BufferGeometry().setFromPoints(this.curve.getPoints(N));
-      const gl = new Line(ghost, new LineDashedMaterial({ color: C.soft, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.32 }));
+      const gl = new Line(ghost, new LineDashedMaterial({ color: C.soft, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.4 }));
       gl.computeLineDistances();
       s.add(gl);
       // Its shadow on the floor, for depth.
@@ -203,6 +247,10 @@ export class NoteScene {
       const l = label('STRIKE', hex(C.muted), 0.55);
       l.position.set(X0 - 1.4, FLOOR_Y - 0.9, 0.6);
       this.strikeMark.add(l);
+      this.strikeCre = label('CRE · STRIKE FIXED', hex(C.blue), 0.48, 600);
+      this.strikeCre.position.set(X0 - 2.2, y + 1.6, 0);
+      (this.strikeCre.material as SpriteMaterial).opacity = 0;
+      this.strikeMark.add(this.strikeCre);
     }
     s.add(this.strikeMark);
 
@@ -214,39 +262,47 @@ export class NoteScene {
       const stem = new Line(new BufferGeometry().setFromPoints([new Vector3(x, FLOOR_Y, 0), new Vector3(x, y, 0)]), new LineBasicMaterial({ color: C.lineStrong, transparent: true, opacity: 0.9 }));
       const ring = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.text, transparent: true, side: DoubleSide, depthWrite: false }));
       ring.position.set(x, y, 0);
-      const pulse = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.blue, transparent: true, side: DoubleSide, depthWrite: false, blending: AdditiveBlending }));
+      const pulse = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.blue, transparent: true, side: DoubleSide, depthWrite: false }));
       pulse.position.copy(ring.position);
       const hexMark = new LineLoop(new BufferGeometry().setFromPoints(hexPts), new LineBasicMaterial({ color: C.blue, transparent: true }));
       hexMark.position.set(x, y + 2.1, 0);
       const l = label(k === OBS_X.length - 1 ? 'MATURITY' : `OBSERVATION ${k + 1}`, hex(C.muted), 0.5);
       l.position.set(x - 1.6, FLOOR_Y - 0.9, 0.6);
-      s.add(stem, ring, pulse, hexMark, l);
-      this.obs.push({ ring, pulse, hexMark, stem, x, at: (x - X0) / (X1 - X0) });
+      const cre = label('CHAINLINK CRE', hex(C.blue), 0.42, 600);
+      cre.position.set(x - 1.9, y + 3.35, 0);
+      (cre.material as SpriteMaterial).opacity = 0;
+      s.add(stem, ring, pulse, hexMark, l, cre);
+      this.obs.push({ ring, pulse, hexMark, stem, x, at: (x - X0) / (X1 - X0), cre });
     });
 
     // Holders: a rail at the front where coupons land.
     {
       const rail = new BufferGeometry().setFromPoints([new Vector3(X0 - 4, FLOOR_Y + 0.01, HOLDERS_Z), new Vector3(X1 + 4, FLOOR_Y + 0.01, HOLDERS_Z)]);
       s.add(new Line(rail, new LineBasicMaterial({ color: C.green, transparent: true, opacity: 0.5 })));
-      this.holdersLabel = label('HOLDERS', hex(C.green), 0.6);
+      this.holdersLabel = label('HOLDERS · COUPONS IN USDG', hex(C.green), 0.6);
       this.holdersLabel.position.set(X1 + 4.6, FLOOR_Y + 0.2, HOLDERS_Z);
       s.add(this.holdersLabel);
     }
 
     // Coupons: a handful of coins per observation, falling from the price to the holders' rail.
     const perObs = low ? 5 : 8;
-    const coinGeo = new CylinderGeometry(0.34, 0.34, 0.08, 24);
-    this.coins = new InstancedMesh(coinGeo, new MeshBasicMaterial({ color: C.green }), OBS_X.length * perObs);
+    const coinGeo = new CylinderGeometry(0.5, 0.5, 0.1, 32);
+    this.coins = new InstancedMesh(coinGeo, coinMaterials(), OBS_X.length * perObs);
     let ci = 0;
     OBS_X.forEach((x, k) => {
       const y = pathY(x);
       for (let j = 0; j < perObs; j++) {
         const jitter = (j - (perObs - 1) / 2) * 0.55;
         this.coinFrom.push(new Vector3(x + jitter * 0.3, y, 0));
-        this.coinTo.push(new Vector3(x + jitter, FLOOR_Y + 0.06 + (j % 3) * 0.09, HOLDERS_Z + (Math.floor(j / 3) - 1) * 0.5));
+        this.coinTo.push(new Vector3(x + jitter * 1.6, FLOOR_Y + 0.5 + (j % 3) * 0.12, HOLDERS_Z + (Math.floor(j / 3) - 1) * 0.7));
         this.coinAt.push(this.obs[k].at + j * 0.004);
         ci++;
       }
+      const tag = label('COUPON PAID IN USDG', hex(C.green), 0.5, 600);
+      tag.position.set(x - 2.6, FLOOR_Y + 2.2, HOLDERS_Z + 0.6);
+      (tag.material as SpriteMaterial).opacity = 0;
+      this.couponTags.push({ s: tag, at: this.obs[k].at });
+      s.add(tag);
     });
     this.coins.count = ci;
     s.add(this.coins);
@@ -255,7 +311,7 @@ export class NoteScene {
     this.collateral = new Group();
     {
       const box = new BoxGeometry(5.6, 3.2, 4.2);
-      const body = new Mesh(box, new MeshBasicMaterial({ color: C.panel, transparent: true, opacity: 0.92 }));
+      const body = new Mesh(box, new MeshBasicMaterial({ color: C.panel, transparent: true, opacity: 0.9 }));
       this.collEdges = new LineSegments(new EdgesGeometry(box), new LineBasicMaterial({ color: C.blue }));
       this.collateral.add(body, this.collEdges);
       for (const dy of [-0.7, 0.7]) {
@@ -267,11 +323,14 @@ export class NoteScene {
       this.collateral.position.set(ISSUER.x, FLOOR_Y + 1.6, ISSUER.z);
       this.collLabel = label('COLLATERAL · LOCKED', hex(C.blueHi), 0.6);
       this.collLabel.position.set(ISSUER.x - 2.8, FLOOR_Y + 4.1, ISSUER.z + 2.2);
-      this.collLabelReleased = label('COLLATERAL · RELEASED', hex(C.green), 0.6);
+      this.collLabelReleased = label('CRE · COLLATERAL RELEASED', hex(C.green), 0.6);
       this.collLabelReleased.position.copy(this.collLabel.position);
       const issuerLbl = label('ISSUER', hex(C.muted), 0.55);
       issuerLbl.position.set(ISSUER.x - 2.8, FLOOR_Y - 0.9, ISSUER.z + 2.3);
-      s.add(this.collateral, this.collLabel, this.collLabelReleased, issuerLbl);
+      this.marginCre = label('CRE · MARGIN CHECKED', hex(C.blue), 0.5, 600);
+      this.marginCre.position.set(ISSUER.x - 2.8, FLOOR_Y + 5.0, ISSUER.z + 2.2);
+      (this.marginCre.material as SpriteMaterial).opacity = 0;
+      s.add(this.collateral, this.collLabel, this.collLabelReleased, issuerLbl, this.marginCre);
     }
 
     // Investors: a small crowd at the front left.
@@ -290,9 +349,75 @@ export class NoteScene {
 
     // Subscription flows: stablecoins to the issuer, note units to the investors.
     const flowN = low ? 10 : 18;
-    this.flowCoins = new InstancedMesh(new CylinderGeometry(0.22, 0.22, 0.06, 18), new MeshBasicMaterial({ color: C.green }), flowN);
+    this.flowCoins = new InstancedMesh(new CylinderGeometry(0.3, 0.3, 0.07, 24), coinMaterials(), flowN);
     this.flowUnits = new InstancedMesh(new BoxGeometry(0.34, 0.34, 0.34), new MeshBasicMaterial({ color: C.text }), flowN);
     s.add(this.flowCoins, this.flowUnits);
+    // The swap point: USDG and units cross here in the same transaction (DvP), so the note shows it as one step.
+    {
+      const mid = new Vector3().lerpVectors(INVESTORS, ISSUER, 0.5);
+      this.swapMark = new Group();
+      const ring = new Mesh(new RingGeometry(1.25, 1.4, 48), new MeshBasicMaterial({ color: C.blue, transparent: true, side: DoubleSide, depthWrite: false }));
+      ring.rotation.y = Math.PI / 2;
+      this.swapMark.add(ring);
+      this.swapMark.position.set(mid.x, FLOOR_Y + 1.6, mid.z);
+      this.swapTag = label('ATOMIC SWAP · ONE TRANSACTION', hex(C.blue), 0.55, 600);
+      this.swapTag.position.set(mid.x - 3.4, FLOOR_Y - 0.5, mid.z + 2.4);
+      s.add(this.swapMark, this.swapTag);
+    }
+
+    // Ending A: principal back in USDG, from the issuer to the holders near maturity.
+    {
+      const n = low ? 6 : 10;
+      this.principal = new InstancedMesh(new CylinderGeometry(0.62, 0.62, 0.12, 32), coinMaterials(), n);
+      for (let i = 0; i < n; i++) {
+        this.principalFrom.push(new Vector3(ISSUER.x + 1, FLOOR_Y + 2.4, ISSUER.z + 2));
+        this.principalTo.push(new Vector3(13 + (i % 5) * 1.5, FLOOR_Y + 0.75 + Math.floor(i / 5) * 0.25, HOLDERS_Z - 0.6 + Math.floor(i / 5) * 1.1));
+      }
+      this.principal.count = n;
+      s.add(this.principal);
+      this.principalTag = label('PRINCIPAL BACK · USDG', hex(C.green), 0.62, 600);
+      this.principalTag.position.set(12.4, FLOOR_Y + 3.1, HOLDERS_Z + 0.6);
+      (this.principalTag.material as SpriteMaterial).opacity = 0;
+      s.add(this.principalTag);
+    }
+    // Ending B: the price falls through the knock-in at maturity (a red branch from the last observation).
+    {
+      const x0 = OBS_X[2], x1 = X1, yEnd = LEVEL(0.5);
+      const bp: Vector3[] = [];
+      for (let i = 0; i <= 80; i++) {
+        const tt = i / 80, x = mix(x0, x1, tt);
+        bp.push(new Vector3(x, mix(pathY(x0), yEnd, smooth(tt)) + Math.sin(Math.PI * tt) * 0.5 * Math.sin(x * 2.3), 0.15));
+      }
+      this.branchSegs = low ? 90 : 160;
+      this.branchGeo = new TubeGeometry(new CatmullRomCurve3(bp), this.branchSegs, 0.12, this.pathRadial, false);
+      this.branch = new Mesh(this.branchGeo, new MeshBasicMaterial({ color: C.red }));
+      this.branch.visible = false;
+      s.add(this.branch);
+      this.knockTag = label('CRE · KNOCKED IN, BELOW 60%', hex(C.red), 0.6, 600);
+      this.knockTag.position.set(x1 - 3.5, yEnd - 1.2, 1.2);
+      (this.knockTag.material as SpriteMaterial).opacity = 0;
+      s.add(this.knockTag);
+      // Stock tokens: holders receive TSLA instead of cash.
+      const n = low ? 6 : 9;
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const g2 = cv.getContext('2d')!;
+      g2.fillStyle = hex(C.text); g2.fillRect(0, 0, 128, 128);
+      g2.strokeStyle = 'rgba(255,255,255,.6)'; g2.lineWidth = 6; g2.strokeRect(8, 8, 112, 112);
+      g2.fillStyle = '#ffffff'; g2.font = '700 38px "IBM Plex Mono", ui-monospace, Menlo, monospace';
+      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('TSLA', 64, 66);
+      const tex = new CanvasTexture(cv); tex.colorSpace = SRGBColorSpace;
+      this.tsla = new InstancedMesh(new BoxGeometry(0.95, 0.95, 0.95), new MeshBasicMaterial({ map: tex }), n);
+      for (let i = 0; i < n; i++) {
+        this.tslaFrom.push(new Vector3(x1, yEnd, 0));
+        this.tslaTo.push(new Vector3(12.5 + (i % 5) * 1.6, FLOOR_Y + 0.5, HOLDERS_Z - 0.4 + Math.floor(i / 5) * 1.3));
+      }
+      this.tsla.count = n;
+      s.add(this.tsla);
+      this.tslaTag = label('HOLDERS RECEIVE TSLA TOKENS · ROBINHOOD CHAIN', hex(C.text), 0.58, 600);
+      this.tslaTag.position.set(9.5, FLOOR_Y + 3.0, HOLDERS_Z + 0.8);
+      (this.tslaTag.material as SpriteMaterial).opacity = 0;
+      s.add(this.tslaTag);
+    }
 
     // Dust: depth and quiet motion.
     {
@@ -306,7 +431,7 @@ export class NoteScene {
       }
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(this.dustBase.slice(), 3));
-      this.dust = new Points(g, new PointsMaterial({ color: C.soft, size: 0.07, transparent: true, opacity: 0.45, depthWrite: false }));
+      this.dust = new Points(g, new PointsMaterial({ color: C.blue, size: 0.06, transparent: true, opacity: 0.3, depthWrite: false }));
       s.add(this.dust);
     }
   }
@@ -382,28 +507,40 @@ export class NoteScene {
     (this.collLabel.material as SpriteMaterial).opacity = 1 - release;
     (this.collLabelReleased.material as SpriteMaterial).opacity = release;
 
-    // 2. Subscribe: stablecoins flow to the issuer, units to the investors.
+    // 2. Subscribe: atomic settlement. Each wave of USDG (investors -> issuer) and of note units (issuer ->
+    //    investors) moves in lockstep and crosses at the swap point together: one transaction, no leg alone.
     const sub = span(p, 0.3, 0.45);
     const flowOn = sub > 0 && sub < 1;
     const flowFade = Math.sin(Math.PI * sub);
     const n = this.flowCoins.count;
+    const WAVES = 3, perWave = Math.max(1, Math.floor(n / WAVES));
+    let cross = 0;
     for (let i = 0; i < n; i++) {
-      const ph = frac(sub * 2.4 + i / n + (this.opts.reducedMotion ? 0 : t * 0.05));
-      const arc = Math.sin(Math.PI * ph) * 3.2;
-      // coins: investors -> issuer
-      this.v.lerpVectors(INVESTORS, ISSUER, ph);
-      this.tmp.position.set(this.v.x + 1.2, FLOOR_Y + 0.9 + arc, this.v.z);
-      this.tmp.scale.setScalar(flowOn ? flowFade : 0.0001);
-      this.tmp.rotation.set(Math.PI / 2, 0, ph * 6);
+      const w = Math.floor(i / perWave), j = i % perWave;
+      const ph = clamp(sub * 1.6 - w * 0.28);
+      const e = smoother(ph);
+      cross = Math.max(cross, 1 - Math.min(1, Math.abs(e - 0.5) * 6));
+      const arc = Math.sin(Math.PI * e) * 2.4;
+      const spread = (j - (perWave - 1) / 2) * 0.45;
+      const live = flowOn && ph > 0 && ph < 1;
+      // USDG: investors -> issuer, faces turned to the camera
+      this.v.lerpVectors(INVESTORS, ISSUER, e);
+      this.tmp.position.set(this.v.x + 0.9, FLOOR_Y + 1.6 + arc + spread * 0.2, this.v.z + spread);
+      this.tmp.scale.setScalar(live ? Math.max(0.0001, flowFade) : 0.0001);
+      this.tmp.rotation.set(Math.PI / 2, 0, 0);
       this.tmp.updateMatrix();
       this.flowCoins.setMatrixAt(i, this.tmp.matrix);
-      // units: issuer -> investors
-      this.v.lerpVectors(ISSUER, INVESTORS, ph);
-      this.tmp.position.set(this.v.x - 1.2, FLOOR_Y + 1.2 + arc * 0.8, this.v.z);
-      this.tmp.rotation.set(ph * 3, ph * 4, 0);
+      // note units: issuer -> investors, same instant
+      this.v.lerpVectors(ISSUER, INVESTORS, e);
+      this.tmp.position.set(this.v.x - 0.9, FLOOR_Y + 1.6 - arc * 0.4 + spread * 0.2, this.v.z + spread);
+      this.tmp.rotation.set(e * 3, e * 4, 0);
       this.tmp.updateMatrix();
       this.flowUnits.setMatrixAt(i, this.tmp.matrix);
     }
+    const swapOn = flowOn ? flowFade : 0;
+    this.swapMark.scale.setScalar(0.85 + cross * 0.35);
+    ((this.swapMark.children[0] as Mesh).material as MeshBasicMaterial).opacity = swapOn * (0.45 + cross * 0.55);
+    (this.swapTag.material as SpriteMaterial).opacity = swapOn;
     this.flowCoins.instanceMatrix.needsUpdate = true;
     this.flowUnits.instanceMatrix.needsUpdate = true;
 
@@ -438,6 +575,7 @@ export class NoteScene {
       o.hexMark.visible = check > 0.01;
       o.hexMark.scale.setScalar(0.4 + check * 0.6);
       (o.hexMark.material as LineBasicMaterial).opacity = check;
+      (o.cre.material as SpriteMaterial).opacity = check;
       o.hexMark.quaternion.copy(this.camera.quaternion);
       if (!this.opts.reducedMotion) o.hexMark.rotateZ(t * 0.4 + o.x);
     }
@@ -451,11 +589,15 @@ export class NoteScene {
       this.tmp.position.copy(this.v);
       this.tmp.rotation.set(e * Math.PI * 3, 0, e * Math.PI);
       this.tmp.scale.setScalar(k > 0 ? 1 : 0.0001);
-      if (k >= 1) this.tmp.rotation.set(0, 0, 0);
+      // Landed coins stand tilted towards the camera, so their USDG faces read.
+      if (k >= 1) this.tmp.rotation.set(1.15, 0, 0);
       this.tmp.updateMatrix();
       this.coins.setMatrixAt(i, this.tmp.matrix);
     }
     this.coins.instanceMatrix.needsUpdate = true;
+    for (const c of this.couponTags) (c.s.material as SpriteMaterial).opacity = smooth(clamp((pathT - c.at - 0.02) / 0.05));
+    (this.strikeCre.material as SpriteMaterial).opacity = smooth(clamp(pathT / 0.03)) * (1 - smooth(span(p, 0.86, 0.9)));
+    (this.marginCre.material as SpriteMaterial).opacity = smooth(span(p, 0.5, 0.56)) * (1 - smooth(span(p, 0.84, 0.88)));
 
     // Dust drifts slowly upward.
     if (!this.opts.reducedMotion) {
@@ -481,11 +623,66 @@ export class NoteScene {
   }
 
   /** Render one frame now (first paint, reduced motion, resize). */
-  renderFrame(now = performance.now(), p = this.current) {
+  renderFrame(now = performance.now(), q = this.current) {
     this.clock = now / 1000;
+    // The story up to the coupons runs on the original timeline (0..0.8); ending A finishes it (0.8..1: the
+    // collateral is released); ending B is the other branch, layered on top.
+    const p = q <= STORY_END ? (q / STORY_END) * 0.8 : 0.8 + 0.2 * clamp((q - STORY_END) / (ENDING_SPLIT - STORY_END));
     this.placeCamera(p, this.clock);
     this.apply(p, this.clock);
+    this.applyEndings(q);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** The two endings: A, the price holds (principal back in USDG); B, knocked in (holders receive TSLA tokens). */
+  private applyEndings(q: number) {
+    const a = smoother(span(q, STORY_END + 0.02, STORY_END + 0.12));
+    const b = smoother(span(q, ENDING_SPLIT, ENDING_SPLIT + 0.08));
+    const deliver = smoother(span(q, ENDING_SPLIT + 0.05, ENDING_SPLIT + 0.14));
+    // A: principal coins from the issuer to the holders (fading out when the story turns to ending B).
+    for (let i = 0; i < this.principalFrom.length; i++) {
+      const e = smoother(clamp(a * 1.25 - i * 0.03));
+      this.v.lerpVectors(this.principalFrom[i], this.principalTo[i], e);
+      this.v.y += Math.sin(Math.PI * e) * 3;
+      this.tmp.position.copy(this.v);
+      this.tmp.rotation.set(e >= 1 ? 1.15 : e * Math.PI * 2, 0, 0);
+      this.tmp.scale.setScalar(e > 0 ? Math.max(0.0001, 1 - b) : 0.0001);
+      this.tmp.updateMatrix();
+      this.principal.setMatrixAt(i, this.tmp.matrix);
+    }
+    this.principal.instanceMatrix.needsUpdate = true;
+    (this.principalTag.material as SpriteMaterial).opacity = a * (1 - b);
+    // B: the price falls through the knock-in at maturity: a red branch, then stock tokens to the holders.
+    this.branchGeo.setDrawRange(0, Math.floor(b * this.branchSegs) * this.pathRadial * 6);
+    this.branch.visible = b > 0.001;
+    (this.knockTag.material as SpriteMaterial).opacity = b;
+    for (let i = 0; i < this.tslaFrom.length; i++) {
+      const e = smoother(clamp(deliver * 1.3 - i * 0.04));
+      this.v.lerpVectors(this.tslaFrom[i], this.tslaTo[i], e);
+      this.v.y += Math.sin(Math.PI * e) * 2.4;
+      this.tmp.position.copy(this.v);
+      this.tmp.rotation.set(0, e >= 1 ? -0.35 : e * Math.PI * 2, 0);
+      this.tmp.scale.setScalar(e > 0 ? 1 : 0.0001);
+      this.tmp.updateMatrix();
+      this.tsla.setMatrixAt(i, this.tmp.matrix);
+    }
+    this.tsla.instanceMatrix.needsUpdate = true;
+    (this.tslaTag.material as SpriteMaterial).opacity = deliver;
+    // Camera: ending A frames the holders receiving principal; ending B settles on maturity and the rail.
+    const ca = smooth(span(q, STORY_END + 0.01, STORY_END + 0.08)) * (1 - smooth(b));
+    if (ca > 0) {
+      this.camera.position.set(mix(this.camera.position.x, 22, ca), mix(this.camera.position.y, 10, ca), mix(this.camera.position.z, 31, ca));
+      this.look.set(mix(this.look.x, 6, ca), mix(this.look.y, 1.2, ca), mix(this.look.z, 3, ca));
+      if (this.camera.aspect < 1) { this.camera.position.z += 10 * ca; }
+      this.camera.lookAt(this.look);
+    }
+    if (b > 0) {
+      const k = smooth(b);
+      this.camera.position.set(mix(this.camera.position.x, 30, k), mix(this.camera.position.y, 8.5, k), mix(this.camera.position.z, 27, k));
+      this.look.set(mix(this.look.x, 15, k), mix(this.look.y, 0.4, k), mix(this.look.z, 4.5, k));
+      if (this.camera.aspect < 1) { this.camera.position.z += 10 * k; this.camera.position.x += 4 * k; }
+      this.camera.lookAt(this.look);
+    }
   }
 
   /** Jump straight to a progress value (no easing), e.g. the reduced-motion still. */

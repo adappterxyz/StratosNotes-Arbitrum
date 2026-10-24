@@ -9,13 +9,14 @@ import { BEATS } from './scene/beats';
 
 const APP_URL = '/app/';
 
-export const BEAT_COPY = [
+export const BEAT_COPY: ReadonlyArray<{ k: string; t: string; n?: string }> = [
   { k: 'Issue', t: 'Collateral is locked in the note.' },
-  { k: 'Subscribe', t: 'USDG in, note units out.' },
-  { k: 'Observe', t: 'Chainlink checks the prices on each date.' },
-  { k: 'Pay', t: 'Coupons go to every holder.' },
-  { k: 'Redeem', t: 'Paid in full: collateral released. Missed: it goes to holders.' },
-] as const;
+  { k: 'Subscribe', t: 'Atomic settlement: USDG in, note units out, in one transaction.' },
+  { k: 'Observe', t: 'Chainlink CRE fixes the strike, checks prices and enforces every date.' },
+  { k: 'Pay', t: 'Coupons paid in USDG to every holder.' },
+  { k: 'Ending 1 · price holds', t: 'Full principal back in USDG at redemption, on top of the coupons.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
+  { k: 'Ending 2 · knocked in', t: 'Below the knock-in, holders receive the stock: TSLA tokens on Robinhood Chain.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders.' },
+];
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -106,7 +107,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
       } catch {
         return; // no WebGL: the page stands without the scene
       }
-      if (reduced) scene.snap(0.97);
+      if (reduced) scene.snap(0.8);
       else { scene.snap(progress()); scene.setProgress(progress()); }
       setReady(true);
     };
@@ -132,7 +133,11 @@ export default function Stage({ onTry }: { onTry: () => void }) {
           <div className="wrap hero-inner">
             <span className="badge"><i />Live on testnet</span>
             <h1>Structured notes, on-chain.</h1>
-            <p className="sub">Issued by anyone. Priced and enforced by Chainlink.</p>
+            <p className="sub">Issued by anyone. Coupons in USDG. Chainlink CRE automates the entire lifecycle.</p>
+            <ul className="outcomes" aria-label="How a note can end">
+              <li><b>Price holds</b> coupons in USDG, full principal back</li>
+              <li className="ki"><b>Price falls through the barrier</b> you receive the stock (TSLA on Robinhood Chain)</li>
+            </ul>
             <div className="hero-cta">
               <a href={APP_URL} className="btn btn-primary btn-lg">Open the app</a>
               <button type="button" className="btn btn-ghost btn-lg" onClick={onTry}>Try a note</button>
@@ -140,7 +145,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
             <div className="built-on">
               <span className="built-label">Built on</span>
               <span className="built-mark"><img src="/logos/arbitrum.svg" alt="" height={26} />Arbitrum</span>
-              <span className="built-mark"><img src="/logos/robinhood-chain.svg" alt="" height={24} />Robinhood Chain</span>
+              <span className="built-mark"><img src="/logos/robinhood-chain-dark.svg" alt="" height={24} />Robinhood Chain</span>
               <span className="built-mark"><img src="/logos/chainlink.svg" alt="Chainlink" height={20} /></span>
             </div>
           </div>
@@ -153,6 +158,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
                 <div key={b.k} ref={el => { beatRefs.current[i] = el; }} className="beat" aria-hidden="true">
                   <span className="beat-k"><b>{String(i + 1).padStart(2, '0')}</b> {b.k}</span>
                   <p>{b.t}</p>
+                  {b.n && <span className="beat-n">{b.n}</span>}
                 </div>
               ))}
             </div>
@@ -167,7 +173,7 @@ export default function Stage({ onTry }: { onTry: () => void }) {
       {/* The story in words: visible as a list with reduced motion, for screen readers otherwise. */}
       {(
         <ol className={`beats-list wrap${reduced ? '' : ' sr-only'}`}>
-          {BEAT_COPY.map((b, i) => <li key={b.k}><span className="beat-k"><b>{String(i + 1).padStart(2, '0')}</b> {b.k}</span><p>{b.t}</p></li>)}
+          {BEAT_COPY.map((b, i) => <li key={b.k}><span className="beat-k"><b>{String(i + 1).padStart(2, '0')}</b> {b.k}</span><p>{b.t}</p>{b.n && <span className="beat-n">{b.n}</span>}</li>)}
         </ol>
       )}
     </section>

@@ -4,34 +4,10 @@ import Carousel from './Carousel';
 import Stage from './Stage';
 import ExplorerPanel from './ExplorerPanel';
 import { DEFAULT_START, type ExplorerStart } from './explorer/start';
-import proofJson from './proof.json';
 
 const APP_URL = '/app/';
 const STRATOS_URL = 'https://stratoslab.xyz';
 const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
-
-// Written by scripts/landing-proof.ts from deployments/*.json and docs/evidence.json: no typed-in numbers.
-type Deployment = { key: string; name: string; explorer: string } & (
-  | { deployed: false }
-  | { deployed: true; engine: string; lens: string; faucet: string | null; forwarder: string; block: number; tokens: Record<string, string> }
-);
-interface Run {
-  chain: string; note: string; title: string; reporter: 'cre' | 'fallback';
-  events: Array<{ what: string; detail: string; tx: string; gas?: string }>;
-  paid: Array<{ holder: string; units: string; paid: string }>;
-}
-const proof = proofJson as unknown as { generatedAt: string; deployments: Deployment[]; runs: Run[] };
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-/** A one-word label for a proof step. */
-function stepLabel(what: string) {
-  if (/collateral/i.test(what)) return 'Collateral';
-  if (/subscribes/i.test(what)) return 'Subscribe';
-  if (/strike/i.test(what)) return 'Strike';
-  if (/observes/i.test(what)) return 'Observe';
-  if (/funds/i.test(what)) return 'Funded';
-  if (/pays/i.test(what)) return 'Paid';
-  return what.split(' ').slice(-1)[0];
-}
 
 /** The wordmark: lowercase, with the dot as the one blue mark. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
@@ -76,8 +52,7 @@ export default function Landing() {
     return () => window.removeEventListener('keydown', onKey);
   }, [menu]);
 
-  const live = proof.deployments.filter((d): d is Extract<Deployment, { deployed: true }> => d.deployed);
-  const links = [['#how', 'How it works'], ['#notes', 'What notes do'], ['#arbitrum', 'Why Arbitrum'], ['#proof', 'Proof']];
+  const links = [['#how', 'How it works'], ['#notes', 'What notes do'], ['#arbitrum', 'Why Arbitrum']];
 
   return (
     <div className="sn-root" ref={rootRef}>
@@ -133,7 +108,7 @@ export default function Landing() {
                 <p>Issue, subscribe, observe and pay: every note's lifecycle, on stocks or crypto.</p>
               </div>
               <div className="card" data-reveal>
-                <div className="card-logo"><img src="/logos/robinhood-chain.svg" alt="" height={24} />Robinhood Chain</div>
+                <div className="card-logo"><img src="/logos/robinhood-chain-dark.svg" alt="" height={24} />Robinhood Chain</div>
                 <span className="tag">Asset chain · testnet 46630</span>
                 <p>Where the stock tokens live: TSLA and AMZN pledged as collateral or delivered at maturity.</p>
               </div>
@@ -143,46 +118,6 @@ export default function Landing() {
                 <p>Prices for ETH, BTC, SOL, TSLA, NVDA, AAPL, AMZN and SPY, checked on-chain. CCIP links the two chains (live on testnet).</p>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section id="proof">
-          <div className="wrap">
-            <div className="section-head" data-reveal>
-              <span className="eyebrow">Proof</span>
-              <h2>Two notes, start to finish, on testnet.</h2>
-              <p>Every step is a transaction. Every price came from Chainlink CRE.</p>
-            </div>
-            <div className="runs">
-              {proof.runs.map(r => {
-                const dep = proof.deployments.find(d => d.key === r.chain);
-                const ex = dep?.explorer;
-                const [title, outcome] = r.title.split(': ');
-                return (
-                  <article key={r.note} className="run-card" data-reveal>
-                    <h3>{title.replace(/^Demo /, '')}</h3>
-                    {outcome && <p className="run-outcome">{outcome}</p>}
-                    <ol className="run-steps">
-                      {r.events.map((e, i) => {
-                        const k = stepLabel(e.what);
-                        const cl = e.what.startsWith('Chainlink');
-                        const body = <><span className="run-k">{k}</span><span className="mono">{e.tx.slice(0, 8)}</span></>;
-                        return (
-                          <li key={e.tx + i} className={cl ? 'cl' : undefined} title={`${e.what}: ${e.detail}`}>
-                            {ex ? <a href={`${ex}/tx/${e.tx}`} target="_blank" rel="noopener">{body}</a> : body}
-                          </li>
-                        );
-                      })}
-                    </ol>
-                    {r.paid.length > 0 && (
-                      <p className="paid">{r.paid.map(p => <span key={p.holder}>{p.units} units → <b className="up">{p.paid}</b></span>)}</p>
-                    )}
-                    {dep && dep.deployed && <a className="run-contract mono" href={`${ex}/address/${dep.engine}`} target="_blank" rel="noopener">engine {short(dep.engine)}</a>}
-                  </article>
-                );
-              })}
-            </div>
-            {live.length === 0 && <p className="muted">Nothing is deployed yet.</p>}
           </div>
         </section>
 

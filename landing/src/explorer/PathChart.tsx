@@ -4,7 +4,7 @@ import { clamp, HI, LO, MONTHS, N, type Terms } from './model';
 // Drawn at the container's own pixel size, so labels stay readable on a phone instead of shrinking with a fixed viewBox.
 const PL = 44, PR = 40, PT = 26, PB = 40;
 
-export const LINE_COLORS = ['var(--purple)', 'var(--cyan)', '#f5b14c'];
+export const LINE_COLORS = ['var(--purple)', 'var(--cyan)', 'var(--amber)'];
 
 interface Props {
   terms: Terms;

@@ -24,28 +24,28 @@
 .xs-goal b { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
 .xs-goal span { font-size: 13px; color: var(--text-soft); line-height: 1.4; }
 .xs-goal:hover { border-color: var(--border-strong); }
-.xs-goal.on { border-color: var(--purple); background: rgba(111, 163, 255, .07); }
+.xs-goal.on { border-color: var(--purple); background: rgba(31, 95, 214, .06); }
 .xs-picks { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
 .xs-picks .xs-kicker { width: 100%; }
 .xs-pick { flex: 1 1 220px; text-align: left; display: grid; gap: 2px; padding: 10px 14px; border-radius: 10px; border: 1px dashed var(--border-strong); background: none; transition: border-color .2s, background .2s; }
 .xs-pick b { font-size: 14px; font-weight: 600; }
 .xs-pick span { font-size: 12.5px; color: var(--text-soft); line-height: 1.4; }
-.xs-pick.on { border-style: solid; border-color: var(--blue); background: rgba(76, 141, 255, .08); }
+.xs-pick.on { border-style: solid; border-color: var(--blue); background: rgba(31, 95, 214, .07); }
 
 /* terms + market */
 .xs-main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
 .xs-terms { display: grid; gap: 14px; align-content: start; }
-.xs-block { display: grid; gap: 10px; padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255, 255, 255, .02); }
+.xs-block { display: grid; gap: 10px; padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(10, 22, 40, .02); }
 .xs-seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .xs-seg button, .xs-presets button { border: 1px solid var(--border); background: var(--glass); padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); transition: all .2s; }
-.xs-seg button.on, .xs-presets button.on { border-color: var(--purple); color: var(--text); background: rgba(111, 163, 255, .1); }
+.xs-seg button.on, .xs-presets button.on { border-color: var(--purple); color: var(--text); background: rgba(31, 95, 214, .08); }
 .xs-blurb { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; }
 .xs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .xs-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: none; padding: 5px 11px; border-radius: 999px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-soft); }
 .xs-chip i { width: 8px; height: 8px; border-radius: 50%; }
-.xs-chip.stock { border-color: rgba(40, 160, 240, .3); }
-.xs-chip.on { color: var(--text); border-color: var(--purple); background: rgba(111, 163, 255, .1); }
-.xs-chip.stock.on { border-color: var(--arb); background: rgba(40, 160, 240, .12); }
+.xs-chip.stock { border-color: rgba(18, 105, 159, .35); }
+.xs-chip.on { color: var(--text); border-color: var(--purple); background: rgba(31, 95, 214, .08); }
+.xs-chip.stock.on { border-color: var(--arb); background: rgba(18, 105, 159, .1); }
 .xs-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); cursor: pointer; }
 .xs-check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .xs-check.strong { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--text); }
@@ -64,14 +64,14 @@
 .xs-legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 
 .pchart { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
-.pchart .plot { fill: rgba(255, 255, 255, .015); }
-.pchart .grid { stroke: rgba(255, 255, 255, .06); }
+.pchart .plot { fill: rgba(10, 22, 40, .015); }
+.pchart .grid { stroke: rgba(10, 22, 40, .07); }
 .pchart .tick { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
 .pchart-wrap { min-width: 0; width: 100%; }
 .pchart .tick.faded { opacity: .45; }
-.pchart .after-call { fill: rgba(0, 0, 0, .35); }
+.pchart .after-call { fill: rgba(10, 22, 40, .06); }
 .pchart .lvl { stroke-width: 1.2; stroke-dasharray: 5 4; }
-.pchart .lvl.strike { stroke: rgba(255, 255, 255, .35); stroke-dasharray: none; }
+.pchart .lvl.strike { stroke: rgba(10, 22, 40, .4); stroke-dasharray: none; }
 .pchart .lvl.call { stroke: var(--blue); }
 .pchart .lvl.coupon { stroke: var(--purple); }
 .pchart .lvl.ki { stroke: var(--down); }
@@ -88,12 +88,12 @@
 .pchart .handle .hit { fill: transparent; }
 .pchart .handle .dot { stroke-width: 2.5; transition: r .15s; }
 .pchart .handle:hover .dot, .pchart .handle:focus-visible .dot { r: 10; }
-.pchart .handle:focus-visible .hit { fill: rgba(111, 163, 255, .14); }
+.pchart .handle:focus-visible .hit { fill: rgba(31, 95, 214, .14); }
 .pchart .handle.after { opacity: .45; }
 .pchart .val { fill: var(--text); font-family: var(--font-mono); font-size: 12px; paint-order: stroke; stroke: var(--bg-1); stroke-width: 4px; pointer-events: none; }
 
 /* outcome */
-.xs-out { display: grid; gap: 16px; padding: 18px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: rgba(255, 255, 255, .025); }
+.xs-out { display: grid; gap: 16px; padding: 18px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: rgba(10, 22, 40, .05); }
 @media (prefers-reduced-motion: no-preference) { .xs-out { animation: xs-in .35s ease-out; } }
 @keyframes xs-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .xs-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
@@ -134,7 +134,7 @@
 .xs-pledge div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-soft); }
 .xs-pledge b { color: var(--text); font-family: var(--font-mono); font-weight: 500; }
 .xs-default { display: grid; gap: 10px; padding: 14px; border-radius: 10px; border: 1px dashed var(--border-strong); }
-.xs-default.on { border-style: solid; border-color: rgba(229, 72, 77, .45); background: rgba(229, 72, 77, .05); }
+.xs-default.on { border-style: solid; border-color: rgba(201, 54, 59, .45); background: rgba(201, 54, 59, .05); }
 .xs-default p { font-size: 14.5px; line-height: 1.55; color: var(--text-soft); max-width: 76ch; }
 .xs-default p b { color: var(--text); }
 
