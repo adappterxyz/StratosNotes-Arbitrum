@@ -31,7 +31,7 @@ Contracts: FlowEngine v4 `0x7d36Da43724b09Bb03ED98a4574685070073020b` and HomeGa
 - **Issuer wallet** (desktop browser): test ETH on Arbitrum Sepolia and Robinhood Chain testnet (chain 46630);
   Robinhood's TSLA from faucet.testnet.chain.robinhood.com; a little USDG from faucet.paxos.com to fund the coupon.
   The app's **Get testnet tokens** menu links each faucet.
-- **Investor wallet** on a phone, connected by WalletConnect: test ETH and USDG on Arbitrum Sepolia.
+- **Investor:** the demo investor autopilot on the server buys 20 units within ~15 s of the book opening and claims each payout (see [DEMO-AUTOMATION.md](DEMO-AUTOMATION.md)). A phone wallet over WalletConnect works too, if you want to show it.
 - **Both wallets email-verified** before recording, with inboxes you can show. Subscribe both to alerts at
   `/app/alerts`.
 - **CRE** running through the simulator with `--broadcast` (it writes the strike, observations, collateral checks
@@ -47,7 +47,7 @@ Contracts: FlowEngine v4 `0x7d36Da43724b09Bb03ED98a4574685070073020b` and HomeGa
 | T−60 min | **Take A: lock.** Issue → Structured product → **Collateral held on: Robinhood Chain**, pick TSLA. **Lock collateral on Robinhood Chain**: the wallet switches chain, approves and locks (CCIP fee in ETH). Keep the CCIP message link. |
 | T−40 min | The TSLA.rh receipts show as credited on Arbitrum (about 21 minutes after the lock). |
 | T−35 min | **Take B: issue.** A short schedule: book open about 10 minutes, strike a few minutes after it closes, two observations 5 minutes apart, short payment lag. Pledge the TSLA.rh at Approve Terms. Grace of a few hours. |
-| T−30 min | **Take C: subscribe** from the phone. |
+| T−25 min | **Lock 1 TSLA on Robinhood Chain** from the issue page (off camera), so the recording never waits for CCIP. |
 | Strike time | **Take D: strike.** Wait for the CRE strike report; open it on Arbiscan. |
 | After the last observation | **Take E: claim.** The issuer bot funds the payments; the note redeems. The investor clicks **Claim** in Portfolio; show the receipt id. |
 | Right after | **Take F: release.** The bot withdraws the issuer's receipts: TSLA.rh burned, release queued, CRE flushes over CCIP. About 18 minutes later Portfolio shows "Released to your wallet on Robinhood Chain" with the CCIP link. |
@@ -62,7 +62,7 @@ Total wall time is about two hours for one take of each step. If anything stalls
 | 0:00 | — | https://notes.markets/app, the marketplace | "This is notes.markets. Every note here runs on Arbitrum. Its collateral can sit on another chain." |
 | 0:10 | B | Issue: template, terms, collateral list showing TSLA locked on Robinhood Chain | "I'm the issuer. I pick a template, set the terms, and pledge 3 TSLA. Robinhood's real TSLA, locked in a vault on Robinhood Chain testnet." |
 | 0:22 | A | The lock panel, then the CCIP explorer message | "The lock went over Chainlink CCIP. Arbitrum credited a receipt that only the note can hold. Nothing is bridged or tradable." |
-| 0:32 | C | Phone: WalletConnect, verified email, **Subscribe** | "An investor subscribes from a phone wallet. Units are an ERC-20, and only verified wallets can hold them." |
+| 0:32 | C | Note page: the book fills, 20 sold | "An investor buys in with USDG. The note is an ERC-20 token, and only verified wallets can hold it." |
 | 0:45 | D | Note page: strike; Arbiscan report transaction | "At the strike date Chainlink CRE reads TSLA from Robinhood Chain's own Chainlink feed and writes it to the note." |
 | 0:58 | E | Portfolio: **Claim**, then the receipt id | "Coupons and the redemption accrue in the note. The investor claims them in one transaction, with a receipt anyone can recompute from the logs." |
 | 1:12 | F | Portfolio: "Released to your wallet on Robinhood Chain", CCIP link; Robinhood explorer transfer | "At redemption the receipt is burned and CRE sends the release over CCIP. The TSLA is back on Robinhood Chain. No one had to redeem anything." |
@@ -92,7 +92,7 @@ In that run the issuer withdrew by hand and the bot's fallback flush sent the re
 bot withdraws; CRE flushes first). Say so if asked.
 
 Other fallbacks:
-- **Phone wallet won't connect:** subscribe from a second desktop browser wallet. Say the phone path is the same.
+- **The book doesn't fill:** the investor autopilot only picks up an Arbitrum note named "TSLA Reverse Convertible"; issue from the demo link.
 - **Email code is slow:** show the dialog and say the contract refuses unverified wallets.
 - **Site is down:** play the recorded takes; open the proof links above directly on the explorers.
 
@@ -101,7 +101,7 @@ Other fallbacks:
 1. Marketplace at `/app` (desktop).
 2. Issue: template, terms, collateral with "Collateral held on: Robinhood Chain".
 3. The lock panel and the CCIP message page (Robinhood → Arbitrum).
-4. Phone screen: WalletConnect pairing, verified email, Subscribe confirmation.
+4. The note page as the book fills (20 sold).
 5. Note page after subscribing: holders, collateral coverage, schedule.
 6. The CRE strike transaction on Arbiscan (`onReport` through the forwarder).
 7. Portfolio: Claim, then the payout row with its receipt id.
