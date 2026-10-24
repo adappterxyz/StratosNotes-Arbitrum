@@ -12,6 +12,10 @@ import {MockCCIPRouter} from "./mocks/MockCCIPRouter.sol";
 import {MockERC20, FreezableERC20} from "./mocks/MockERC20.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/contracts/applications/CCIPReceiver.sol";
 import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
+import {IAny2EVMMessageReceiver} from "@chainlink/contracts-ccip/contracts/interfaces/IAny2EVMMessageReceiver.sol";
+import {CreReceiver} from "../src/cre/CreReceiver.sol";
+import {IReceiver} from "../src/cre/IReceiver.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// Stage 1 of the cross-chain lifecycle: a note runs on its home chain (Arbitrum) while its collateral stays
 /// locked on other chains (Robinhood Chain, Base), coordinated by CCIP. The note fixtures that pledge collateral
@@ -45,11 +49,11 @@ contract CrossChainTest is ProductsBase {
         rhRouter.connect(homeRouter);
         baseRouter.connect(homeRouter);
 
-        gateway = new HomeGateway(address(homeRouter), admin, address(engine));
+        gateway = new HomeGateway(address(homeRouter), admin, address(engine), forwarder);
         rhVault = new RemoteVault(address(rhRouter), admin, ARB);
         baseVault = new RemoteVault(address(baseRouter), admin, ARB);
-        rhEth = new FreezableERC20("ETH.rh", 18);
-        baseUsdg = new FreezableERC20("USDG.base", 6);
+        rhEth = new FreezableERC20("ETH.rh", decimals[2]);
+        baseUsdg = new FreezableERC20("USDG.base", decimals[1]);
 
         vm.startPrank(admin);
         rhVault.setHomeGateway(address(gateway));
@@ -58,9 +62,10 @@ contract CrossChainTest is ProductsBase {
         baseVault.setToken(address(baseUsdg), true);
         gateway.setRemote(RH, address(rhVault), 300_000);
         gateway.setRemote(BASE, address(baseVault), 300_000);
-        rEth = RemoteReceipt(gateway.registerReceipt(RH, address(rhEth), 18, "ETH locked on Robinhood Chain", "ETH.rh"));
-        rUsd = RemoteReceipt(gateway.registerReceipt(BASE, address(baseUsdg), 6, "USDG locked on Base", "USDG.base"));
+        rEth = RemoteReceipt(gateway.registerReceipt(RH, address(rhEth), decimals[2], "ETH locked on Robinhood Chain", "ETH.rh"));
+        rUsd = RemoteReceipt(gateway.registerReceipt(BASE, address(baseUsdg), decimals[1], "USDG locked on Base", "USDG.base"));
         vm.stopPrank();
+        gateway.fundFees{value: 1 ether}(); // the release fee pool (the issuer or the protocol funds it)
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -186,22 +191,38 @@ contract CrossChainTest is ProductsBase {
         return decimals[f.tokenOf[a]];
     }
 
-    /// Withdraw every balance as its ERC-20, and redeem receipts for the real asset on its chain.
+    /// Withdraw every balance. Receipts never reach the wallet: they are burned on the way out and a RELEASE is
+    /// queued; a flush (anyone, fees from the pool) sends it and the vault pays the real asset on its chain.
     function _cashOut(Fixture memory f, uint256 pid, address who, int256[] memory expected, string memory label) internal {
         for (uint8 a = CASH; a < f.tokenOf.length; a++) {
             int256 got = engine.balanceOf(pid, who, a);
             assertApproxEqAbs(got, expected[a], uint256(TOLERANCE), string.concat(f.name, ": ", label, " asset ", vm.toString(a)));
             uint256 base = uint256(got * int256(10 ** _decimalsOf(f, a)) / SCALE);
             if (base == 0) continue;
+            RemoteReceipt r = _receiptFor(f, a);
+            uint256 queued = gateway.releasesQueued();
             vm.prank(who);
             engine.withdraw(pid, a, base);
-            RemoteReceipt r = _receiptFor(f, a);
             if (address(r) != address(0)) {
-                assertEq(r.balanceOf(who), base, "receipts withdrawn from the engine");
-                assertEq(_redeem(r, who, base), base, string.concat(f.name, ": ", label, " paid in the real asset on its chain"));
-                assertEq(r.balanceOf(who), 0, "receipts burned");
+                assertEq(r.balanceOf(who), 0, "receipts burned on leaving the engine, never in the wallet");
+                assertEq(gateway.releasesQueued(), queued + 1, "one release queued");
+                (address qr,, address qto, uint96 qamount) = gateway.releases(queued + 1);
+                assertEq(qr, address(r));
+                assertEq(qto, who, "released to the same address on the asset chain");
+                assertEq(uint256(qamount), base);
+                assertEq(_flushAndDeliver(r, who), base, string.concat(f.name, ": ", label, " paid in the real asset on its chain"));
             }
         }
+    }
+
+    /// Anyone flushes the queue (CCIP fees from the pool); CCIP delivers; what `who` received on r's asset chain.
+    function _flushAndDeliver(RemoteReceipt r, address who) internal returns (uint256 got) {
+        FreezableERC20 token = r == rEth ? rhEth : baseUsdg;
+        uint256 before = token.balanceOf(who);
+        vm.prank(keeper);
+        gateway.flush(25);
+        homeRouter.deliverAll();
+        got = token.balanceOf(who) - before;
     }
 
     function _runRemote(uint256 idx) internal returns (uint256 pid, address issuer) {
@@ -461,5 +482,295 @@ contract CrossChainTest is ProductsBase {
         vm.prank(admin);
         rhVault.pause();
         assertEq(_redeem(rEth, alice, 2e9), 2e9, "releases pay while new locks are paused");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Auto-release (v2): receipts leaving the engine are burned and released on their own chain
+    // ---------------------------------------------------------------------------------------------------------
+
+    bytes32 constant PAYOUT_DEFERRED = keccak256("PayoutDeferred(uint256,uint8,uint64,address,uint256)");
+    bytes32 constant FLUSH_STALLED = keccak256("FlushStalled(uint256,uint256,uint256)");
+
+    /// `who` gets `base` receipts out of the engine, as the engine's own transfer does (withdraw / push).
+    function _outOfEngine(RemoteReceipt r, address who, uint256 base) internal {
+        address locker = makeAddr("locker");
+        _lockRemote(r, locker, base, true);
+        vm.prank(locker);
+        r.transfer(address(engine), base); // pledging is a transfer into the engine
+        vm.prank(address(engine));
+        r.transfer(who, base);
+    }
+
+    function _drainPool() internal {
+        uint256 bal = address(gateway).balance;
+        vm.prank(admin);
+        gateway.withdrawFees(payable(admin), bal);
+    }
+
+    function _flushReport(uint256 maxItems) internal {
+        vm.prank(forwarder);
+        gateway.onReport("", abi.encode(uint8(1), maxItems));
+    }
+
+    /// A default whose collateral payout is PUSHED (keeper, pushTo): each holder's receipts are burned inside the
+    /// engine's capped push transfer and queued; one CRE report flushes them; CCIP delivers; the vault pays every
+    /// holder the real asset on its own chain, exactly the reference amounts. Nothing is deferred.
+    function test_autoRelease_pushedDefault_creFlush_paysHoldersOnTheirChain() public {
+        uint256 idx = _idx("margin call not cured");
+        Fixture memory f = _fixture(idx);
+        address issuer = makeAddr(string.concat("issuer", vm.toString(idx)));
+        uint256 pid = _issueRemote(f, issuer, makeAddr("pa"));
+        address[] memory holders = _holders(f, idx);
+        for (uint256 k = 0; k < f.investorUnits.length; k++) _subscribe(f, pid, holders[k], f.investorUnits[k], f.investorCash[k]);
+        _playRemote(f, pid, issuer);
+        assertTrue(f.defaulted);
+        uint8 a = 0;
+        for (uint8 x = CASH + 1; x < f.tokenOf.length; x++) if (address(_receiptFor(f, x)) == address(rEth)) a = x;
+        assertGt(a, 0, "the note's ETH collateral is the Robinhood receipt");
+        uint256[] memory owed = new uint256[](holders.length);
+        uint256 expectQueued;
+        for (uint256 k = 0; k < holders.length; k++) {
+            owed[k] = uint256(engine.balanceOf(pid, holders[k], a) * int256(10 ** rEth.decimals()) / SCALE);
+            if (owed[k] > 0) expectQueued++;
+        }
+        assertGt(expectQueued, 0, "holders are owed collateral");
+        uint256 q0 = gateway.releasesQueued();
+        vm.recordLogs();
+        vm.prank(keeper);
+        engine.pushTo(pid, a, holders);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) assertTrue(logs[i].topics[0] != PAYOUT_DEFERRED, "no push deferred: the release fits the cap");
+        assertEq(gateway.releasesQueued(), q0 + expectQueued, "one release queued per holder");
+        uint256[] memory before = new uint256[](holders.length);
+        for (uint256 k = 0; k < holders.length; k++) {
+            assertEq(rEth.balanceOf(holders[k]), 0, "no receipt rests in a wallet");
+            assertLt(engine.balanceOf(pid, holders[k], a), SCALE / int256(10 ** rEth.decimals()) + 1, "paid out of the note");
+            before[k] = rhEth.balanceOf(holders[k]);
+        }
+        _flushReport(25);
+        homeRouter.deliverAll();
+        for (uint256 k = 0; k < holders.length; k++) {
+            assertApproxEqAbs(rhEth.balanceOf(holders[k]) - before[k], owed[k], 1, "the vault paid the real asset on Robinhood");
+        }
+        (uint256 pending,,,,) = gateway.releaseQueue();
+        assertEq(pending, 0, "queue empty");
+        assertEq(rhVault.locked(address(rhEth)), rEth.totalSupply(), "locked = receipts outstanding");
+    }
+
+    /// What queueing costs inside the engine's transfer, against the 150k gas the engine gives each pushed transfer.
+    function test_autoRelease_gasFitsThePushCap() public {
+        address holder = makeAddr("holder");
+        address locker = makeAddr("locker");
+        _lockRemote(rEth, locker, 10e9, true);
+        vm.prank(locker);
+        rEth.transfer(address(engine), 10e9);
+        // A fresh release (new queue entry), then one that joins it (same receipt and recipient, unsent).
+        vm.prank(address(engine));
+        uint256 g = gasleft();
+        rEth.transfer(holder, 4e9);
+        uint256 fresh = g - gasleft();
+        vm.prank(address(engine));
+        g = gasleft();
+        rEth.transfer(holder, 1e9);
+        uint256 joined = g - gasleft();
+        console2.log("receipt transfer out of the engine, new release queued (gas):", fresh);
+        console2.log("receipt transfer out of the engine, joins an open release (gas):", joined);
+        assertLt(fresh, 120_000, "well under the engine's 150k push cap");
+        // Exactly as the engine pushes: a call with 150k gas must succeed for a third address (cold everything).
+        address other = makeAddr("other");
+        vm.prank(address(engine));
+        (bool ok,) = address(rEth).call{gas: 150_000}(abi.encodeCall(rEth.transfer, (other, 2e9)));
+        assertTrue(ok, "fits the 150k cap");
+        assertEq(gateway.releasesQueued(), 2);
+        (,, uint256 queued, uint256 pool,) = gateway.releaseQueue();
+        assertEq(queued, 2);
+        assertEq(pool, 1 ether);
+        // Flushing: per release sent (mock router; a real on-ramp adds its own ~100-200k).
+        vm.prank(keeper);
+        g = gasleft();
+        gateway.flush(25);
+        console2.log("flush of 2 releases (gas, mock router):", g - gasleft());
+    }
+
+    /// The pool runs dry: what it cannot pay for stays queued (FlushStalled) and goes on the next flush. Nothing
+    /// is lost and nothing is sent twice.
+    function test_autoRelease_poolEmpty_staysQueued_thenRetried() public {
+        _drainPool();
+        address[3] memory who = [makeAddr("h1"), makeAddr("h2"), makeAddr("h3")];
+        for (uint256 k = 0; k < 3; k++) _outOfEngine(rEth, who[k], (k + 1) * 1e9);
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 0, "nothing sent with an empty pool");
+        gateway.fundFees{value: FEE}();
+        vm.recordLogs();
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 1, "one release paid for");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool stalled;
+        for (uint256 i = 0; i < logs.length; i++) if (logs[i].topics[0] == FLUSH_STALLED) stalled = true;
+        assertTrue(stalled, "the flush says where it stopped");
+        (uint256 pending, uint256 head,,, uint256 nextFee) = gateway.releaseQueue();
+        assertEq(pending, 2);
+        assertEq(head, 2);
+        assertEq(nextFee, FEE);
+        (bool ok,) = address(gateway).call{value: 2 * FEE}(""); // plain ETH funds the pool too
+        assertTrue(ok);
+        _flushReport(25);
+        homeRouter.deliverAll();
+        for (uint256 k = 0; k < 3; k++) assertEq(rhEth.balanceOf(who[k]), (k + 1) * 1e9, "each paid once, in full");
+        (pending,,,,) = gateway.releaseQueue();
+        assertEq(pending, 0);
+        assertEq(rhVault.locked(address(rhEth)), 0);
+    }
+
+    /// At most once end to end: a sent release is never sent again, and a replayed or duplicated RELEASE pays nothing.
+    function test_autoRelease_atMostOnce() public {
+        address h = makeAddr("h");
+        _outOfEngine(rEth, h, 3e9);
+        vm.prank(keeper);
+        gateway.flush(25);
+        uint256 m = homeRouter.count() - 1;
+        homeRouter.deliver(m);
+        homeRouter.deliver(m); // CCIP retry / manual re-execution
+        assertEq(rhEth.balanceOf(h), 3e9, "paid once");
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 0, "nothing to resend");
+        vm.expectRevert(abi.encodeWithSelector(HomeGateway.NotQueued.selector, 1));
+        gateway.sendQueued{value: FEE}(1);
+        assertTrue(rhVault.released(gateway.releaseId(1)), "the vault recorded the id");
+        assertTrue(gateway.releaseId(1) != keccak256(abi.encode(block.chainid, address(gateway), uint256(1))), "queue ids never collide with redeem ids");
+        // The same id carried by another message from the gateway (e.g. a forged duplicate) pays nothing.
+        _lockRemote(rEth, makeAddr("x"), 5e9, true);
+        bytes memory rel = CrossChainMessages.encode(CrossChainMessages.RELEASE, gateway.releaseId(1), h, address(rhEth), 3e9);
+        rhRouter.execute(ARB, address(gateway), address(rhVault), rel, bytes32("dup"));
+        assertEq(rhEth.balanceOf(h), 3e9, "still paid once");
+    }
+
+    /// A holder need not wait for the pool or the queue order: sendQueued with its own fee; flush skips it.
+    function test_autoRelease_sendQueued_ownFee_outOfOrder() public {
+        _drainPool();
+        address h1 = makeAddr("h1");
+        address h2 = makeAddr("h2");
+        _outOfEngine(rEth, h1, 1e9);
+        _outOfEngine(rEth, h2, 2e9);
+        vm.deal(h2, 1 ether);
+        vm.prank(h2);
+        gateway.sendQueued{value: 1 ether}(2);
+        assertEq(h2.balance, 1 ether - FEE, "excess refunded");
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h2), 2e9);
+        gateway.fundFees{value: FEE}();
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 1, "only the first is left");
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h1), 1e9);
+        assertEq(gateway.releaseHead(), 3, "the head moves past releases sent out of order");
+    }
+
+    /// Releases to the same account that are not sent yet add up: dust withdrawals cost the pool one message.
+    function test_autoRelease_unsentReleasesToTheSameAccountJoin() public {
+        address h = makeAddr("h");
+        _outOfEngine(rEth, h, 1e9);
+        _outOfEngine(rEth, h, 2e9);
+        assertEq(gateway.releasesQueued(), 1, "joined");
+        (,,, uint96 amount) = gateway.releases(1);
+        assertEq(uint256(amount), 3e9);
+        vm.prank(keeper);
+        gateway.flush(25);
+        _outOfEngine(rEth, h, 4e9); // after the send: a release of its own
+        assertEq(gateway.releasesQueued(), 2);
+        vm.prank(keeper);
+        gateway.flush(25);
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h), 7e9);
+    }
+
+    /// A smart wallet that does not exist at the same address on the asset chain names where to be paid.
+    function test_autoRelease_releaseAddress() public {
+        address safe = makeAddr("safe");
+        address dest = makeAddr("dest on Robinhood");
+        vm.prank(safe);
+        gateway.setReleaseAddress(dest);
+        _outOfEngine(rEth, safe, 2e9);
+        vm.prank(keeper);
+        gateway.flush(25);
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(dest), 2e9);
+        assertEq(rhEth.balanceOf(safe), 0);
+    }
+
+    /// The CRE path: only the forwarder; a wrong kind is refused; paused, a report is a no-op (CRE does not retry).
+    function test_autoRelease_creReport() public {
+        address h = makeAddr("h");
+        _outOfEngine(rEth, h, 1e9);
+        vm.expectRevert(abi.encodeWithSelector(CreReceiver.InvalidSender.selector, address(this), forwarder));
+        gateway.onReport("", abi.encode(uint8(1), uint256(5)));
+        vm.prank(forwarder);
+        vm.expectRevert(HomeGateway.WrongKind.selector);
+        gateway.onReport("", abi.encode(uint8(2), uint256(5)));
+        vm.prank(admin);
+        gateway.pause();
+        _flushReport(5);
+        (uint256 pending,,,,) = gateway.releaseQueue();
+        assertEq(pending, 1, "paused: nothing sent, still queued");
+        vm.prank(admin);
+        gateway.unpause();
+        _flushReport(5);
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h), 1e9);
+        assertTrue(gateway.supportsInterface(type(IReceiver).interfaceId), "a CRE receiver");
+        assertTrue(gateway.supportsInterface(type(IAny2EVMMessageReceiver).interfaceId), "a CCIP receiver");
+    }
+
+    /// Pause stops outbound messages, never the queue: the engine's transfers keep working while paused.
+    function test_autoRelease_pauseKeepsQueueing() public {
+        vm.prank(admin);
+        gateway.pause();
+        address h = makeAddr("h");
+        _outOfEngine(rEth, h, 1e9);
+        assertEq(gateway.releasesQueued(), 1, "queued while paused");
+        vm.prank(keeper);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        gateway.flush(25);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        gateway.sendQueued{value: FEE}(1);
+        vm.prank(admin);
+        gateway.unpause();
+        vm.prank(keeper);
+        gateway.flush(25);
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h), 1e9);
+    }
+
+    function test_autoRelease_onlyReceiptsQueue_receiptsNeverToTheGateway() public {
+        vm.expectRevert(HomeGateway.UnknownReceipt.selector);
+        gateway.queueRelease(address(this), 1);
+        address locker = makeAddr("locker");
+        _lockRemote(rEth, locker, 2e9, true);
+        vm.prank(locker);
+        rEth.transfer(address(engine), 2e9);
+        vm.prank(address(engine));
+        vm.expectRevert(RemoteReceipt.ReceiptNotTransferable.selector);
+        rEth.transfer(address(gateway), 1e9);
+        vm.prank(admin);
+        vm.expectRevert();
+        gateway.withdrawFees(payable(address(0)), 1);
+        vm.expectRevert();
+        gateway.withdrawFees(payable(address(this)), 1); // owner only
+    }
+
+    /// A release whose chain lost its vault (owner reconfiguring) stalls the flush instead of being dropped.
+    function test_autoRelease_unconfiguredChainStalls() public {
+        address h = makeAddr("h");
+        _outOfEngine(rEth, h, 1e9);
+        vm.prank(admin);
+        gateway.setRemote(RH, address(0), 0);
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 0);
+        vm.prank(admin);
+        gateway.setRemote(RH, address(rhVault), 300_000);
+        vm.prank(keeper);
+        assertEq(gateway.flush(25), 1);
+        homeRouter.deliverAll();
+        assertEq(rhEth.balanceOf(h), 1e9);
     }
 }

@@ -3,18 +3,32 @@ pragma solidity 0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-/// @title RemoteReceipt
+/// @notice What a receipt needs from its gateway: queue the release of receipts that just left the engine.
+interface IReleaseQueue {
+    function queueRelease(address account, uint256 amount) external;
+}
+
+/// @title RemoteReceipt (v2)
 /// @notice On a note's home chain, a claim on collateral that stays locked in a RemoteVault on another chain
 ///         (e.g. TSLA on Robinhood Chain). One receipt contract per (remote chain, remote token).
 ///         The FlowEngine treats it as any other collateral ERC-20: pledged into escrow, valued with the
 ///         underlying's Chainlink price and haircut, released to the issuer or paid out to holders on a default,
-///         all by the engine's own (tested) rules. Holders and the issuer turn receipts back into the real asset
-///         on its chain with HomeGateway.redeem.
+///         all by the engine's own (tested) rules.
+///         v2: receipts never rest in a wallet after the note. Whenever the engine sends receipts to an account
+///         (a holder's withdraw or claim after a default, a push, the issuer's collateral coming back at maturity),
+///         they are burned in that same transaction and the gateway queues a RELEASE of the same amount to that
+///         account on the asset chain, where the vault pays the real token. Collateral stays on its own chain;
+///         the home chain is only the anchor that decides who gets it.
+///         Receipts minted to a locker and not pledged yet are ordinary: the locker pledges them into a note, or
+///         redeems them directly at the gateway (HomeGateway.redeem).
 /// @dev Not a bridge: receipts are minted only by the gateway for a CCIP-verified lock, burned only by the
-///      gateway on redemption, and can move only into or out of the engine (pledge in, release or payout out).
-///      Between people they do not move, so no market forms in a wrapped copy of the asset.
+///      gateway (redeem) or on leaving the engine (auto-release), and can move only into the engine. Between
+///      people they do not move, so no market forms in a wrapped copy of the asset.
+///      Gas: the whole transfer out of the engine, burn and queue included, costs at most ~102k (a new release,
+///      all cold; ~9.5k when it joins an open release), under the engine's 150k per-transfer cap for pushed
+///      payouts (test_autoRelease_gasFitsThePushCap).
 contract RemoteReceipt is ERC20 {
-    /// @notice The HomeGateway: the only minter and burner.
+    /// @notice The HomeGateway: the only minter and burner, and the release queue.
     address public immutable gateway;
     /// @notice The FlowEngine: the only counterparty a transfer may have.
     address public immutable engine;
@@ -25,7 +39,7 @@ contract RemoteReceipt is ERC20 {
     uint8 private immutable _decimals;
 
     error OnlyGateway();
-    /// @notice Receipts move only into or out of the engine.
+    /// @notice Receipts move only into the engine (out of it, they are released on the asset chain).
     error ReceiptNotTransferable();
 
     constructor(
@@ -64,8 +78,16 @@ contract RemoteReceipt is ERC20 {
     }
 
     function _update(address from, address to, uint256 value) internal override {
-        // Mint (from 0) and burn (to 0) pass; any transfer must have the engine on one side.
-        if (from != address(0) && to != address(0) && from != engine && to != engine) revert ReceiptNotTransferable();
+        if (from == engine && to != address(0) && to != engine) {
+            // The gateway never holds receipts (it burns them itself): sending it some could only strand them.
+            if (to == gateway) revert ReceiptNotTransferable();
+            // Leaving the engine: burned here, released to the same account on the asset chain.
+            super._update(from, address(0), value);
+            IReleaseQueue(gateway).queueRelease(to, value);
+            return;
+        }
+        // Mint (from 0) and burn (to 0) pass; any other transfer must go into the engine.
+        if (from != address(0) && to != address(0) && to != engine) revert ReceiptNotTransferable();
         super._update(from, to, value);
     }
 }

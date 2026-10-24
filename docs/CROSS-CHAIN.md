@@ -1,10 +1,17 @@
-# Cross-chain collateral (stage 1)
+# Cross-chain collateral (stage 1, auto-release v2)
 
 Notes run on **Arbitrum** (Arbitrum Sepolia today): the FlowEngine there holds the note's state, schedule,
 holders, payments and default rule. **Collateral stays on the chain where it lives**: Robinhood Chain's tokenized
 stocks (TSLA, AMZN, NFLX) and Paxos USDG are locked in place in a vault on Robinhood Chain. Chainlink **CCIP**
 carries the two value commands between the chains, and Chainlink **CRE** checks every run that each vault still
 backs what the note counts. Nothing is bridged and no wrapped token can be traded.
+
+**Principle: collateral stays on its own chain; Arbitrum is only the anchor.** The note's single home (FlowEngine
+v4 on Arbitrum Sepolia) decides who gets the collateral; the collateral itself never leaves its chain. Since the
+v2 gateway this holds end to end: when a note pays collateral out (to holders on a default, back to the issuer
+at maturity), the receipts are burned on Arbitrum in that same transaction and the release is sent automatically
+over CCIP; the vault pays the real token on Robinhood Chain to the same address. Nobody holds a receipt after a
+note, and nobody has to redeem one.
 
 Receipts in use: USDG.rh, TSLA.rh and AMZN.rh (NFLX.rh exists but has no feed). The receipts of our retired test
 tokens (tTSLA.rh, tETH.rh, tBTC.rh, tSOL.rh, tNVDA.rh, tAAPL.rh, tSPY.rh) are disabled in the vault and no longer
@@ -26,8 +33,8 @@ locally (Chainlink Local, mock routers) and on forks of both testnets with the r
  │                                        │         │ FlowEngine: escrow, coverage (price x haircut,     │
  │                                        │         │   summed over local + remote collateral), margin, │
  │                                        │         │   release at maturity, default (cap-at-owed)      │
- │  pay TSLA to issuer / holder ◄──────────CCIP────│ redeem(receipt) burns it ──► RELEASE              │
- │  locked[TSLA] -= amount        RELEASE │         │                                                    │
+ │  pay TSLA to issuer / holder ◄──────────CCIP────│ receipts leave the engine → burned, queued        │
+ │  locked[TSLA] -= amount        RELEASE │         │ flush (CRE report / anyone; fee pool) ──► RELEASE │
  └────────────────────────────────────────┘         └──────────────────────────────────────────────────┘
           ▲                                                       ▲
           └──────── Chainlink CRE reads both every run ───────────┘
@@ -42,10 +49,18 @@ locally (Chainlink Local, mock routers) and on forks of both testnets with the r
    coverage sums every collateral asset, local or remote, on any number of asset chains.
 3. **Run.** Observations, coupons, margin calls, the grace period and the default rule are the engine's
    unchanged, reference-tested paths.
-4. **Paid in full.** The engine releases the receipts to the issuer, who **redeems** them: the gateway burns
-   them and sends **RELEASE**; the vault pays the real TSLA back on Robinhood.
+4. **Paid in full.** The engine releases the receipts to the issuer. When they leave the engine (the issuer's
+   withdraw), the receipt burns them and the gateway **queues a RELEASE** to the issuer's address on Robinhood.
 5. **Default.** The engine pays the receipts to the holders (cap-at-owed: what they are owed, the excess to the
-   issuer). Each holder redeems their own receipts for real TSLA on Robinhood, to the same EVM address.
+   issuer). Each holder's share leaves the engine on their claim (or a keeper's `pushTo`): burned and queued the
+   same way, to the holder's address on Robinhood.
+6. **Flush.** Chainlink CRE writes a report to the gateway (`onReport` through the KeystoneForwarder) that sends
+   the queued RELEASEs, paying each CCIP fee from the gateway's ETH **fee pool**; anyone can call `flush` too (the
+   issuer bot does, as a fallback), and anyone can send one queued release with their own fee (`sendQueued`). The
+   vault pays the real token; the app shows "Released to your wallet on Robinhood Chain" with the CCIP message.
+
+Receipts a locker holds and never pledged are ordinary: pledge them into a note, or `redeem` them at the gateway
+(burn + RELEASE, the caller pays the fee) to unlock the tokens on Robinhood.
 
 ### Design decisions
 
@@ -53,14 +68,29 @@ locally (Chainlink Local, mock routers) and on forks of both testnets with the r
   receipt is an ERC-20 the engine already handles as collateral, so pledging, coverage, margin, release and both
   default rules run on code that every product test already checks against the reference payoff. The engine
   (23,384 / 24,576 bytes) stays as deployed and audited-in-progress.
-- **Receipts are not a bridge.** `RemoteReceipt` moves only into or out of the engine (pledge in; release or
-  payout out). It cannot be sent between people, so there is no tradable wrapped TSLA. It is minted only for a
-  CCIP-verified lock and burned only on redemption.
-- **Pull redemptions, not a pushed DISTRIBUTE.** On a default the engine credits each holder; each holder
-  redeems when they like. One message per redemption keeps every CCIP execution small and bounded (about 82k gas
-  on the vault, measured), whatever the number of holders, and a holder who never redeems costs nobody anything. A pushed
-  batch to 62 holders would need a large destination gas limit and would fail as a whole if one transfer
-  failed.
+- **Receipts are not a bridge.** `RemoteReceipt` moves only into the engine (pledge in); out of it, it is burned.
+  It cannot be sent between people, so there is no tradable wrapped TSLA. It is minted only for a CCIP-verified
+  lock and burned only on redemption or on leaving the engine.
+- **Auto-release in the receipt, not in the engine (v2).** The burn-and-queue is the receipt's own transfer hook
+  (`_update`: from the engine to anyone → burn, `gateway.queueRelease(to, amount)`), so the engine stays unchanged
+  and every exit path (withdraw, a holder's claim, `pushPayouts`/`pushTo`, the issuer's release) is covered by
+  the same few lines. Queueing is cheap and makes no external call: 2 storage slots per new release (measured in
+  the table below), well under the 150k gas the engine gives each pushed transfer, so a push never defers.
+- **Queue, then flush; one message per release.** The transfer cannot send CCIP itself: it would need the fee
+  inside a capped push and would make every withdraw depend on CCIP. Queueing decouples them: the release is
+  recorded atomically with the burn, and sending happens later in batches. Each release is still its own CCIP
+  message, so every execution on the vault stays small and bounded (~82k gas) whatever the number of holders, and
+  one frozen recipient never blocks the others (out-of-order execution; the vault records it as `unclaimed`).
+- **Fee pool, permissionless flush, CRE automation.** The gateway holds native ETH (`fundFees` or a plain
+  transfer: the issuer at pledge, the protocol). `flush(maxItems)` sends queued releases oldest first, at most 25
+  per call, and stops at the first one the pool cannot pay for (`FlushStalled`): it stays queued and goes on the
+  next flush. A CRE report triggers the same flush, so releases go out without anyone acting; the issuer bot
+  flushes as a fallback. `sendQueued(index)` lets anyone (the holder) send one release paying the fee
+  themselves: no release ever depends on the pool or the queue order.
+- **Dust cannot drain the pool.** Releases to the same (receipt, recipient) that are not sent yet add up into one
+  queue entry, so many small withdrawals between two flushes cost the pool one message, not one each.
+- **Smart wallets.** A release goes to the same address on the asset chain. A contract wallet that does not
+  exist there sets `setReleaseAddress(dest)` first (applies to releases queued afterwards).
 - **Authorisation without per-note registration.** The vault does not need to know which note a lock is for: the
   receipts go to the locker (or a beneficiary they name), and only a note's issuer can pledge into that note (the
   engine's role checks). So a lock can never be credited to someone else's note.
@@ -81,7 +111,10 @@ allowOutOfOrderExecution: true}`:
 | kind | Direction | `id` | `account` | Effect |
 |---|---|---|---|---|
 | 1 LOCKED | vault → gateway | `keccak(chainid, vault, lockNonce)` | receipt beneficiary | mint receipts (once per id) |
-| 2 RELEASE | gateway → vault | `keccak(chainid, gateway, redeemNonce)` | recipient on the asset chain | pay the locked token (once per id) |
+| 2 RELEASE | gateway → vault | `keccak(chainid, gateway, redeemNonce)` (redeem) or `keccak(chainid, gateway, "release", queueIndex)` (auto-release) | recipient on the asset chain | pay the locked token (once per id) |
+
+The two id forms have different preimage lengths, so a redeem id never equals a queued release's id. The vault's
+`released[id]` check is unchanged: it enforces at most once for both.
 
 The gateway accepts LOCKED only from the vault configured for the message's source chain selector, and only
 through its CCIP router; the vault accepts RELEASE only from the home chain selector and the configured gateway.
@@ -94,14 +127,25 @@ through its CCIP router; the vault accepts RELEASE only from the home chain sele
 - **Redemption** `id`: receipts **burned** at home → **paid** on the asset chain (`locked` decreased, token
   transferred) or **unclaimed** (recipient frozen; `claim` later). A duplicate is ignored. A release larger than
   what is locked reverts (cannot happen while the invariant holds) and stays executable.
-- **Invariant:** `locked[token]` ≥ receipts outstanding at home, with equality when nothing is in flight; the
-  vault's balance minus unclaimed ≥ `locked[token]` unless the token took tokens back.
+- **Auto-release** `index`: receipts **burned** leaving the engine → **queued** at the gateway (`ReleaseQueued`;
+  joins an unsent release to the same recipient) → **sent** exactly once (`ReleaseSent` with the CCIP
+  `messageId`, by `flush` from the pool or `sendQueued` with the caller's fee; `sent` is set before the send) →
+  **paid** or **unclaimed** on the asset chain, as a redemption. While the pool is short, the chain has no vault
+  configured or the gateway is paused, it stays queued; nothing is ever dropped.
+- **Invariant:** `locked[token]` ≥ receipts outstanding at home, with equality when nothing is queued or in
+  flight; the vault's balance minus unclaimed ≥ `locked[token]` unless the token took tokens back.
 
 ## Trust and failure modes
 
 - **What you trust:** Chainlink CCIP to deliver the authenticated message once (plus our id check), the gateway
-  and vault owners to configure the right peer (they cannot move anyone's tokens), and the token issuers
-  (USDG/stock tokens can freeze or seize: that is the asset's own risk and CRE reports it).
+  and vault owners to configure the right peer (they cannot move anyone's tokens; the gateway owner can withdraw
+  the fee pool, never a release), and the token issuers (USDG/stock tokens can freeze or seize: that is the
+  asset's own risk and CRE reports it). Liveness of auto-releases needs someone to pay the CCIP fee: the pool
+  (funded by the issuer or the protocol) through CRE or any flusher, or the holder through `sendQueued`.
+- **Who can queue.** Only a receipt the gateway created (`queueRelease` checks `receiptInfo[msg.sender]`), and a
+  receipt queues only for what it just burned leaving the engine. The CRE report is accepted only from the
+  configured KeystoneForwarder (the engine's own; optionally pinned to a workflow id/owner, as on the engine); it
+  can only trigger a flush, which can only send what is queued, to whom it is queued for.
 - **Latency.** A CCIP message executes after its source chain is final. For Arbitrum-family chains (Arbitrum
   Sepolia, Robinhood Chain testnet) that is the L1 (Ethereum) finality of the batch that includes the
   transaction: roughly 15–25 minutes per message (Chainlink's execution-latency guidance; not yet measured on
@@ -118,18 +162,60 @@ through its CCIP router; the vault accepts RELEASE only from the home chain sele
   `totalSupply` at home every run, and logs `[collateral shortfall]` (packages/core/src/crosschain.ts). In stage 1
   that is a report for operators and the app; stage 2 can let CRE write it into the note so coverage drops and a
   margin call opens.
-- **Pause.** Pausing the gateway stops redemptions (outbound); pausing a vault stops new locks. Neither stops a
-  release already sent, and holders can always claim.
+- **Pause.** Pausing the gateway stops outbound messages (redeem, flush, sendQueued; a CRE flush report is then a
+  no-op rather than a revert), never queueing: holders can still withdraw from the engine while it is paused, and
+  their releases wait in the queue. Pausing a vault stops new locks. Neither stops a release already sent, and
+  holders can always claim.
 
 ## Fees and gas
 
 - CCIP fees are paid in the native token (ETH on both chains; LINK also accepted by the routers). The caller of
-  `lock` or `redeem` pays; `quoteLock` / `quoteRedeem` return the fee, excess is refunded.
+  `lock`, `redeem` or `sendQueued` pays; `quoteLock` / `quoteRedeem` return the fee, excess is refunded.
+  Auto-releases are paid from the gateway's fee pool: about one RELEASE fee (≈ 0.00005 ETH on Arbitrum Sepolia)
+  per holder paid collateral plus one for the issuer, so an issuer funding ~0.005 ETH at pledge covers a full
+  book with room to spare. `releaseQueue()` returns the pool and the next fee.
 - Destination gas limits: 200,000 for LOCKED (measured ~118k: decode, check, mint) and 300,000 for RELEASE
   (measured ~82k: decode, check, transfer; headroom for tokens with transfer hooks). Both configurable.
-- Fees quoted by the real routers on forks (2026-10-24): lock on Robinhood ≈ 0.000067 ETH, redeem on Arbitrum
-  Sepolia ≈ 0.000051 ETH per message.
-- Bytecode: HomeGateway, RemoteVault and RemoteReceipt are separate contracts; the engine is unchanged.
+- Fees quoted by the real routers on forks (2026-10-24): lock on Robinhood ≈ 0.000067 ETH, redeem or a queued
+  release on Arbitrum Sepolia ≈ 0.000051 ETH per message.
+- Auto-release gas (measured, `forge test --match-path "test/CrossChain*"`):
+
+  | What | Gas | Bound |
+  |---|---|---|
+  | Receipt leaving the engine, burned + new release queued (worst case: first release ever, all cold) | ~102,000 | engine push cap 150,000 per transfer (a call with exactly 150k succeeds in the tests) |
+  | Same, joining an unsent release to the same recipient | ~9,500 | |
+  | `pushTo` of a default's collateral to 2 holders, both queued (engine + receipts + gateway) | ~295,000 | |
+  | `flush` of 1 release on the real Arbitrum Sepolia router (fork, Chainlink Local) | ~270,000 | report gas: 150k + 300k per release |
+  | CRE flush report of 2 releases incl. their RELEASE execution on the vault (Chainlink Local, same chain) | ~239,000 | |
+  | RELEASE execution on the vault (unchanged) | ~82,000 | destination gas limit 300,000 |
+
+- Bytecode: HomeGateway v2 17,837 B (was 10,678; it creates the receipts and is now a CRE receiver),
+  RemoteReceipt v2 3,588 B, RemoteVault 6,734 B (unchanged); all under 24,576. The engine is unchanged.
+
+## Chainlink CRE: the flush report (for the keeper workflow)
+
+The gateway is a CRE receiver exactly like the engine (`CreReceiver`: only the configured KeystoneForwarder may
+call `onReport`; optional workflow id / owner / name checks, off by default). The keeper needs one read and, when
+it says so, one write per run, on the home chain:
+
+- **Read** (at `latest` is fine: the gateway re-checks everything) `HomeGateway.releaseQueue()` →
+  `(uint256 pending, uint256 head, uint256 queued, uint256 pool, uint256 nextFee)`: releases waiting, the index
+  flush starts at, the last index, the fee pool (wei) and the CCIP fee of the oldest waiting release (0 when
+  nothing waits, or its chain has no vault configured). ABI fragment: `releaseQueueAbi` in
+  packages/core/src/crosschain.ts.
+- **Decide** with `planFlush(reading, { maxItems?, baseGas?, gasPerItem? })` (packages/core/src/crosschain.ts):
+  no write when `pending == 0`, when `pool < nextFee` (`pool-short`: log it, the issuer or protocol tops up) or
+  when `nextFee == 0` with something pending (`no-vault`: an operator issue). Otherwise
+  `maxItems = min(pending, pool / nextFee, cap)` (cap default 10, the gateway never sends more than 25) and
+  `gasLimit = 150,000 + 300,000 × maxItems`.
+- **Write** `encodeFlushReport(maxItems)` = `abi.encode(uint8 kind = 1, uint256 maxItems)` (64 bytes) through
+  `runtime.report(prepareReportRequest(hex))` and `evm.writeReport({ receiver: <gateway>, report, gasConfig: {
+  gasLimit } })`, the same calls the engine reports use. The report never reverts on an empty queue, an empty
+  pool or a paused gateway (it is a no-op); it reverts only for a kind other than 1 or a sender other than the
+  forwarder. Releases sent emit `ReleaseSent(index, releaseId, to, receipt, amount, messageId, fee, fromPool)`.
+- **Config** the keeper needs per home chain: the gateway address (deployments/crosschain-testnet.json
+  `home.gateway`) and its gas settings. Racing the issuer bot's fallback flush is harmless: whoever is second
+  finds less (or nothing) to send.
 
 ## Stage 2 (next)
 
@@ -138,6 +224,52 @@ through its CCIP router; the vault accepts RELEASE only from the home chain sele
 - Payments to the asset chain: coupons and redemptions funded by the issuer on Robinhood and paid to holders
   there, with the engine as the ledger of who is owed what.
 - Shortfall enforcement: CRE writes the vault backing into the note, so a seized vault opens a margin call.
+
+## v2 deploy plan (auto-release; not run yet)
+
+The vault is kept: `setHomeGateway` is owner-settable at any time, and the vault itself does not change (the
+RELEASE format and its id check are the same). Switching it is only safe when nothing is locked under the old
+gateway, otherwise the old gateway's receipts could never be redeemed (the vault accepts RELEASE from one gateway).
+Checked on-chain 2026-10-24: `locked` is 0 for TSLA, AMZN, NFLX, AMD and PLTR, but **100 USDG** is locked, backing
+100 USDG.rh (old receipt `0xd3Bc…4daA`) held unpledged by `0xf420b79be456724cf7fa0ca25c029c070ee945af`. That
+wallet must redeem them through the old gateway (`0x3551…372A`, "Redeem on Robinhood Chain" in the app) and the
+RELEASE must land (~20 min) before step 2; the `repoint` run refuses otherwise. If that is not possible, deploy a
+new vault instead (ROLE=vault) and keep the old pair serving the old receipts.
+
+```bash
+cd packages/evm-engine
+export ARB=https://sepolia-rollup.arbitrum.io/rpc RH=https://rpc.testnet.chain.robinhood.com
+export OWNER=0x298afB9424188C7eA7c01556D8CAE6ff4768de0a DEPLOYER_KEY=...   # the deployer key, from your key store
+# 0. Preconditions: nothing locked in the vault (all must print 0)
+for t in 0x7E955252E15c84f5768B83c41a71F9eba181802F 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02 0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93; do
+  cast call 0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846 'locked(address)(uint256)' $t --rpc-url $RH; done
+# 1. Gateway v2 next to the v4 engine, CRE forwarder = the engine's, 0.005 ETH in the release fee pool
+ROLE=gateway CHAIN=arbitrum-sepolia ENGINE=0x7d36Da43724b09Bb03ED98a4574685070073020b OWNER=$OWNER FEE_POOL=5000000000000000 \
+  forge script script/DeployCrossChain.s.sol --rpc-url $ARB --broadcast
+export GATEWAY=0x...   # printed by step 1
+# 2. Point the existing vault at it; allow AMD and PLTR
+ROLE=repoint CHAIN=robinhood-testnet VAULT=0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846 GATEWAY=$GATEWAY \
+  TOKENS=0x7E955252E15c84f5768B83c41a71F9eba181802F,0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E,0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02,0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93 \
+  ALLOW=0x71178BAc73cBeb415514eB542a8995b82669778d,0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0 \
+  forge script script/DeployCrossChain.s.sol --rpc-url $RH --broadcast
+# 3. Wire the gateway and create the v2 receipts
+ROLE=wire CHAIN=arbitrum-sepolia GATEWAY=$GATEWAY REMOTE=robinhood-testnet VAULT=0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846 \
+  TOKENS=0x7E955252E15c84f5768B83c41a71F9eba181802F,0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E,0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02,0x71178BAc73cBeb415514eB542a8995b82669778d,0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0 \
+  DECIMALS=6,18,18,18,18 SYMBOLS=USDG.rh,TSLA.rh,AMZN.rh,AMD.rh,PLTR.rh \
+  forge script script/DeployCrossChain.s.sol --rpc-url $ARB --broadcast
+# 4. Verify
+cast call $GATEWAY 'VERSION()(uint256)' --rpc-url $ARB                     # 2
+cast call $GATEWAY 'getForwarderAddress()(address)' --rpc-url $ARB          # = the engine's forwarder
+cast call $GATEWAY 'releaseQueue()(uint256,uint256,uint256,uint256,uint256)' --rpc-url $ARB
+cast call 0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846 'homeGateway()(address)' --rpc-url $RH   # = $GATEWAY
+```
+
+Then: record the gateway and the five receipts in deployments/crosschain-testnet.json (`home.gateway`,
+`gatewayBlock`, `remotes[0].receipts`; the old pair under a retired entry), regenerate the served config
+(scripts/server-config.ts) and the CRE config (scripts/cre-config.ts: `vaults` with the new receipts, and the
+gateway for the flush report), and run the issuer bot with `GATEWAY=$GATEWAY` as the flush fallback. The engine's
+forwarder on Arbitrum Sepolia is currently the CRE simulation forwarder (`0xD412…ca5d`); if the keeper moves to
+the production KeystoneForwarder (`0x76c9…5E62`), call `setForwarderAddress` on the engine and the gateway.
 
 ## Testnet deployment (live)
 

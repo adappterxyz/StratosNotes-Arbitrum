@@ -18,7 +18,12 @@
  *                stablecoin). PUSH_ONLY=1 makes it a payout keeper for every note (or PIDS) under the same
  *                policy, funding nothing: any funded account will do, since pushing is permissionless.
  *
- *   RPC=... CHAIN_ID=421614 ENGINE=0x... LENS=0x... ISSUER_KEY_FILE=path [FROM_BLOCK=n] \
+ * Cross-chain collateral (HomeGateway v2, docs/CROSS-CHAIN.md): receipts paid out of a note are burned and queued
+ * at the gateway as releases on the asset chain. Chainlink CRE flushes the queue; as a fallback, with GATEWAY set
+ * this bot calls `flush` whenever releases wait and the gateway's fee pool can pay for the next one (FLUSH=0: off;
+ * FLUSH_MAX: releases per transaction, default 10). Flushing is permissionless: any funded key will do.
+ *
+ *   RPC=... CHAIN_ID=421614 ENGINE=0x... LENS=0x... ISSUER_KEY_FILE=path [FROM_BLOCK=n] [GATEWAY=0x...] \
  *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [PUSH=1|0] [PUSH_MIN=0.5] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
  *
  * PIDS: the notes to look after (default: every note whose Issuer role is this key). MISS: pid:period payments
@@ -30,7 +35,7 @@
 import { readFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { CHAIN_TOKENS, collateralSymbolOfAsset, dec, toBase } from '@sn/core';
+import { CHAIN_TOKENS, collateralSymbolOfAsset, dec, planFlush, releaseQueueAbi, toBase } from '@sn/core';
 import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, pushesNote, pushPolicyFromEnv, type ChainInfo } from '@sn/sdk';
 
 const env = (k: string, d?: string) => { const v = process.env[k] ?? d; if (v === undefined) throw new Error(`set ${k}`); return v; };
@@ -54,6 +59,8 @@ const miss = new Set((process.env.MISS ?? '').split(',').map(s => s.trim()).filt
 const only = process.env.PIDS ? new Set(process.env.PIDS.split(',').map(s => s.trim())) : null;
 const mintAbi = parseAbi(['function mint(address to, uint256 amount)']);
 const log = (s: string) => console.log(`[issuer-bot] ${s}`);
+const gateway = process.env.GATEWAY as Address | undefined;
+const flushAbi = parseAbi(['function flush(uint256 maxItems) returns (uint256 sent)']);
 const policy = pushPolicyFromEnv(process.env);
 const pushOnly = process.env.PUSH_ONLY === '1';
 const pushBatch = policy.batch;
@@ -144,7 +151,25 @@ async function ensure(token: Address, base: bigint) {
 
 const ceil6 = (x: number) => Math.ceil(x * 1e6 - 1e-6) / 1e6;
 
+/**
+ * Fallback to CRE: send queued releases (auto-released receipts) when the gateway's fee pool can pay for them. The
+ * gateway re-checks everything; a flush racing CRE's simply finds less to send.
+ */
+async function flushReleases() {
+  if (!gateway || process.env.FLUSH === '0') return;
+  const [pending, head, queued, pool, nextFee] = await client.readContract({ address: gateway, abi: releaseQueueAbi, functionName: 'releaseQueue' });
+  const plan = planFlush({ pending, head, queued, pool, nextFee }, { maxItems: Number(process.env.FLUSH_MAX ?? 10) });
+  if (!plan.flush) {
+    if (plan.reason !== 'empty') log(`gateway: ${pending} release(s) waiting, not flushed (${plan.reason}; pool ${pool} wei, next fee ${nextFee} wei)`);
+    return;
+  }
+  const hash = await wallet.writeContract({ address: gateway, abi: flushAbi, functionName: 'flush', args: [BigInt(plan.maxItems)], chain, account });
+  const r = await client.waitForTransactionReceipt({ hash });
+  log(`gateway: flushed up to ${plan.maxItems} of ${pending} queued release(s) to the asset chain (${r.gasUsed} gas, tx ${hash})`);
+}
+
 async function tick() {
+  await flushReleases().catch(err => log(`flush: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`));
   const count = await client.readContract({ address: engine, abi: engineAbi, functionName: 'processCount' });
   const mine = new Set<string>();
   if (pushOnly) {

@@ -20,6 +20,7 @@ import { AssetIcon, AssetStack } from '../components/AssetIcon';
 import { FullTerms, Specs, YieldBlock } from '../components/Listing';
 import { listingOf } from '../lib/listing';
 import { useClaimable } from '../lib/balances';
+import { useAutoReleased } from '../components/CrossChainCollateral';
 
 export default function OfferingPage() {
   const { id: rawId } = useParams();
@@ -45,6 +46,8 @@ export default function OfferingPage() {
   // Stock products redraw from their term sheet; custom workflows from the definition.
   const xml = useMemo(() => (!o || !def ? '' : o.custom ? defToBpmn(def) : instantiateProduct(o.params).bpmnXml), [o?.custom, def]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Receipts of collateral locked on another chain: leaving the note they are burned and released on that chain.
+  const autoReleased = useAutoReleased();
   if (note === undefined) return <main className="page"><p className="muted">Loading the note…</p></main>;
   if (note === null || !o) return <main className="page"><div className="empty"><strong>No note with this id.</strong><Link to="/">Back to the marketplace</Link></div></main>;
 
@@ -102,7 +105,7 @@ export default function OfferingPage() {
     await w.watchAsset(p);
     return { tx: [] };
   });
-  const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => adapter().withdraw(await signer(s.chain), s.id, asset, undefined, progress));
+  const withdraw = (asset: number, done = 'Withdrawn to your wallet.') => run(done, async () => adapter().withdraw(await signer(s.chain), s.id, asset, undefined, progress));
   // A holder claims coupons and the redemption: one transaction for everything accrued so far, with a receipt.
   const claimPayouts = () => run(legacy ? 'Withdrawn to your wallet.' : 'Claimed to your wallet. The receipt is in your portfolio under Paid to your wallet.', async () => {
     const r = await adapter().claimPayouts(await signer(s.chain), s.id, CASH_ASSET, progress);
@@ -277,10 +280,14 @@ export default function OfferingPage() {
               {delivered.map(h => {
                 const name = h.name.replace(/^Collateral /, '');
                 const kind = h.name.startsWith('Collateral ') ? (isIssuer ? 'Collateral released' : 'Collateral received') : 'Delivered';
+                const auto = autoReleased(s.assetTokens?.[h.asset]);
+                const real = name.replace(/\.rh$/, '');
                 return (
                   <div key={h.asset} className="spread small" data-other-asset={h.name}>
-                    <span>{kind} <span className="num">{h.amount.toFixed(6)}</span> {name}</span>
-                    <button className="btn" disabled={busy} onClick={() => withdraw(h.asset)}>Withdraw {name}</button>
+                    <span>{kind} <span className="num">{h.amount.toFixed(6)}</span> {auto ? `${real} on ${auto.chain}` : name}</span>
+                    {auto
+                      ? <button className="btn" disabled={busy} onClick={() => withdraw(h.asset, `Released: the vault on ${auto.chain} pays your ${real} to this address over Chainlink CCIP (about 15–25 minutes once sent). Follow it in your portfolio under Collateral & receipts.`)} data-release>Release to {auto.chain}</button>
+                      : <button className="btn" disabled={busy} onClick={() => withdraw(h.asset)}>Withdraw {name}</button>}
                   </div>
                 );
               })}

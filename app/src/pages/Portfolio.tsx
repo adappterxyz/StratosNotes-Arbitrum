@@ -307,7 +307,7 @@ export default function Portfolio() {
                 </tbody>
               </table>
             </div>
-          ) : <Empty title="No collateral locked." body="Issuers lock collateral when they issue: on Arbitrum, or on Robinhood Chain where the stock tokens live. Receipts you hold after a default can be redeemed here." />}
+          ) : <Empty title="No collateral locked." body="Issuers lock collateral when they issue: on Arbitrum, or on Robinhood Chain where the stock tokens live. Collateral a note pays you after a default is released to your wallet on Robinhood Chain automatically; it shows here." />}
         </div>
       )}
 

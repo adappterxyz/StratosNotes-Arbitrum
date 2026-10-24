@@ -37,7 +37,7 @@ contract CrossChainForkTest is Test {
         arb = sim.getNetworkDetails(421614);
         rh = sim.getNetworkDetails(46630);
 
-        gateway = new HomeGateway(arb.routerAddress, owner, engine);
+        gateway = new HomeGateway(arb.routerAddress, owner, engine, makeAddr("forwarder"));
         vm.selectFork(rhFork);
         vault = new RemoteVault(rh.routerAddress, owner, arb.chainSelector);
         vm.startPrank(owner);
@@ -90,5 +90,25 @@ contract CrossChainForkTest is Test {
     function test_fork_tslaLockedOnRobinhood_receiptsOnArbitrum_redeemed() public {
         RemoteReceipt r = _lockAndRoute(TSLA_RH, 3e18);
         _redeemAndRoute(r, TSLA_RH, 3e18);
+    }
+
+    /// v2 auto-release on the real routers: receipts leave the engine, are burned and queued; the fee pool pays the
+    /// real CCIP fee on flush; the vault pays the real TSLA on Robinhood.
+    function test_fork_autoRelease_tslaPaidOnRobinhood() public {
+        RemoteReceipt r = _lockAndRoute(TSLA_RH, 2e18);
+        vm.prank(alice);
+        r.transfer(engine, 2e18); // pledge
+        vm.prank(engine);
+        r.transfer(alice, 2e18); // payout or release: burned here, queued at the gateway
+        assertEq(r.balanceOf(alice), 0);
+        (,,,, uint256 fee) = gateway.releaseQueue();
+        console2.log("CCIP fee of a queued release (wei, Arbitrum Sepolia):", fee);
+        gateway.fundFees{value: fee}();
+        uint256 g = gasleft();
+        assertEq(gateway.flush(25), 1);
+        console2.log("flush of 1 release on the real Arbitrum Sepolia router (gas):", g - gasleft());
+        sim.switchChainAndRouteMessage(rhFork);
+        assertEq(IERC20(TSLA_RH).balanceOf(alice), 2e18, "real TSLA paid on Robinhood");
+        assertEq(vault.locked(TSLA_RH), 0);
     }
 }

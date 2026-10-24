@@ -1,12 +1,14 @@
 /**
  * Collateral held on another chain (docs/CROSS-CHAIN.md). The issuer locks USDG, TSLA or AMZN in the vault on
  * Robinhood Chain; Chainlink CCIP tells the gateway on Arbitrum, which mints the same amount of receipts (USDG.rh,
- * TSLA.rh…) to the issuer. The receipts are what the note's escrow holds. Redeeming burns receipts on Arbitrum and
- * sends the release back over CCIP: the vault pays the real token on Robinhood. Every message waits for the source
- * chain to be final, so each direction takes roughly 15–25 minutes.
+ * TSLA.rh…) to the issuer. The receipts are what the note's escrow holds. With the v2 gateway, receipts never rest
+ * in a wallet after the note: whatever the note pays out of them (a holder's share after a default, the issuer's
+ * collateral at maturity) is burned on the way out and released automatically to the same address on Robinhood,
+ * where the vault pays the real token (AutoReleases). Only receipts locked and never pledged are redeemed by hand.
+ * Every message waits for the source chain to be final, so each direction takes roughly 15–25 minutes.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, ExternalLink, Lock } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle2, Clock, ExternalLink, Lock } from 'lucide-react';
 import { erc20Abi, formatUnits, parseUnits } from 'viem';
 import { homeGatewayAbi, remoteVaultAbi } from '@sn/sdk';
 import type { ChainConfig, CrossChainReceipt } from '../lib/api';
@@ -143,10 +145,122 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
   );
 }
 
-/** Portfolio: receipts you hold (released collateral, or a default payout) can be redeemed for the real token. */
+/** Whether a gateway auto-releases (v2: `VERSION()` = 2; a v1 gateway has no VERSION and reverts). */
+const versionCache = new Map<string, Promise<number>>();
+export function useGatewayVersion(leg: Leg | null): number | null {
+  const { byKey } = useChains();
+  const [v, setV] = useState<number | null>(null);
+  useEffect(() => {
+    if (!leg) return;
+    let live = true;
+    const key = `${leg.home.key}:${leg.gateway.toLowerCase()}`;
+    if (!versionCache.has(key)) {
+      versionCache.set(key, byKey[leg.home.key].client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'VERSION' })
+        .then(x => Number(x)).catch(() => 1));
+    }
+    versionCache.get(key)!.then(x => { if (live) setV(x); });
+    return () => { live = false; };
+  }, [leg, byKey]);
+  return v;
+}
+
+/**
+ * Whether `token` (a note asset) is a receipt that the current gateway releases automatically when it leaves the
+ * note: withdrawing it pays the real token on the asset chain, nothing to redeem.
+ */
+export function useAutoReleased(): (token: string | undefined) => { chain: string } | null {
+  const leg = useCrossChain();
+  const v = useGatewayVersion(leg);
+  return (token) => {
+    if (!leg || v !== 2 || !token) return null;
+    const t = token.toLowerCase();
+    return Object.values(leg.receipts).some(r => r.receipt.toLowerCase() === t) ? { chain: leg.asset.name } : null;
+  };
+}
+
+/**
+ * Portfolio: collateral paid to you out of a note is released automatically to your wallet on Robinhood Chain
+ * (AutoReleases); receipts in your wallet (locked, never pledged; or paid out by an earlier gateway) are redeemed.
+ */
 export function RedeemOnRobinhood() {
   const legs = useCrossChainLegs();
-  return <>{legs.map(l => <RedeemLeg key={l.gateway} leg={l} />)}</>;
+  return <>{legs.map(l => <AutoReleases key={`a${l.gateway}`} leg={l} />)}{legs.map(l => <RedeemLeg key={l.gateway} leg={l} />)}</>;
+}
+
+type ReleaseRow = { index: bigint; sym: string; decimals: number; amount: bigint; to: string; sent?: { messageId: string; tx: string } };
+
+/** Releases queued for you at a v2 gateway (from its events), and their CCIP messages once sent. */
+function AutoReleases({ leg }: { leg: Leg }) {
+  const address = useAddress();
+  const signer = useSigner();
+  const { byKey } = useChains();
+  const version = useGatewayVersion(leg);
+  const [rows, setRows] = useState<ReleaseRow[]>([]);
+  const [tick, setTick] = useState(0);
+  const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({ busy: '', text: '' });
+  useEffect(() => {
+    if (version !== 2 || !address) return;
+    let live = true;
+    const client = byKey[leg.home.key].client;
+    const bySym = new Map(Object.entries(leg.receipts).map(([sym, r]) => [r.receipt.toLowerCase(), { sym, decimals: r.decimals }]));
+    const read = async () => {
+      // The gateway is deployed after the engine: the engine's first block bounds the scan.
+      const fromBlock = BigInt(leg.home.fromBlock ?? 0);
+      const queued = await client.getContractEvents({ address: leg.gateway, abi: homeGatewayAbi, eventName: 'ReleaseQueued', args: { account: address as `0x${string}` }, fromBlock });
+      const byIndex = new Map<bigint, ReleaseRow>();
+      for (const l of queued) {
+        const a = l.args as { index: bigint; receipt: string; to: string; amount: bigint };
+        const r = bySym.get(a.receipt.toLowerCase());
+        byIndex.set(a.index, { index: a.index, sym: r?.sym ?? 'receipt', decimals: r?.decimals ?? 18, amount: a.amount, to: a.to }); // later events: the joined total
+      }
+      if (byIndex.size) {
+        const sent = await client.getContractEvents({ address: leg.gateway, abi: homeGatewayAbi, eventName: 'ReleaseSent', args: { index: [...byIndex.keys()] }, fromBlock });
+        for (const l of sent) {
+          const a = l.args as { index: bigint; messageId: string };
+          const row = byIndex.get(a.index);
+          if (row) row.sent = { messageId: a.messageId, tx: l.transactionHash ?? '' };
+        }
+      }
+      if (live) setRows([...byIndex.values()].sort((x, y) => Number(y.index - x.index)));
+    };
+    read().catch(() => {});
+    const t = setInterval(() => read().catch(() => {}), 30_000);
+    return () => { live = false; clearInterval(t); };
+  }, [leg, address, version, tick, byKey]);
+  if (version !== 2 || !address || !rows.length) return null;
+
+  // Anyone may send a queued release now, paying its CCIP fee (it does not have to wait for the next flush).
+  const sendNow = async (row: ReleaseRow) => {
+    setState({ busy: String(row.index), text: `Switching to ${leg.home.name}…` });
+    try {
+      const w = await signer(leg.home.key);
+      const client = byKey[leg.home.key].client;
+      const r = leg.receipts[row.sym];
+      const fee = await client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'quoteRedeem', args: [r.receipt, row.amount, row.to as `0x${string}`] }) as bigint;
+      setState({ busy: String(row.index), text: `Send now (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
+      const hash = await w.writeContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'sendQueued', args: [row.index], value: fee, account: w.account!, chain: w.chain });
+      const rc = await client.waitForTransactionReceipt({ hash });
+      setState({ busy: '', text: `Sent. Chainlink CCIP pays your ${receiptLabel(row.sym)} on ${leg.asset.name} in about 15–25 minutes.`, msg: messageIdOf(rc.logs) });
+      setTick(t => t + 1);
+    } catch (e) { setState({ busy: '', text: errText(e), bad: true }); }
+  };
+
+  return (
+    <section className="card stack" data-auto-releases>
+      <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral released to {leg.asset.name}</h3></div>
+      <p className="xs muted">Collateral a note paid you (your share after a default, or an issuer's collateral back at maturity) stays on {leg.asset.name}: the receipts are burned on {leg.home.name} and the vault there pays the real token to your address, over Chainlink CCIP. Nothing to redeem.</p>
+      {rows.map(row => (
+        <div key={String(row.index)} className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <span>{formatUnits(row.amount, row.decimals)} {receiptLabel(row.sym)}{row.to.toLowerCase() !== address.toLowerCase() ? <span className="xs muted"> to {row.to.slice(0, 6)}…{row.to.slice(-4)}</span> : null}</span>
+          {row.sent
+            ? <span className="xs"><CheckCircle2 className="i" style={{ width: 12, height: 12 }} /> Released to your wallet on {leg.asset.name} <a href={ccipLink(row.sent.messageId)} target="_blank" rel="noreferrer">CCIP msg {row.sent.messageId.slice(0, 10)}… <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a></span>
+            : <span className="row xs" style={{ gap: 8 }}><Clock className="i" style={{ width: 12, height: 12 }} /> Queued: goes out with the next release run
+              <button className="btn sm" onClick={() => sendNow(row)} disabled={!!state.busy}>{state.busy === String(row.index) ? 'Sending…' : 'Send now'}</button></span>}
+        </div>
+      ))}
+      {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
+    </section>
+  );
 }
 
 function RedeemLeg({ leg }: { leg: Leg }) {
@@ -180,7 +294,7 @@ function RedeemLeg({ leg }: { leg: Leg }) {
   return (
     <section className="card stack">
       <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3></div>
-      <p className="xs muted">Receipts for tokens locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine; they redeem through its own gateway' : ''}. Redeem them to get the real tokens back there (collateral released to an issuer, or a holder's share after a default).</p>
+      <p className="xs muted">Receipts in your wallet for tokens locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine; they redeem through its own gateway' : ''}: ones you locked and have not pledged{leg.version ? ', or a payout from an earlier note' : ''}. Redeem them to get the real tokens back there.</p>
       {held.map(s => (
         <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
           <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {s}</span>

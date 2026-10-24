@@ -3608,9 +3608,57 @@ export const homeGatewayAbi = [
     "name": "engine_",
     "type": "address",
     "internalType": "address"
+   },
+   {
+    "name": "forwarder",
+    "type": "address",
+    "internalType": "address"
    }
   ],
   "stateMutability": "nonpayable"
+ },
+ {
+  "type": "receive",
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "MAX_FLUSH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "REPORT_FLUSH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "VERSION",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
  },
  {
   "type": "function",
@@ -3705,6 +3753,32 @@ export const homeGatewayAbi = [
  },
  {
   "type": "function",
+  "name": "flush",
+  "inputs": [
+   {
+    "name": "maxItems",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "sent",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "fundFees",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
   "name": "getCCVsAndFinalityConfig",
   "inputs": [
    {
@@ -3744,6 +3818,58 @@ export const homeGatewayAbi = [
  },
  {
   "type": "function",
+  "name": "getExpectedAuthor",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getExpectedWorkflowId",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getExpectedWorkflowName",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes10",
+    "internalType": "bytes10"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getForwarderAddress",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "getRouter",
   "inputs": [],
   "outputs": [
@@ -3751,6 +3877,48 @@ export const homeGatewayAbi = [
     "name": "",
     "type": "address",
     "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "onReport",
+  "inputs": [
+   {
+    "name": "metadata",
+    "type": "bytes",
+    "internalType": "bytes"
+   },
+   {
+    "name": "report",
+    "type": "bytes",
+    "internalType": "bytes"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "openRelease",
+  "inputs": [
+   {
+    "name": "receipt",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "to",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
    }
   ],
   "stateMutability": "view"
@@ -3800,6 +3968,24 @@ export const homeGatewayAbi = [
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "queueRelease",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -3961,6 +4147,150 @@ export const homeGatewayAbi = [
  },
  {
   "type": "function",
+  "name": "releaseAddress",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "dest",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releaseHead",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releaseId",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releaseQueue",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "pending",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "head",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "queued",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "pool",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "nextFee",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releases",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "receipt",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "sent",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "to",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint96",
+    "internalType": "uint96"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releasesQueued",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "releasesSent",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "remotes",
   "inputs": [
    {
@@ -3987,6 +4317,90 @@ export const homeGatewayAbi = [
   "type": "function",
   "name": "renounceOwnership",
   "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "sendQueued",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "messageId",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "setExpectedAuthor",
+  "inputs": [
+   {
+    "name": "author",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setExpectedWorkflowId",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setExpectedWorkflowName",
+  "inputs": [
+   {
+    "name": "name",
+    "type": "string",
+    "internalType": "string"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setForwarderAddress",
+  "inputs": [
+   {
+    "name": "forwarder",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setReleaseAddress",
+  "inputs": [
+   {
+    "name": "dest",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
   "outputs": [],
   "stateMutability": "nonpayable"
  },
@@ -4053,6 +4467,24 @@ export const homeGatewayAbi = [
   "stateMutability": "nonpayable"
  },
  {
+  "type": "function",
+  "name": "withdrawFees",
+  "inputs": [
+   {
+    "name": "to",
+    "type": "address",
+    "internalType": "address payable"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
   "type": "event",
   "name": "DuplicateLock",
   "inputs": [
@@ -4067,6 +4499,145 @@ export const homeGatewayAbi = [
     "type": "bytes32",
     "indexed": false,
     "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ExpectedAuthorUpdated",
+  "inputs": [
+   {
+    "name": "previousAuthor",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newAuthor",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ExpectedWorkflowIdUpdated",
+  "inputs": [
+   {
+    "name": "previousId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "newId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ExpectedWorkflowNameUpdated",
+  "inputs": [
+   {
+    "name": "previousName",
+    "type": "bytes10",
+    "indexed": true,
+    "internalType": "bytes10"
+   },
+   {
+    "name": "newName",
+    "type": "bytes10",
+    "indexed": true,
+    "internalType": "bytes10"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "FeesFunded",
+  "inputs": [
+   {
+    "name": "from",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "FeesWithdrawn",
+  "inputs": [
+   {
+    "name": "to",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "FlushStalled",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "fee",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "pool",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ForwarderAddressUpdated",
+  "inputs": [
+   {
+    "name": "previousForwarder",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newForwarder",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
    }
   ],
   "anonymous": false
@@ -4247,6 +4818,129 @@ export const homeGatewayAbi = [
  },
  {
   "type": "event",
+  "name": "ReleaseAddressSet",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "dest",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ReleaseQueued",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "releaseId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "account",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "receipt",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "to",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "added",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ReleaseSent",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "releaseId",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "to",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "receipt",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "messageId",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "fee",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "fromPool",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "RemoteSet",
   "inputs": [
    {
@@ -4272,6 +4966,19 @@ export const homeGatewayAbi = [
  },
  {
   "type": "event",
+  "name": "SecurityWarning",
+  "inputs": [
+   {
+    "name": "message",
+    "type": "string",
+    "indexed": false,
+    "internalType": "string"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "Unpaused",
   "inputs": [
    {
@@ -4286,6 +4993,11 @@ export const homeGatewayAbi = [
  {
   "type": "error",
   "name": "AlreadyRegistered",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "AmountTooLarge",
   "inputs": []
  },
  {
@@ -4321,12 +5033,97 @@ export const homeGatewayAbi = [
  },
  {
   "type": "error",
+  "name": "InvalidAuthor",
+  "inputs": [
+   {
+    "name": "received",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "expected",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "InvalidForwarderAddress",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidMetadata",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "InvalidRouter",
   "inputs": [
    {
     "name": "router",
     "type": "address",
     "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "InvalidSender",
+  "inputs": [
+   {
+    "name": "sender",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "expected",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "InvalidWorkflowId",
+  "inputs": [
+   {
+    "name": "received",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "expected",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "InvalidWorkflowName",
+  "inputs": [
+   {
+    "name": "received",
+    "type": "bytes10",
+    "internalType": "bytes10"
+   },
+   {
+    "name": "expected",
+    "type": "bytes10",
+    "internalType": "bytes10"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "NotQueued",
+  "inputs": [
+   {
+    "name": "index",
+    "type": "uint256",
+    "internalType": "uint256"
    }
   ]
  },
@@ -4398,6 +5195,11 @@ export const homeGatewayAbi = [
     "internalType": "address"
    }
   ]
+ },
+ {
+  "type": "error",
+  "name": "WorkflowNameRequiresAuthorValidation",
+  "inputs": []
  },
  {
   "type": "error",
