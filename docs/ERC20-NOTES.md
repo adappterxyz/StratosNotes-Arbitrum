@@ -249,7 +249,13 @@ each holder's storage cold, as it is in a real batch.)
   engine. New issuance goes to v4.
 - **Old read-model rows are unaffected.** A v3 note never emits the new events.
 
-## 9. v4 redeploy plan (testnets; needs approval, nothing deployed yet)
+## 9. v4 redeploy (done on both testnets, 2026-10-24)
+
+Deployed: engines Arbitrum Sepolia `0x7d36Da43724b09Bb03ED98a4574685070073020b` and Robinhood Chain testnet
+`0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244` (test tokens and faucet kept); a fresh HomeGateway
+`0x355196434760Ce382315E2cDADaa5bA76b06372A` and RemoteVault `0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846`. v3 files
+are in `deployments/archive/v3/`; the keeper and the v3 issuer bots keep running v3 notes to maturity, and the
+indexer reads both engines per chain (`<chain>-v3` rows). The plan as it was run:
 
 Balances on 2026-10-24: the deployer holds ~0.021 ETH on Arbitrum Sepolia and ~0.0022 ETH on Robinhood Chain
 testnet, plus 90 USDG on Arbitrum Sepolia.
