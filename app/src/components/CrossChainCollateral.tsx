@@ -5,27 +5,54 @@
  * sends the release back over CCIP: the vault pays the real token on Robinhood. Every message waits for the source
  * chain to be final, so each direction takes roughly 15–25 minutes.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRightLeft, ExternalLink, Lock } from 'lucide-react';
 import { erc20Abi, formatUnits, parseUnits } from 'viem';
 import { homeGatewayAbi, remoteVaultAbi } from '@sn/sdk';
 import type { ChainConfig, CrossChainReceipt } from '../lib/api';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { legacyConfig, useAddress, useChains, useSigner } from '../lib/chains';
 import { errText } from '../lib/format';
 
 const ccipLink = (id: string) => `https://ccip.chain.link/msg/${id}`;
 const receiptLabel = (sym: string) => sym.replace(/\.rh$/, '');
 
-type Leg = { home: ChainConfig; asset: ChainConfig; vault: `0x${string}`; gateway: `0x${string}`; receipts: Record<string, CrossChainReceipt> };
+/** `version`: set for an earlier engine's own gateway–vault pair (its notes' collateral is released through it). */
+type Leg = { home: ChainConfig; asset: ChainConfig; vault: `0x${string}`; gateway: `0x${string}`; receipts: Record<string, CrossChainReceipt>; version?: number };
 
 /** The home chain and its first asset chain, when this deployment has cross-chain collateral. */
 export function useCrossChain(): Leg | null {
   const { config } = useChains();
+  // Memoised: the leg is an effect dependency (receipt balances), so it must keep its identity across renders.
+  return useMemo(() => currentLeg(config), [config]);
+}
+
+function currentLeg(config: ReturnType<typeof useChains>['config']): Leg | null {
   const home = config.chains.find(c => c.crossChain?.role === 'home');
   const r = home?.crossChain?.remotes?.[0];
   const asset = r && config.chains.find(c => c.key === r.chain);
   if (!home || !r || !asset || !home.crossChain?.gateway) return null;
   return { home, asset, vault: r.vault, gateway: home.crossChain.gateway, receipts: r.receipts };
+}
+
+/** The current pair, then each earlier engine's pair (receipts from v3 notes redeem through the v3 gateway). */
+export function useCrossChainLegs(): Leg[] {
+  const { config } = useChains();
+  return useMemo(() => legsOf(config), [config]);
+}
+
+function legsOf(config: ReturnType<typeof useChains>['config']): Leg[] {
+  const current = currentLeg(config);
+  const out: Leg[] = current ? [current] : [];
+  for (const c of config.chains) {
+    for (const l of c.legacyEngines ?? []) {
+      const xc = l.crossChain;
+      const r = xc?.role === 'home' ? xc.remotes?.[0] : undefined;
+      const asset = r && config.chains.find(x => x.key === r.chain);
+      if (!xc?.gateway || !r || !asset) continue;
+      out.push({ home: legacyConfig(c, l), asset, vault: r.vault, gateway: xc.gateway, receipts: r.receipts, version: l.version });
+    }
+  }
+  return out;
 }
 
 /** Receipt balances (on the home chain) for the given receipt symbols, refreshed every 20 s. */
@@ -118,7 +145,11 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
 
 /** Portfolio: receipts you hold (released collateral, or a default payout) can be redeemed for the real token. */
 export function RedeemOnRobinhood() {
-  const leg = useCrossChain();
+  const legs = useCrossChainLegs();
+  return <>{legs.map(l => <RedeemLeg key={l.gateway} leg={l} />)}</>;
+}
+
+function RedeemLeg({ leg }: { leg: Leg }) {
   const address = useAddress();
   const signer = useSigner();
   const { byKey } = useChains();
@@ -148,8 +179,8 @@ export function RedeemOnRobinhood() {
 
   return (
     <section className="card stack">
-      <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral receipts</h3></div>
-      <p className="xs muted">Receipts for tokens locked on {leg.asset.name}. Redeem them to get the real tokens back there (collateral released to an issuer, or a holder's share after a default).</p>
+      <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3></div>
+      <p className="xs muted">Receipts for tokens locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine; they redeem through its own gateway' : ''}. Redeem them to get the real tokens back there (collateral released to an issuer, or a holder's share after a default).</p>
       {held.map(s => (
         <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
           <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {s}</span>

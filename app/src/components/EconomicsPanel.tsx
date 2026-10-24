@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { dec, type WorkflowDef } from '@sn/core';
 import { issuerActions, type NoteEconomics, type NoteState, type PeriodStatus } from '@sn/sdk';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { useAddress, useNoteChain, useSigner } from '../lib/chains';
 import { When } from './ui';
 import { errText, fmtDate, fmtMoney, fmtPct } from '../lib/format';
 
@@ -37,7 +37,7 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
 }) {
   const me = useAddress();
   const tokenName = collateralTokenNames(def);
-  const { byKey } = useChains();
+  const engine = useNoteChain(state);
   const signer = useSigner();
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState('');
@@ -52,8 +52,9 @@ export default function EconomicsPanel({ e, state, def, issuer, sym, now, onDone
     try {
       if (!(Number(raw) > 0)) throw new Error('Enter an amount.');
       const f = def.fields.findIndex(x => x.name === field);
+      if (!engine) throw new Error('This app does not serve the engine this note runs on.');
       const w = await signer(state.chain);
-      await byKey[state.chain].adapter.executeStep(w, state.id, step, { [f]: { kind: 'number', value: dec(raw) } }, undefined, t => setMsg({ kind: 'ok', text: `${t}…` }));
+      await engine.adapter.executeStep(w, state.id, step, { [f]: { kind: 'number', value: dec(raw) } }, undefined, t => setMsg({ kind: 'ok', text: `${t}…` }));
       setMsg({ kind: 'ok', text: `${label}: ${raw} moved into escrow.` });
       setAmounts(a => { const { [key]: _, ...rest } = a; return rest; }); // back to the proposed amount
       onDone();

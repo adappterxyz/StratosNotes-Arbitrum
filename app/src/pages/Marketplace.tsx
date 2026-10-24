@@ -6,7 +6,7 @@ import { cashSymbol } from '../lib/chains';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { useChains, PREFERRED_CHAIN } from '../lib/chains';
+import { engineOf, useChains, PREFERRED_CHAIN } from '../lib/chains';
 import { listingOf } from '../lib/listing';
 import { useNotes, useNow } from '../lib/live';
 import { ListingRow } from '../components/Listing';
@@ -27,10 +27,12 @@ export default function Marketplace() {
   const { notes, error } = useNotes({ status: 'all', q: q.trim() || undefined });
   // Each note's own cash token (older demo notes settle in tUSD), falling back to the chain's stablecoin.
   const cashOf = (chain: string, token?: string) => cashSymbol(config.chains.find(c => c.key === chain), token);
+  // Notes on an earlier engine (v3) take no new subscriptions: never "open now", labelled when shown.
+  const earlier = (id: string) => !!engineOf(config, id)?.legacy;
 
   const shown = useMemo(() => {
     const items = (notes ?? [])
-      .filter(n => !openOnly || n.view.phase === 'book')
+      .filter(n => !openOnly || (n.view.phase === 'book' && !earlier(n.id)))
       .map(n => ({ n, l: listingOf(n.view.params, { strikeDate: n.view.strikeDate, obsDates: n.view.obsDates }, cashOf(n.chain, n.view.cashToken)) }))
       .filter(({ l }) => {
         if (filters.has('yield') && l.goal !== 'yield') return false;
@@ -85,7 +87,7 @@ export default function Marketplace() {
           </div>
         ) : (
           <div className="ls-list">
-            {shown.map(({ id, view, chain }) => <ListingRow key={id} id={id} o={view} cash={cashOf(chain, view.cashToken)} now={now} />)}
+            {shown.map(({ id, view, chain }) => <ListingRow key={id} id={id} o={view} cash={cashOf(chain, view.cashToken)} now={now} earlier={earlier(id)} />)}
           </div>
         )}
       <p className="xs muted" style={{ marginTop: 14 }}>Rates are annualised from each note's terms. "Up to" rates depend on prices staying above a level and are not guaranteed. Testnet only.</p>

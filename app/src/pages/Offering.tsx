@@ -12,7 +12,7 @@ import { useVerifiedEmail } from '../components/VerifiedEmail';
 import PayoffChart from '../components/PayoffChart';
 import { Addr, Steps, When, type StepState } from '../components/ui';
 import { plainTerms } from '../lib/plain';
-import { useAddress, useChains, useSigner, cashSymbol } from '../lib/chains';
+import { useAddress, useChains, useSigner, cashSymbol, entryFor } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
 import { CurrentState } from '../components/NoteState';
@@ -49,7 +49,10 @@ export default function OfferingPage() {
   if (note === null || !o) return <main className="page"><div className="empty"><strong>No note with this id.</strong><Link to="/">Back to the marketplace</Link></div></main>;
 
   const s = note.state;
-  const chain = byKey[s.chain];
+  // The engine that runs this note: the chain's current one, or an earlier one (v3) its notes stay on.
+  const chain = entryFor(byKey, s);
+  const legacy = !!chain?.legacy;
+  const adapter = () => { if (!chain) throw new Error('This app does not serve the engine this note runs on.'); return chain.adapter; };
   const sym = cashSymbol(chain?.cfg, s.assetTokens?.[1]);
   const explorer = chain?.cfg.explorer;
   const pos = me ? positionOf(s, me, def ?? undefined) : null;
@@ -62,7 +65,8 @@ export default function OfferingPage() {
   // Default to a round amount that fits what is left in the book.
   const units = unitsIn ?? String(Math.max(0, Math.min(100, Math.floor(remaining))));
   const cost = (Number(units) || 0) * o.params.issuePricePct / 100;
-  const subscribable = !!def && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
+  // Notes on an earlier engine take no new subscriptions (their holders still withdraw and settle there).
+  const subscribable = !!def && !!chain && !legacy && o.phase === 'book' && !o.custom && def.steps.some(x => x.id === 'Task_Subscribe');
   const run = async (what: string, f: () => Promise<{ tx: string[] }>) => {
     setBusy(true); setMsg(null);
     try { const r = await f(); setMsg({ kind: 'ok', text: what, tx: r.tx[r.tx.length - 1] }); refresh(); setClaimTick(t => t + 1); }
@@ -78,7 +82,7 @@ export default function OfferingPage() {
     };
     return run(`Subscribed ${units} units for ${fmtMoney(cost)} ${sym}. They're in your portfolio.`, async () => {
       try {
-        const r = await chain.adapter.subscribe(await signer(s.chain), s.id, dec(units), onStep);
+        const r = await adapter().subscribe(await signer(s.chain), s.id, dec(units), onStep);
         setSubStep({ approve: 'done', swap: 'done' });
         return r;
       } catch (e) {
@@ -89,16 +93,16 @@ export default function OfferingPage() {
   };
   const transfer = () => run(`Transferred ${xfer.units} units.`, async () => {
     if (!isAddress(xfer.to.trim())) throw new Error('Enter the recipient wallet address.');
-    return chain.adapter.transferUnits(await signer(s.chain), s.id, xfer.to.trim(), dec(xfer.units), progress);
+    return adapter().transferUnits(await signer(s.chain), s.id, xfer.to.trim(), dec(xfer.units), progress);
   });
   const addToWallet = () => run('Added the note token to your wallet.', async () => {
     const w = await signer(s.chain);
-    const p = await chain.adapter.watchAssetParams(s.id);
+    const p = await adapter().watchAssetParams(s.id);
     if (!p) throw new Error('This note has no unit token.');
     await w.watchAsset(p);
     return { tx: [] };
   });
-  const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => chain.adapter.withdraw(await signer(s.chain), s.id, asset, undefined, progress));
+  const withdraw = (asset: number) => run('Withdrawn to your wallet.', async () => adapter().withdraw(await signer(s.chain), s.id, asset, undefined, progress));
   // Delivered tokens (physical settlement) and collateral received on a default, withdrawable like cash.
   const delivered = mine?.other ?? [];
   // The economics panel runs the issuer's funding, top-up and delivery windows; the generic task list skips them.
@@ -129,7 +133,7 @@ export default function OfferingPage() {
       <div className="page-head">
         <div className="stack" style={{ gap: 6 }}>
           <span className="label row" style={{ gap: 8 }}><AssetStack syms={o.unds.length ? o.unds.map(u => u.symbol) : o.params.underlyings.map(u => u.symbol)} size={18} label={false} />{listingOf(o.params, {}, sym).assets} · {chain?.cfg.name ?? s.chain}</span>
-          <div className="row"><h1>{o.name}</h1><span className={`pill ${o.phase}`} data-phase={o.phase}><span className="dot" />{PHASE_LABEL[o.phase]}</span></div>
+          <div className="row"><h1>{o.name}</h1><span className={`pill ${o.phase}`} data-phase={o.phase}><span className="dot" />{PHASE_LABEL[o.phase]}</span>{legacy && <span className="pill plain" data-earlier-engine title={`Issued on an earlier engine (v${chain?.version}). Your units are in that engine's ledger, not an ERC-20.`}>Earlier engine</span>}</div>
         </div>
         <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
           <span className="pill plain" title="This page updates when the indexer sees anything happen to the note: a report, a subscription, a transfer.">
@@ -148,6 +152,12 @@ export default function OfferingPage() {
       {o.hasTerms && <FullTerms o={o} cash={sym} />}
 
       <CurrentState o={o} now={now} sym={sym} units={mine && mine.units > 0 ? mine.units : null} />
+
+      {legacy && (
+        <div className="notice info" role="note" data-earlier-engine-note>
+          This note runs on an earlier version of the engine (v{chain?.version}). It keeps running to maturity there: holders withdraw coupons, the redemption and anything delivered from this page or the portfolio. It takes no new subscriptions; new notes are issued on the current engine.
+        </div>
+      )}
 
       <div className="two note-layout">
         <div className="stack">
@@ -252,7 +262,7 @@ export default function OfferingPage() {
                   <button className="btn sm" disabled={busy} onClick={addToWallet}><WalletCards className="i" />Add to wallet</button>
                 </div>
               )}
-              {!isIssuer && <span className="xs muted">Coupons and the redemption are paid straight to your wallet; anything that could not be sent waits here.</span>}
+              {!isIssuer && <span className="xs muted">{legacy ? 'On this engine, coupons and the redemption wait here until you withdraw them.' : 'Coupons and the redemption are paid straight to your wallet; anything that could not be sent waits here.'}</span>}
               <button className="btn" disabled={busy || !(mine.cash > 0)} onClick={() => withdraw(CASH_ASSET)}>{isIssuer ? `Withdraw proceeds (${sym})` : `Withdraw ${sym}`}</button>
               {delivered.map(h => {
                 const name = h.name.replace(/^Collateral /, '');
@@ -270,7 +280,7 @@ export default function OfferingPage() {
                   <div className="field"><label htmlFor="x-to">To wallet</label><input id="x-to" className="num" value={xfer.to} onChange={e => setXfer({ ...xfer, to: e.target.value })} placeholder="0x…" /></div>
                   <div className="field"><label htmlFor="x-units">Units (up to {fmtMoney(mine.units)})</label><input id="x-units" inputMode="decimal" value={xfer.units} onChange={e => setXfer({ ...xfer, units: e.target.value })} /></div>
                   <button className="btn" disabled={busy || !(Number(xfer.units) > 0) || Number(xfer.units) > mine.units} onClick={transfer}>Transfer</button>
-                  <span className="xs muted">In whole or in part, to a wallet with a verified email only. Payouts already made stay yours; from now on they go to whoever holds the units.</span>
+                  <span className="xs muted">In whole or in part, to a wallet with a verified email only. {legacy ? 'Cash already credited stays yours to withdraw' : 'Payouts already made stay yours'}; from now on they go to whoever holds the units.</span>
                 </div>
               )}
             </section>
@@ -306,7 +316,7 @@ export default function OfferingPage() {
             <div className="adv-body small">
               <div className="spread"><span className="muted">Network</span><span>{chain?.cfg.name ?? s.chain}</span></div>
               {noteToken && <div className="spread"><span className="muted">Note token (ERC-20)</span><Addr value={noteToken} href={explorer ? `${explorer}/token/${noteToken}` : undefined} /></div>}
-              <div className="spread"><span className="muted">Engine · note #</span><span><Addr value={s.engine} href={explorer ? `${explorer}/address/${s.engine}` : undefined} /> · #{s.pid}</span></div>
+              <div className="spread"><span className="muted">Engine{legacy ? ` (v${chain?.version}, earlier)` : ''} · note #</span><span><Addr value={s.engine} href={explorer ? `${explorer}/address/${s.engine}` : undefined} /> · #{s.pid}</span></div>
               <div className="spread"><span className="muted">Workflow definition</span><Addr value={s.definition} /></div>
               <div className="spread"><span className="muted">Issuer</span><Addr value={o.issuer} href={explorer ? `${explorer}/address/${o.issuer}` : undefined} /></div>
               <div className="spread"><span className="muted">Note units held</span><span className="num">{fmtMoney(s.holdings.filter(h => h.asset === NOTE_ASSET).reduce((a, h) => a + Number(BigInt(h.balance)) / Number(SCALE), 0), 0)}</span></div>

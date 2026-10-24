@@ -7,19 +7,19 @@ import { useState } from 'react';
 import { isAddress, zeroAddress } from 'viem';
 import { dec, FKIND, KIND, OP, SRC, type WorkflowDef } from '@sn/core';
 import type { InputValue, NoteState } from '@sn/sdk';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { useAddress, useNoteChain, useSigner } from '../lib/chains';
 import { errText } from '../lib/format';
 
 const KIND_NAME: Record<number, string> = Object.fromEntries(Object.entries(FKIND).map(([k, v]) => [v, k]));
 
 export default function TasksPanel({ state, def, onDone, hide = [] }: { state: NoteState; def: WorkflowDef; onDone: () => void; hide?: string[] }) {
   const me = useAddress();
-  const { byKey } = useChains();
+  const engine = useNoteChain(state);
   const signer = useSigner();
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  if (!me || state.status !== 0 || !byKey[state.chain]) return null;
+  if (!me || state.status !== 0 || !engine) return null;
   let names: Record<string, string> = {};
   try { names = JSON.parse(def.meta).names ?? {}; } catch { /* ids */ }
 
@@ -51,7 +51,7 @@ export default function TasksPanel({ state, def, onDone, hide = [] }: { state: N
         else inputs[c.field] = { kind: 'number', value: dec(raw) };
       }
       const w = await signer(state.chain);
-      await byKey[state.chain].adapter.executeStep(w, state.id, i, inputs, choice, t => setMsg({ kind: 'ok', text: `${t}…` }));
+      await engine.adapter.executeStep(w, state.id, i, inputs, choice, t => setMsg({ kind: 'ok', text: `${t}…` }));
       setMsg({ kind: 'ok', text: `${names[s.id] ?? s.id}: done.` });
       onDone();
     } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }

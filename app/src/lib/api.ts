@@ -19,6 +19,21 @@ export interface ChainConfig extends ChainInfo {
   tokens: Record<string, `0x${string}`>;
   /** Cross-chain collateral (docs/CROSS-CHAIN.md): home = this chain runs notes and holds receipts; asset = vault. */
   crossChain?: CrossChainConfig | null;
+  /**
+   * Earlier engines on this chain whose notes stay on them (FlowEngine v3 next to v4): their notes render and
+   * holders withdraw and settle on them; new issuance and subscriptions go to `engine`.
+   */
+  legacyEngines?: LegacyEngineConfig[];
+}
+export interface LegacyEngineConfig {
+  engine: `0x${string}`;
+  lens: `0x${string}`;
+  fromBlock: number;
+  version: number;
+  /** Symbols that differ for this engine's notes (its cross-chain receipts). */
+  tokens: Record<string, `0x${string}`>;
+  /** Its own gateway–vault pair (collateral locked for its notes is released through it). */
+  crossChain: CrossChainConfig | null;
 }
 export interface CrossChainReceipt { receipt: `0x${string}`; token: `0x${string}`; decimals: number; valuedAs: string | null; note?: string }
 export interface CrossChainConfig {

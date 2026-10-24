@@ -10,7 +10,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { isAddress } from 'viem';
 import { BadgeCheck, Coins, FileText, Landmark, Lock, RefreshCw, Wallet } from 'lucide-react';
 import { CASH_ASSET, type NoteView } from '@sn/sdk';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { entryFor, useAddress, useChains, useSigner } from '../lib/chains';
 import { errText, fmtMoney, fmtPct, nextEvent } from '../lib/format';
 import { useNotes, usePortfolio } from '../lib/live';
 import { useClaimable, useWalletBalances } from '../lib/balances';
@@ -63,6 +63,8 @@ export default function Portfolio() {
   }
 
   const open = (id: string) => nav(`/note/${encodeURIComponent(id)}`);
+  // Notes on an earlier engine (v3): shown and settled as before, labelled so the different mechanics are clear.
+  const earlier = (id: string) => (entryFor(byKey, { id })?.legacy ? <span title="On an earlier engine: payouts wait in the note until you withdraw them; units are not an ERC-20."> · earlier engine</span> : null);
   const rowProps = (id: string, name: string) => ({
     className: 'link', tabIndex: 0, role: 'link', 'aria-label': `Open ${name}`,
     onClick: () => open(id),
@@ -72,9 +74,11 @@ export default function Portfolio() {
   const withdraw = async (id: string, chain: string, name: string, cash: number) => {
     setBusy(id); setMsg(null);
     try {
+      const e = entryFor(byKey, { chain, id }); // the note's own engine: v3 notes withdraw from the v3 engine
+      if (!e) throw new Error('This app does not serve the engine this note runs on.');
       const w = await signer(chain);
-      const r = await byKey[chain].adapter.withdraw(w, id, CASH_ASSET);
-      setMsg({ kind: 'ok', text: `Withdrew ${fmtMoney(cash)} ${byKey[chain].cfg.stablecoin.symbol} from ${name}.`, tx: r.tx[r.tx.length - 1], explorer: byKey[chain].cfg.explorer });
+      const r = await e.adapter.withdraw(w, id, CASH_ASSET);
+      setMsg({ kind: 'ok', text: `Withdrew ${fmtMoney(cash)} ${e.cfg.stablecoin.symbol} from ${name}.`, tx: r.tx[r.tx.length - 1], explorer: e.cfg.explorer });
       refresh(); refreshWallet(); setClaimTick(t => t + 1);
     } catch (e) { setMsg({ kind: 'err', text: errText(e) }); }
     finally { setBusy(''); }
@@ -126,7 +130,7 @@ export default function Portfolio() {
                     const paid = p.view.outcome ? p.view.outcome.perUnit * p.position.units : null;
                     return (
                       <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
-                        <td><strong>{p.view.name}</strong><div className="xs muted">{byKey[p.chain]?.cfg.name ?? p.chain}</div></td>
+                        <td><strong>{p.view.name}</strong><div className="xs muted">{byKey[p.chain]?.cfg.name ?? p.chain}{earlier(p.id)}</div></td>
                         <td><AssetStack syms={symsOf(p.view)} /></td>
                         <td><StatePill o={p.view} /></td>
                         <td className="r num">{fmtMoney(p.position.units, 0)}</td>
@@ -155,7 +159,7 @@ export default function Portfolio() {
                     const pct = o.notional ? Math.min(100, (o.sold / o.notional) * 100) : 0;
                     return (
                       <tr key={id} {...rowProps(id, o.name)} data-note={id}>
-                        <td><strong>{o.name}</strong><div className="xs muted">{byKey[o.chain]?.cfg.name ?? o.chain}</div></td>
+                        <td><strong>{o.name}</strong><div className="xs muted">{byKey[o.chain]?.cfg.name ?? o.chain}{earlier(id)}</div></td>
                         <td><StatePill o={o} /></td>
                         <td><div className="bar"><span style={{ width: `${pct}%` }} /></div><div className="xs muted num" style={{ marginTop: 3 }}>{fmtMoney(o.sold, 0)} of {fmtMoney(o.notional, 0)}</div></td>
                         <td>{o.economics?.collateral.length ? <span className="coll-line" style={{ justifyContent: 'flex-start' }}>{o.economics.collateral.map(c => <Asset key={c.asset} sym={c.symbol === 'USD' ? cashSymbol(byKey[o.chain]?.cfg, o.cashToken) : c.symbol} size={16} />)}</span> : <span className="muted">—</span>}</td>
@@ -223,11 +227,11 @@ export default function Portfolio() {
                     const cash = cashOf(p);
                     return (
                       <tr key={p.id} {...rowProps(p.id, p.view.name)} data-note={p.id}>
-                        <td><strong>{p.view.name}</strong><div className="xs muted">{p.view.issuer.toLowerCase() === address ? 'Raised as issuer' : 'Paid to you'}</div></td>
+                        <td><strong>{p.view.name}</strong><div className="xs muted">{p.view.issuer.toLowerCase() === address ? 'Raised as issuer' : 'Paid to you'}{earlier(p.id)}</div></td>
                         <td className="r num" data-cash><span className="asset" style={{ justifyContent: 'flex-end' }}><span className="num">{fmtMoney(cash)}</span><Asset sym={sym} size={16} /></span></td>
                         <td className="small">{tokens.length ? <span className="muted">{tokens.length} token{tokens.length > 1 ? 's' : ''}: withdraw on the note page</span> : <span className="muted">—</span>}</td>
                         <td className="r">
-                          <button className="btn primary sm" disabled={readOnly || !(cash > 0) || !!busy || !byKey[p.chain]}
+                          <button className="btn primary sm" disabled={readOnly || !(cash > 0) || !!busy || !entryFor(byKey, { chain: p.chain, id: p.id })}
                             onClick={e => { e.stopPropagation(); withdraw(p.id, p.chain, p.view.name, cash); }}>
                             {busy === p.id ? 'Withdrawing…' : `Withdraw ${fmtMoney(cash)} ${sym}`}
                           </button>

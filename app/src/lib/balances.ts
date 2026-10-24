@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { erc20Abi, formatUnits } from 'viem';
-import { useChains } from './chains';
+import { entryFor, useChains } from './chains';
 
 export interface Balance { sym: string; amount: number; kind: 'gas' | 'cash' | 'stock' | 'test' | 'receipt' | 'token' }
 export interface ChainBalances { key: string; name: string; balances: Balance[]; error?: string }
@@ -38,6 +38,11 @@ export function useWalletBalances(address: string | null) {
         }
         if (cfg.crossChain?.role === 'home') {
           for (const r of cfg.crossChain.remotes ?? []) for (const [sym, rc] of Object.entries(r.receipts)) add(sym, rc.receipt, 'receipt');
+        }
+        // Receipts from an earlier engine's gateway (v3 notes' collateral): listed when held, by their version.
+        for (const l of cfg.legacyEngines ?? []) {
+          if (l.crossChain?.role !== 'home') continue;
+          for (const r of l.crossChain.remotes ?? []) for (const [sym, rc] of Object.entries(r.receipts)) add(`${sym} (v${l.version})`, rc.receipt, 'receipt');
         }
         const [eth, ...vals] = await Promise.all([
           client.getBalance({ address: owner }),
@@ -81,7 +86,7 @@ export function useClaimable(address: string | null, notes: Array<{ id: string; 
     if (!address || !notes.length) { setData(new Map()); return; }
     let live = true;
     Promise.all(notes.map(async n => {
-      const c = byKey[n.chain];
+      const c = entryFor(byKey, { chain: n.chain, id: n.id }); // the note's own engine (current or earlier)
       if (!c) return null;
       try { return [n.id, await c.adapter.claimable(n.id, address, asset)] as const; } catch { return null; }
     })).then(rows => { if (live) setData(new Map(rows.filter((r): r is readonly [string, bigint] => !!r))); });

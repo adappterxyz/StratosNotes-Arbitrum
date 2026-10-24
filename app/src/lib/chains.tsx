@@ -1,8 +1,9 @@
 /**
  * Chains and wallets. The API's /api/config says which chains this deployment serves (RPC, engine, lens,
  * stablecoin); this builds the wagmi + RainbowKit setup for them (injected wallets, discovered with EIP-6963)
- * and one SDK adapter per chain. Writes go through `useActions`, which puts the wallet on the note's chain
- * first.
+ * and one SDK adapter per (chain, engine): the chain's current engine, plus each earlier engine whose notes stay on
+ * it (FlowEngine v3). `useNoteChain` picks the one that runs a note. Writes go through `useSigner`, which puts the
+ * wallet on the note's chain first.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { connectorsForWallets, darkTheme, lightTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit';
@@ -11,9 +12,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, defineChain, http, type Chain, type PublicClient, type WalletClient } from 'viem';
 import { createConfig, WagmiProvider, useAccount } from 'wagmi';
 import { getAccount, getWalletClient, switchChain } from 'wagmi/actions';
-import { EvmAdapter } from '@sn/sdk';
+import { EvmAdapter, type EngineVersion } from '@sn/sdk';
 import { CASH_TOKEN, CASH_TOKENS, EXTERNAL_TOKENS, TEST_CASH_TOKEN } from '@sn/core';
 import type { AppConfig, ChainConfig } from './api';
+import { entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
+
+export { engineOf, entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
 import '@rainbow-me/rainbowkit/styles.css';
 
 /**
@@ -64,7 +68,8 @@ function toChain(c: ChainConfig): Chain {
 
 interface Chains {
   config: AppConfig;
-  byKey: Record<string, { cfg: ChainConfig; chain: Chain; adapter: EvmAdapter; client: PublicClient }>;
+  /** Each chain's current engine, with every engine it serves (`entryFor` picks a note's). */
+  byKey: ByKey;
   wagmi: ReturnType<typeof createConfig>;
 }
 
@@ -77,7 +82,14 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     for (const cfg of evm) {
       const chain = toChain(cfg);
       const client = createPublicClient({ chain, transport: http(cfg.rpc) }) as PublicClient;
-      byKey[cfg.key] = { cfg, chain, client, adapter: new EvmAdapter(cfg, client, { engine: cfg.engine, lens: cfg.lens, fromBlock: BigInt(cfg.fromBlock) }) };
+      const current: EngineEntry = { cfg, chain, client, version: 4, legacy: false, adapter: new EvmAdapter(cfg, client, { engine: cfg.engine, lens: cfg.lens, fromBlock: BigInt(cfg.fromBlock) }) };
+      const engines: Record<string, EngineEntry> = { [cfg.engine.toLowerCase()]: current };
+      for (const l of cfg.legacyEngines ?? []) {
+        const version = (l.version < 4 ? 3 : 4) as EngineVersion; // earlier engines use the v3 ABI subset
+        const lc = legacyConfig(cfg, l);
+        engines[l.engine.toLowerCase()] = { cfg: lc, chain, client, version, legacy: version < 4, adapter: new EvmAdapter(lc, client, { engine: l.engine, lens: l.lens, fromBlock: BigInt(l.fromBlock), version }) };
+      }
+      byKey[cfg.key] = { ...current, engines };
     }
     const chains = Object.values(byKey).map(x => x.chain);
     // Injected wallets only (MetaMask, Rabby, Coinbase Wallet extension…, each discovered via EIP-6963).
@@ -122,6 +134,15 @@ export function useChains() {
   const c = useContext(Ctx);
   if (!c) throw new Error('useChains outside ChainsProvider');
   return c;
+}
+
+/**
+ * The engine that runs a note: its chain's current engine or an earlier one (by the note's engine address, or its
+ * id). Undefined when this deployment does not serve that chain or engine.
+ */
+export function useNoteChain(note: { chain: string; engine?: string; id?: string } | null | undefined): EngineEntry | undefined {
+  const { byKey } = useChains();
+  return note ? entryFor(byKey, note) : undefined;
 }
 
 /** The connected wallet's address (lower-case), or null. */

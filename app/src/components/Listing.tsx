@@ -63,7 +63,7 @@ export function Specs({ o, cash, now }: { o: NoteView; cash: string; now: number
 }
 
 /** One marketplace listing: a row on wide screens, a card on phones; the whole thing opens the note. */
-export function ListingRow({ id, o, cash, now }: { id: string; o: NoteView; cash: string; now: number }) {
+export function ListingRow({ id, o, cash, now, earlier = false }: { id: string; o: NoteView; cash: string; now: number; earlier?: boolean }) {
   const l = listingOf(o.params, { strikeDate: o.strikeDate, obsDates: o.obsDates }, cash);
   const syms = symsOf(o);
   return (
@@ -79,6 +79,7 @@ export function ListingRow({ id, o, cash, now }: { id: string; o: NoteView; cash
       <Specs o={o} cash={cash} now={now} />
       <div className="ls-side">
         <StatusPill phase={o.phase} />
+        {earlier && <span className="pill plain" data-earlier-engine title="Issued on an earlier engine: it runs to maturity there and takes no new subscriptions.">Earlier engine</span>}
         <span className="ls-go">View <ArrowRight className="i" /></span>
       </div>
     </Link>
