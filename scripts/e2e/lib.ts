@@ -23,7 +23,8 @@ export function clients(rpc: string, chainId: number) {
  * (coupon barrier 70%, autocall at 100% from the second observation, knock-in 60%).
  */
 export const NOTE: ProductParams = process.env.E2E_NOTE === 'equity'
-  // Equities: Chainlink TSLA/USD and NVDA/USD on Arbitrum One (NYSE hours; outside them, the last close).
+  // Equities: Chainlink TSLA/USD and NVDA/USD on Robinhood Chain mainnet (the stock tokens' own chain; CRE reads them
+  // over HTTP JSON-RPC, the fallback keeper with viem). NYSE hours; outside them, the last close.
   ? { ...EXAMPLE_PRODUCTS.phoenix, name: 'E2E Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], observations: 3 }
   : { ...EXAMPLE_PRODUCTS.phoenix, name: 'E2E Worst-of Phoenix on ETH, BTC', underlyings: [FEEDS.ETH, FEEDS.BTC], observations: 3 };
 

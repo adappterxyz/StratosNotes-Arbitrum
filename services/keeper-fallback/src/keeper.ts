@@ -5,9 +5,11 @@
  * is recorded with that address (ReportProcessed.reporter), so notes show it was not CRE.
  *
  * Same inputs as the CRE workflow: process state from the chain's NotesLens at a chosen block tag, prices
- * from Chainlink feeds (latestRoundData) on the chain each feed lives on, the same staleness rule.
+ * from Chainlink feeds (latestRoundData) on the chain each feed lives on, the same staleness rule. A feed chain
+ * the CRE workflow reads over HTTP (Robinhood Chain mainnet, HTTP_FEED_CHAINS) is read here at the same block
+ * rule: `lagBlocks` below the head, since its public RPC does not keep the finalized block's state.
  */
-import { checkRound, routeFeed, type DueReport, type FeedRef, type FeedRoutes } from '@sn/core';
+import { checkRound, routeFeed, type DueReport, type FeedReadAt, type FeedRef, type FeedRoutes } from '@sn/core';
 import { engineAbi, feedAbi, readDue, reportHex } from '@sn/sdk';
 import type { Account, Address, Chain, PublicClient, Transport, WalletClient } from 'viem';
 
@@ -16,6 +18,8 @@ export interface FallbackConfig {
   chain: { name: string; client: PublicClient; wallet: WalletClient<Transport, Chain, Account>; engine: Address; lens: Address };
   /** Clients for the chains feeds live on, by CRE chain-selector name (e.g. ethereum-mainnet). */
   feedClients: Record<string, PublicClient>;
+  /** Per feed chain: read at a block tag or `lagBlocks` below the head instead of blockTag's rule. */
+  feedReadAt?: Record<string, FeedReadAt>;
   blockTag: 'latest' | 'safe' | 'finalized';
   finalityAllowanceSec: number;
   maxReportsPerRun: number;
@@ -24,12 +28,15 @@ export interface FallbackConfig {
   log: (line: string) => void;
 }
 
-async function readFeed(cfg: FallbackConfig, f: FeedRef, nowSec: number): Promise<bigint> {
+export async function readFeed(cfg: FallbackConfig, f: FeedRef, nowSec: number): Promise<bigint> {
   const client = cfg.feedClients[f.feedChain];
   if (!client) throw new Error(`no RPC for feed chain ${f.feedChain}`);
-  const tag = cfg.blockTag === 'latest' ? 'latest' : 'finalized';
-  const [roundId, answer, , updatedAt, answeredInRound] = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'latestRoundData', blockTag: tag });
-  const decimals = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'decimals', blockTag: tag });
+  const at = cfg.feedReadAt?.[f.feedChain];
+  const block = at?.lagBlocks !== undefined
+    ? { blockNumber: (await client.getBlockNumber()) - BigInt(at.lagBlocks) }
+    : { blockTag: at?.blockTag ?? (cfg.blockTag === 'latest' ? 'latest' as const : 'finalized' as const) };
+  const [roundId, answer, , updatedAt, answeredInRound] = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'latestRoundData', ...block });
+  const decimals = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'decimals', ...block });
   return checkRound({ roundId, answer, updatedAt, answeredInRound }, decimals, nowSec, f.staleness, cfg.finalityAllowanceSec);
 }
 

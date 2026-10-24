@@ -43,6 +43,10 @@ KEEPER_CONFIG=config.json KEEPER_KEY_FILE=/run/secrets/fallback-key npm run once
 ```
 
 - **`feedRpcs`:** maps each feed chain named in a note's oracles (CRE chain-selector names) to an RPC.
+  `robinhood-mainnet` (the equity feeds) defaults to its public RPC (`HTTP_FEED_CHAINS` in `@sn/core`).
+- **`feedReadAt`:** optional, per feed chain: `{ "blockTag": "latest" }` or `{ "lagBlocks": 600 }`. Robinhood
+  Chain mainnet defaults to 600 blocks below the head, the same block rule as the CRE workflow (its public RPC
+  does not keep the finalized block's state).
 - **`feedRoutes`:** optional. Redirects a recorded feed address (lowercase) to another feed, for example
   Robinhood mainnet's own equity feeds.
 

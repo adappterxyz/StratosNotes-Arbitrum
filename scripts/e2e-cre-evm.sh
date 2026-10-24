@@ -5,7 +5,8 @@
 #   1. Arbitrum Sepolia fork (anvil, chain id 421614): the real MockKeystoneForwarder is there. Deploy FlowEngine +
 #      NotesLens + a mock USDC, issue a worst-of phoenix on ETH and BTC (strike ~2 min out, observations
 #      OBS_EVERY apart), subscribe two investors, then run `cre workflow simulate --broadcast` until it completes.
-#      Prices: Chainlink ETH/USD and BTC/USD on Ethereum mainnet, read at a finalized block.
+#      Prices: Chainlink ETH/USD and BTC/USD on Ethereum mainnet, read at a finalized block. E2E_NOTE=equity: TSLA and
+#      NVDA on Robinhood Chain mainnet, read over the CRE HTTP capability (JSON-RPC eth_call; no EVM read there).
 #   2. Robinhood Chain testnet fork (chain id 46630): same note, driven by services/keeper-fallback through
 #      FlowEngine.fallbackReport (the path for Robinhood mainnet, where CRE cannot write yet).
 #
@@ -42,7 +43,9 @@ issuer_bot_start() { # <rpc> <chain id> <deployment json>
     ISSUER_KEY="$KEY1" MINT=1 MISS="${MISS:-}" INTERVAL=4 npx tsx scripts/issuer-bot.ts >> "$WORK/issuer-bot.log" 2>&1 &
   echo $! > "$WORK/issuer-bot.pid"
 }
-issuer_bot_stop() { pkill -f 'scripts/[i]ssuer-bot.ts' 2>/dev/null || true; rm -f "$WORK/issuer-bot.pid"; }
+# Only this run's bot (and its npx/tsx children): a pattern kill would also stop issuer bots running beside it (pm2).
+kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill "$1" 2>/dev/null || true; }
+issuer_bot_stop() { [ -f "$WORK/issuer-bot.pid" ] && kill_tree "$(cat "$WORK/issuer-bot.pid")"; rm -f "$WORK/issuer-bot.pid"; }
 
 # fork <name> <rpc> <chain id>: starts anvil, prints the port. Blocks every 2 s (so "finalized", two blocks
 # behind, keeps moving) and a 30M gas limit for the deploy.
@@ -116,7 +119,7 @@ if [[ " $PARTS " == *" fallback "* ]]; then
   LENS="$(python3 -c "import json;print(json.load(open('$WORK/robinhood-fork.json'))['lens'])")"
   cat > "$WORK/keeper-fallback.json" <<JSON
 { "chain": { "name": "robinhood-fork", "chainId": 46630, "rpc": "$RPC", "engine": "$ENGINE", "lens": "$LENS" },
-  "feedRpcs": { "ethereum-mainnet": "https://ethereum-rpc.publicnode.com" },
+  "feedRpcs": { "ethereum-mainnet": "https://ethereum-rpc.publicnode.com", "robinhood-mainnet": "https://rpc.mainnet.chain.robinhood.com" },
   "blockTag": "finalized", "finalityAllowanceSec": 1800, "maxReportsPerRun": 5, "gasLimit": "8000000" }
 JSON
   echo "$KEY9" > "$WORK/fallback.key"

@@ -8,6 +8,7 @@
  * A chain without a deployment file gets the zero address, which the workflow refuses (fails closed).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { HTTP_FEED_CHAINS } from '../packages/core/src/feed-rpc';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 const TARGETS: Record<string, Array<{ file: string; chainSelectorName: string }>> = {
@@ -56,6 +57,11 @@ const config = {
   ...(target === 'staging' && existsSync('deployments/crosschain-testnet.json') ? { vaults: crossChainVaults() } : {}),
   // Feeds are read at a finalized block (Ethereum ~13 min behind the head; Arbitrum One finalizes with L1).
   finalityAllowanceSec: 1800,
+  // Feed chains CRE has no EVM read capability for (Robinhood Chain mainnet: the equity feeds) are read over the
+  // HTTP capability with JSON-RPC eth_call, pinned a little below the head the nodes agree on (feed-rpc.ts).
+  httpFeedChains: Object.fromEntries(Object.entries(HTTP_FEED_CHAINS).map(([name, c]) => [name, {
+    rpc: c.rpc, ...(c.lagBlocks !== undefined ? { lagBlocks: c.lagBlocks } : { blockTag: c.blockTag ?? 'finalized' }),
+  }])),
 };
 const out = `cre/notes-keeper-evm/config.${target === 'staging' ? 'staging' : target === 'production' ? 'production' : 'local-fork'}.json`;
 writeFileSync(out, JSON.stringify(config, null, 2) + '\n');

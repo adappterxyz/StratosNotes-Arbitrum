@@ -8,12 +8,15 @@
 //     observation whose date has come, or a plain timer to advance.
 //  3. For each due oracle step, reads the Chainlink price feed of every underlying it captures (one for a
 //     single-asset note, several for a worst-of basket), on the chain the feed lives on, at a finalized block,
-//     staleness-checked against the feed's heartbeat.
+//     staleness-checked against the feed's heartbeat. A feed chain CRE has no EVM read capability for
+//     (Robinhood Chain mainnet, the stock tokens' native chain) is read over the HTTP capability instead: one
+//     batched JSON-RPC eth_call request per chain per run, every node decoding it to the same readings
+//     (httpFeedChains, packages/core/src/feed-rpc.ts).
 //  4. Writes a DON-signed report to the chain's FlowEngine through the KeystoneForwarder:
 //     abi.encode(uint256 pid, uint16 step, int256[] values). The engine bounds-checks every value, runs the
 //     step and everything after it that needs nobody (coupons, autocall, redemption) in that transaction.
 import {
-  bytesToHex, consensusIdenticalAggregation, CronCapability, EVMClient, encodeCallMsg, getNetwork, handler,
+  bytesToHex, CronCapability, EVMClient, encodeCallMsg, getNetwork, handler,
   LAST_FINALIZED_BLOCK_NUMBER, LATEST_BLOCK_NUMBER, prepareReportRequest, Runner, TxStatus, type Runtime,
 } from '@chainlink/cre-sdk'
 import { decodeFunctionResult, encodeFunctionData, zeroAddress, type Address, type Hex } from 'viem'
@@ -22,10 +25,10 @@ import { decodeEvmDef, encodeEvmReport } from '../../packages/core/src/compile-e
 import { checkRound, dueReports, routeFeed, type DueReport, type FeedRef } from '../../packages/core/src/keeper'
 import { collateralShortfalls, erc20ReadAbi, remoteVaultAbi, type VaultReading } from '../../packages/core/src/crosschain'
 import type { WorkflowDef } from '../../packages/core/src/def-types'
+import { readingToRound } from '../../packages/core/src/feed-rpc'
 import { feedAbi, lensAbi } from '../../packages/sdk/src/evm/abi'
 import { hexToBytes, snapshotToState } from '../../packages/sdk/src/evm/state'
-
-void consensusIdenticalAggregation // reads go through the EVM capability, which reaches consensus itself
+import { httpFeedChainsSchema, httpFeedReadings } from './http-feeds'
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/)
 /** An engine or lens: the zero address means "not deployed yet" and fails the config, closed. */
@@ -59,6 +62,13 @@ const configSchema = z.object({
   /** Optional: send a recorded feed (lowercase address) to another source, e.g. a chain's own feeds. */
   feedRoutes: z.record(z.object({ feed: address, feedChain: z.string(), staleness: z.number().int().positive().optional() })).optional(),
   /**
+   * Optional: feed chains read over the HTTP capability (JSON-RPC eth_call) because CRE has no EVM read capability
+   * for them, by chain-selector name, e.g. { "robinhood-mainnet": { "rpc": "https://rpc.mainnet.chain.robinhood.com",
+   * "blockTag": "safe" } }. One batched request per chain per run. blockTag defaults to 'finalized'; use 'safe' where
+   * the RPC does not keep the finalized block's state.
+   */
+  httpFeedChains: httpFeedChainsSchema.optional(),
+  /**
    * Optional: cross-chain collateral (stage 1). For each vault on an asset chain (Robinhood) and its receipt on
    * the home chain, check every run that the vault still backs the receipts (packages/core/src/crosschain.ts).
    */
@@ -76,13 +86,13 @@ function client(name: string): EVMClient {
   return new EVMClient(network.chainSelector.selector)
 }
 
-/** One view call, at the last finalized block unless `at` is 'latest'; returns the raw result. */
 /**
  * Chain reads this run. CRE caps EVM reads per workflow run (PerWorkflow.ChainRead.CallLimit, 15 in the
  * simulator), so optional checks (vault backing) only spend what the reports leave.
  */
 const READ_LIMIT = 15
 let readsThisRun = 0
+/** One view call, at the last finalized block unless `at` is 'latest'; returns the raw result. */
 function view(runtime: Runtime<Config>, evm: EVMClient, to: string, data: Hex, at: 'finalized' | 'latest' = 'finalized'): Hex {
   readsThisRun++
   const reply = evm.callContract(runtime, {
@@ -147,36 +157,50 @@ export const onCron = (runtime: Runtime<Config>): string => {
   const failed: string[] = []
   let due = 0
   let budget = cfg.maxReportsPerRun
-  // A basket reads one feed per underlying; read each feed at most once per run, whatever needs it.
-  const prices = new Map<string, bigint>()
-  const price = (f: FeedRef) => {
-    const k = `${f.feedChain}:${f.feed.toLowerCase()}:${f.staleness}`
-    if (!prices.has(k)) prices.set(k, readFeed(runtime, f, nowSec))
-    return prices.get(k)!
-  }
+  // What is due everywhere first, so feeds on the HTTP feed chains can be read in one request per chain.
+  const work: Array<{ chain: ChainConfig; d: DueReport; feeds: FeedRef[] }> = []
   for (const chain of cfg.chains) {
     const reports = dueOn(runtime, chain, nowSec)
     due += reports.length
     runtime.log(`${chain.chainSelectorName}: ${reports.length} report(s) due`)
-    const evm = client(chain.chainSelectorName)
     for (const d of reports) {
       if (budget <= 0) break
       budget--
-      const tag = `${chain.chainSelectorName} pid ${d.process} ${d.stepId}`
-      let values: bigint[]
-      try {
-        values = d.feeds.map(f => price(routeFeed(f, cfg.feedRoutes)))
-      } catch (e) {
-        runtime.log(`${tag} -> skipped: ${(e as Error).message}`)
-        failed.push(tag)
-        continue
-      }
-      const report = runtime.report(prepareReportRequest(bytesToHex(encodeEvmReport(BigInt(d.process), d.step, values)))).result()
-      const resp = evm.writeReport(runtime, { receiver: chain.engine, report, gasConfig: { gasLimit: chain.gasLimit } }).result()
-      const ok = resp.txStatus === TxStatus.SUCCESS && !!resp.txHash && resp.txHash.length > 0
-      runtime.log(`${tag} [${values.join(',')}] -> ${ok ? `written ${bytesToHex(resp.txHash!)}` : `failed: ${resp.errorMessage || resp.txStatus}`}`)
-      ;(ok ? written : failed).push(tag)
+      work.push({ chain, d, feeds: d.feeds.map(f => routeFeed(f, cfg.feedRoutes)) })
     }
+  }
+  const httpReadings = httpFeedReadings(runtime, work.flatMap(w => w.feeds))
+  // A basket reads one feed per underlying; read each feed at most once per run, whatever needs it.
+  const prices = new Map<string, bigint>()
+  const price = (f: FeedRef) => {
+    const k = `${f.feedChain}:${f.feed.toLowerCase()}:${f.staleness}`
+    if (!prices.has(k)) {
+      const reading = httpReadings.get(`${f.feedChain}:${f.feed.toLowerCase()}`)
+      if (reading) {
+        const { round, decimals } = readingToRound(reading)
+        prices.set(k, checkRound(round, decimals, nowSec, f.staleness, cfg.finalityAllowanceSec))
+      } else {
+        prices.set(k, readFeed(runtime, f, nowSec))
+      }
+    }
+    return prices.get(k)!
+  }
+  for (const { chain, d, feeds } of work) {
+    const evm = client(chain.chainSelectorName)
+    const tag = `${chain.chainSelectorName} pid ${d.process} ${d.stepId}`
+    let values: bigint[]
+    try {
+      values = feeds.map(price)
+    } catch (e) {
+      runtime.log(`${tag} -> skipped: ${(e as Error).message}`)
+      failed.push(tag)
+      continue
+    }
+    const report = runtime.report(prepareReportRequest(bytesToHex(encodeEvmReport(BigInt(d.process), d.step, values)))).result()
+    const resp = evm.writeReport(runtime, { receiver: chain.engine, report, gasConfig: { gasLimit: chain.gasLimit } }).result()
+    const done = resp.txStatus === TxStatus.SUCCESS && !!resp.txHash && resp.txHash.length > 0
+    runtime.log(`${tag} [${values.join(',')}] -> ${done ? `written ${bytesToHex(resp.txHash!)}` : `failed: ${resp.errorMessage || resp.txStatus}`}`)
+    ;(done ? written : failed).push(tag)
   }
   // Cross-chain collateral: does every vault still back the receipts outstanding at home?
   // Four reads per vault, within what this run has left; a rotating start so every vault is checked in turn.

@@ -144,5 +144,11 @@
       "stateBlock": "latest"
     }
   ],
-  "finalityAllowanceSec": 1800
+  "finalityAllowanceSec": 1800,
+  "httpFeedChains": {
+    "robinhood-mainnet": {
+      "rpc": "https://rpc.mainnet.chain.robinhood.com",
+      "lagBlocks": 600
+    }
+  }
 }
