@@ -480,7 +480,7 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 .ls-yield { display: grid; gap: 2px; }
 .ls-yield strong { font-size: 20px; letter-spacing: -0.01em; color: hsl(var(--foreground)); }
 .ls-yield.big strong { font-size: 28px; }
-.ls-rate-label { font: 500 11px var(--font-mono, ui-monospace); letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-top: -1px; }
+.ls-rate-label { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-top: -1px; }
 .ls-cond { color: hsl(var(--warning)); }
 .ls-specs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; color: hsl(var(--text-soft, var(--muted-foreground))); }
 .ls-specs li { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
