@@ -120,10 +120,12 @@ compliance layer exists. `[[BEACHHEAD: confirm, name 3–5 target issuers]]`
   collateral can still lose holders money in a default. The app shows the ratio and coverage prominently; issuer
   reputation and minimum ratios may be needed.
 - **Oracle and keeper risk.** Prices come from Chainlink feeds, and CRE runs today in Chainlink's simulator, writing
-  real testnet transactions. Production needs CRE deploy access. CRE doesn't support Robinhood mainnet yet; a
-  fallback keeper covers it and every report says which acted.
-- **Smart-contract risk.** The engine has not been audited. It is at 24,351 of 24,576 bytes, so new features need
-  code moved into libraries.
+  real testnet transactions. We stay on testnets until Chainlink grants CRE production (DON) access; mainnet also
+  waits on the audit. CRE doesn't support Robinhood mainnet yet; there, a fallback keeper would cover it, and every
+  report says which acted.
+- **Smart-contract risk.** The engine has not been audited yet; an internal security pass (static analysis,
+  invariant and fuzz tests) is in [SECURITY.md](SECURITY.md), and its fixes are deployed (v3). The engine is at
+  23,384 of 24,576 bytes, so new features need code moved into libraries.
 - **Test assets.** Notes use our test tokens (tUSD, tTSLA…), not real stablecoins or stock tokens.
 
 ## 11. Assumptions to test

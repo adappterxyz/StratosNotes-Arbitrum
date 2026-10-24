@@ -12,8 +12,8 @@ For recording the demo video, and for a live pitch. URLs are live on Robinhood C
   1. https://notes.markets
   2. https://notes.markets/#explore
   3. https://notes.markets/app/issue
-  4. https://notes.markets/app/note/robinhood-testnet:0xa1c0a6c72d07d885e2b91ecad4aabe758f446c35:1 (open TSLA/NVDA
-     note, v2 engine; the book is open until 25 Oct 2026, 13:29 UTC)
+  4. https://notes.markets/app/note/robinhood-testnet:0xcbf6eec598b8f3b4a4082f5583db6bd6f488b22d:1 (open TSLA/NVDA
+     note, v3 engine; the book is open until 26 Oct 2026, 11:55 UTC)
   5. https://notes.markets/#proof
   6. The Robinhood explorer link for the strike report:
      https://explorer.testnet.chain.robinhood.com/tx/0x77e678a32a097b58818f7df64fc50204fe714cb4caaac392dd267c61bdcc196d
@@ -30,7 +30,7 @@ For recording the demo video, and for a live pitch. URLs are live on Robinhood C
 | 1:05 | Issue stage: size, dates, collateral ratio; click Issue; enter the email and code | "To issue you verify your email. It's bound on-chain as a salted hash, so the contract can require it without anyone seeing it. Then collateral goes into the note's escrow." |
 | 1:20 | Tab 4, switch to the investor account; **Subscribe** 100 units | "Investors buy units for stablecoins in one transaction. The money goes to the issuer as funding. Every payment date, they get an email." |
 | 1:35 | Tab 5, Proof: the TSLA/NVDA run; open tab 6 | "Here's a note that ran to the end on Robinhood Chain testnet: Chainlink CRE fixed the strike, observed, the issuer funded each payment, and holders were paid 630 and 420, exactly the reference payoff." |
-| 1:50 | Back to tab 1, "Built on" row | "Why Robinhood Chain: the stocks and their Chainlink prices are on one chain. Next: audit, Arbitrum One with real USDC, then Robinhood mainnet with real stock tokens." |
+| 1:50 | Back to tab 1, "Built on" row | "Why Robinhood Chain: the stocks and their Chainlink prices are on one chain. Next: an audit, stock notes with Robinhood's own stock tokens, first issuers; mainnet once Chainlink CRE production access is in place." |
 | 2:00 | End | |
 
 ## Fallbacks

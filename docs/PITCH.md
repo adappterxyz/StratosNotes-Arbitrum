@@ -37,8 +37,9 @@ investors; retail comes later through a licensed distribution partner. `[[PRICIN
 - `[[TEAM: names, roles, relevant background]]`
 
 **Milestones and ask (2:45–3:00).**
-- **Milestones:** audit and Arbitrum One with real USDC; Robinhood Chain mainnet with real stock tokens; first real
-  issuers; a compliance layer and distribution partners ([MILESTONES.md](MILESTONES.md)).
+- **Milestones:** audit and hardening; stock notes on Robinhood Chain testnet with its own stock tokens; first
+  issuers; a compliance layer and distribution partners. Mainnet follows once Chainlink CRE production access and
+  the audit are in place ([MILESTONES.md](MILESTONES.md)).
 - **Ask:** `[[ASK: prize/grant amount and what it funds]]`, plus introductions to the Robinhood Chain team and to
   issuers.
 
@@ -81,7 +82,8 @@ near the 24 KB size limit, so new logic goes into libraries.
 
 **Why Robinhood Chain and not just Arbitrum One?**
 Notes on stocks need the stocks and their prices together. Robinhood Chain has tokenized stocks, and Chainlink
-publishes equity feeds. Arbitrum One is where crypto notes and DeFi liquidity are, so we plan to deploy on both.
+publishes equity feeds. We read those feeds on Arbitrum One. Deploying to Arbitrum One itself, for crypto notes and
+DeFi liquidity, comes with mainnet, after production CRE access and an audit; until then we stay on testnets.
 
 ## Placeholders to fill
 

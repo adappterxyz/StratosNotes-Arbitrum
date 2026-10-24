@@ -19,11 +19,12 @@ testnet** and **Arbitrum Sepolia**.
 |---|---|
 | **Robinhood Chain Founder-in-Residence** | Notes on tokenized stocks need the stocks and their prices on one chain; Robinhood Chain has both. We're building a company on it: plan in [MILESTONES.md](MILESTONES.md), go-to-market in [GTM-CANVAS.md](GTM-CANVAS.md). |
 | **Robinhood Chain Innovation Award** | Deployed on Robinhood Chain testnet; a TSLA/NVDA note ran start to finish there, with every price and payment by Chainlink CRE. |
-| **General track** (Robinhood Chain and Arbitrum One slots) | Deployed on Robinhood Chain testnet and Arbitrum Sepolia. **Arbitrum One:** deployment pending funding of the deployer; same contracts and scripts. |
-| **Arbitrum Foundation grants** | Milestones tied to audit, Arbitrum One with real USDC, Robinhood mainnet and the first real issuers. |
+| **General track** (Robinhood Chain slot) | Deployed on Robinhood Chain testnet and Arbitrum Sepolia. |
+| **Arbitrum Foundation grants** | Milestones tied to an audit, stock notes on Robinhood Chain, the first issuers and a compliance layer; mainnet once Chainlink CRE production access and the audit are in place. |
 
 **Eligibility:** deployed on Robinhood Chain testnet (chain 46630) and Arbitrum Sepolia (chain 421614); addresses
-below. Arbitrum One: pending.
+below. We stay on testnets for now: Chainlink runs through the CRE simulator, and mainnet waits on production CRE
+access and an audit.
 
 ## How we meet the criteria
 
@@ -83,15 +84,18 @@ notes.markets = one Cloudflare Worker: landing, app, AI, email (Cloudflare Email
 
 ## Evidence
 
-**Live contracts (v2: collateral, funding calls, email requirement on)**
+**Live contracts (v3: collateral, funding calls, email requirement on, security fixes from [SECURITY.md](SECURITY.md))**
 
 | Network | FlowEngine | NotesLens | TokenFaucet | Forwarder |
 |---|---|---|---|---|
-| Robinhood Chain testnet | `0xA1C0A6c72d07D885e2b91ecaD4AabE758F446C35` | `0xCb510Dcdd6E3BB3C19f041EEe6D3b383227583Fe` | `0x774D56991b73cB254842d302Cc1fd82f2846f370` | MockKeystoneForwarder `0x0b93082D9b3C7C97fAcd250082899BAcf3af3885` |
-| Arbitrum Sepolia | `0x774D56991b73cB254842d302Cc1fd82f2846f370` | `0xE8d9Fa95ad823A20B0e2c3FC0f017C15de98A410` | `0x4d530a52027540E922A5fF1A141454d5207562f3` | MockKeystoneForwarder `0xD41263567DdfeAd91504199b8c6c87371e83ca5d` |
+| Robinhood Chain testnet | `0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D` | `0x0969cCc3e714A3Ac5a49b1cD8e07989B8C7CaA41` | `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10` | MockKeystoneForwarder `0x0b93082D9b3C7C97fAcd250082899BAcf3af3885` |
+| Arbitrum Sepolia | `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10` | `0x7544378876D780E69968CD67c3FEf9a294C23A0B` | `0x02BA09FB3409d310C1C8d145144c84e5bC5D09EE` | MockKeystoneForwarder `0xD41263567DdfeAd91504199b8c6c87371e83ca5d` |
+
+Earlier engines are archived in `deployments/archive/` (v1: the two completed CRE runs below; v2: before the
+security fixes).
 
 Email verifier (both chains): `0xBbAb30Cf49862BAfEb37a405D08949E81045093f`. One open demo note per chain (TSLA/NVDA on
-Robinhood, ETH/BTC on Arbitrum Sepolia; strike 25 Oct 2026).
+Robinhood, ETH/BTC on Arbitrum Sepolia; strike 26 Oct 2026).
 
 **Two notes run start to finish on the live testnets, every price and payment by Chainlink CRE** (v1 engines, before
 the email requirement; records in `deployments/archive/`):
@@ -184,7 +188,9 @@ verify email and attest on-chain, then issue, subscribe, fund and get paid throu
 ## What's next
 
 [MILESTONES.md](MILESTONES.md):
-1. Audit and Arbitrum One with real USDC.
-2. Robinhood Chain mainnet with real stock tokens.
-3. First real issuers.
+1. Audit and hardening on testnet.
+2. Stock notes on Robinhood Chain testnet with its own stock tokens.
+3. First issuers.
 4. Compliance layer and distribution partners.
+
+Mainnet (Arbitrum One, Robinhood Chain) comes after, once Chainlink CRE production access and the audit are in place.

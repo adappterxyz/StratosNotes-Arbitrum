@@ -1,5 +1,15 @@
 # Deploy runbook: Arbitrum Sepolia, Robinhood Chain testnet, notes.markets
 
+> **Networks: testnets only.** notes.markets runs on Robinhood Chain testnet and Arbitrum Sepolia. Chainlink runs
+> through the CRE simulator (`cre workflow simulate --broadcast` against the mock forwarders), so there is no mainnet
+> deployment: Arbitrum One and Robinhood Chain mainnet wait on CRE production (DON) access and an audit
+> (docs/MILESTONES.md). Arbitrum One is only read, for Chainlink's equity price feeds.
+>
+> **Current engines (v3, 2026-10-24):** Arbitrum Sepolia `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10`, Robinhood
+> Chain testnet `0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D`. Earlier engines: `deployments/archive/` (v1, v2). The
+> v3 redeploy reset the D1 read model for both chains (the reset in the notes of §8) and kept the email tables
+> and templates.
+
 Everything below runs from the repo root on the server. Keys live in `.keys/` (gitignored, mode 600) and are read
 from files by the scripts, never typed on a command line or printed.
 
