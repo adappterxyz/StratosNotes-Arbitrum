@@ -155,7 +155,10 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
 
 const lockedEvent = parseAbiItem('event Locked(bytes32 indexed lockId, address indexed from, address indexed beneficiary, address token, uint256 amount, bytes32 messageId, uint256 fee)');
 const creditedEvent = parseAbiItem('event LockCredited(bytes32 indexed lockId, uint64 indexed chainSelector, address indexed account, address receipt, uint256 amount, bytes32 messageId)');
-type TrackedLock = { lockId: `0x${string}`; token: string; amount: bigint; messageId: string; tx: string; at: number; credited: string | null };
+type TrackedLock = { lockId: `0x${string}`; token: string; amount: bigint; messageId: string; tx: string; at: number; credited: string | null;
+  creditedBlock?: bigint; receipt?: string; fate?: { kind: 'sent-back' | 'pledged'; tx: string } };
+const redeemSentEvent = parseAbiItem('event RedeemSent(bytes32 indexed redeemId, uint64 indexed chainSelector, address indexed from, address to, address receipt, uint256 amount, bytes32 messageId, uint256 fee)');
+const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
 
 /**
  * The wallet's recent locks, read from both chains (so it survives a reload): locked in the vault on the asset chain,
@@ -188,8 +191,30 @@ function useMyLocks(leg: Leg, address: string | null, tick: number) {
           for (let i = 0n; i < 6n; i++) {
             const to = hHead - i * 10_000n, from = to - 9_999n;
             const logs = await home.getLogs({ address: leg.gateway, event: creditedEvent, args: { lockId: recent.map(x => x.lockId) }, fromBlock: from, toBlock: to });
-            for (const l of logs) { const x = recent.find(y => y.lockId === l.args.lockId); if (x) x.credited = l.transactionHash!; }
+            for (const l of logs) { const x = recent.find(y => y.lockId === l.args.lockId); if (x) { x.credited = l.transactionHash!; x.creditedBlock = l.blockNumber!; x.receipt = l.args.receipt!; } }
             if (recent.every(x => x.credited)) break;
+          }
+          // What became of each credited lock: sent back (RedeemSent) or pledged into a note (receipt moved to the
+          // engine), matched oldest first; otherwise it is still in the wallet, ready to pledge.
+          const credited = recent.filter(x => x.creditedBlock).sort((a, b) => Number(a.creditedBlock! - b.creditedBlock!));
+          if (credited.length) {
+            const since = credited[0].creditedBlock!;
+            const outs: Array<{ kind: 'sent-back' | 'pledged'; receipt: string; amount: bigint; block: bigint; tx: string }> = [];
+            const engine = leg.home.engine as `0x${string}` | undefined;
+            for (let from = since; from <= hHead; from += 10_000n) {
+              const to = from + 9_999n > hHead ? hHead : from + 9_999n;
+              const sent = await home.getLogs({ address: leg.gateway, event: redeemSentEvent, args: { from: address as `0x${string}` }, fromBlock: from, toBlock: to });
+              for (const l of sent) outs.push({ kind: 'sent-back', receipt: l.args.receipt!.toLowerCase(), amount: l.args.amount!, block: l.blockNumber!, tx: l.transactionHash! });
+              if (engine) {
+                const pl = await home.getLogs({ address: Object.values(leg.receipts).map(r => r.receipt), event: transferEvent, args: { from: address as `0x${string}`, to: engine }, fromBlock: from, toBlock: to });
+                for (const l of pl) outs.push({ kind: 'pledged', receipt: l.address.toLowerCase(), amount: l.args.value!, block: l.blockNumber!, tx: l.transactionHash! });
+              }
+            }
+            outs.sort((a, b) => Number(a.block - b.block));
+            for (const x of credited) {
+              const i = outs.findIndex(o => o.receipt === x.receipt!.toLowerCase() && o.block >= x.creditedBlock! && o.amount >= x.amount);
+              if (i >= 0) { x.fate = { kind: outs[i].kind, tx: outs[i].tx }; outs.splice(i, 1); }
+            }
           }
         }
         if (live) setLocks(recent);
@@ -216,10 +241,11 @@ function LockTracker({ leg, address, tick }: { leg: Leg; address: string | null;
       {locks.map(l => {
         const done = !!l.credited;
         return (
-          <ol key={l.lockId} className="xc-steps" data-lock-state={done ? 'credited' : 'in-flight'}>
+          <ol key={l.lockId} className={`xc-steps${l.fate ? ' spent' : ''}`} data-lock-state={l.fate ? l.fate.kind : done ? 'credited' : 'in-flight'}>
             <li className="done"><CheckCircle2 className="i" /><span><b>Locked on {leg.asset.name}</b> · {formatUnits(l.amount, decOf(l.token))} {symOf(l.token)} · {new Date(l.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{ex(leg.asset, l.tx) && <> · <a href={ex(leg.asset, l.tx)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
             <li className={done ? 'done' : 'active'}>{done ? <CheckCircle2 className="i" /> : <Clock className="i" />}<span><b>{done ? 'Delivered by Chainlink CCIP' : 'Chainlink CCIP delivering'}</b>{done ? '' : ` · ${mins(now - l.at)} so far, usually 15–25`} · <a href={ccipLink(l.messageId)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a></span></li>
-            <li className={done ? 'done' : ''}>{done ? <CheckCircle2 className="i" /> : <ArrowRightLeft className="i" />}<span><b>{done ? `Credited on ${leg.home.name}: ready to pledge` : `Credited on ${leg.home.name}`}</b>{done && ex(leg.home, l.credited!) && <> · <a href={ex(leg.home, l.credited!)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
+            <li className={done ? 'done' : ''}>{done ? <CheckCircle2 className="i" /> : <ArrowRightLeft className="i" />}<span><b>{done ? (l.fate ? `Credited on ${leg.home.name}` : `Credited on ${leg.home.name}: ready to pledge`) : `Credited on ${leg.home.name}`}</b>{done && ex(leg.home, l.credited!) && <> · <a href={ex(leg.home, l.credited!)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
+            {l.fate && <li className="done used"><CheckCircle2 className="i" /><span><b>{l.fate.kind === 'pledged' ? 'Pledged into a note' : `Sent back to ${leg.asset.name}: not available to pledge`}</b>{ex(leg.home, l.fate.tx) && <> · <a href={ex(leg.home, l.fate.tx)} target="_blank" rel="noreferrer">tx</a></>}</span></li>}
           </ol>
         );
       })}

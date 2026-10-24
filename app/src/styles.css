@@ -596,3 +596,5 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 @keyframes xc-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .xc-steps li.active .i { animation: none; } }
 .btn.danger { background: hsl(var(--destructive)); color: #fff; border-color: transparent; font-weight: 600; }
+.xc-steps.spent { opacity: .7; }
+.xc-steps li.used .i { color: hsl(var(--muted-foreground)); }
