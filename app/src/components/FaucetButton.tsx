@@ -5,6 +5,7 @@
  * (Robinhood Chain's TSLA, AMZN, NFLX) come from that chain's faucet, linked. tUSD, our old test dollar, is not
  * offered (it only settles notes issued before USDG). On a local dev chain the API mints its mock stablecoin.
  */
+import { AssetIcon, AssetStack } from './AssetIcon';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Droplet, ExternalLink } from 'lucide-react';
 import { CASH_FAUCET, CASH_TOKEN, EXTERNAL_TOKENS, STOCK_TOKEN_FAUCETS, TEST_CASH_TOKEN } from '@sn/core';
@@ -96,19 +97,19 @@ function TokenMenu({ chainName, gas, stockUrl, stocks, ours, onClaim, state, act
       {open && (
         <div className="menu-pop" role="menu">
           <span className="label" style={{ padding: '4px 10px' }}>1 · Gas (testnet ETH)</span>
-          {gas.map(g => <a key={g.url} className="mi" role="menuitem" href={g.url} target="_blank" rel="noreferrer"><span>ETH on {g.name}<small>Pays for transactions</small></span><ExternalLink className="i" /></a>)}
+          {gas.map(g => <a key={g.url} className="mi" role="menuitem" href={g.url} target="_blank" rel="noreferrer"><span className="row" style={{ gap: 8 }}><AssetIcon sym="ETH" size={20} /><span>ETH on {g.name}<small>Pays for transactions</small></span></span><ExternalLink className="i" /></a>)}
           <div className="sep" />
           <span className="label" style={{ padding: '4px 10px' }}>2 · {CASH_TOKEN.token} to subscribe</span>
-          <a className="mi" role="menuitem" href={CASH_FAUCET} target="_blank" rel="noreferrer"><span>{CASH_TOKEN.token} from Paxos<small>The stablecoin notes are paid in</small></span><ExternalLink className="i" /></a>
+          <a className="mi" role="menuitem" href={CASH_FAUCET} target="_blank" rel="noreferrer"><span className="row" style={{ gap: 8 }}><AssetIcon sym={CASH_TOKEN.token} size={20} /><span>{CASH_TOKEN.token} from Paxos<small>The stablecoin notes are paid in</small></span></span><ExternalLink className="i" /></a>
           {stockUrl && <>
             <div className="sep" />
             <span className="label" style={{ padding: '4px 10px' }}>Stock tokens (collateral, delivery)</span>
-            <a className="mi" role="menuitem" href={stockUrl} target="_blank" rel="noreferrer"><span>{(stocks.length ? stocks : ['TSLA', 'AMZN', 'NFLX']).join(', ')} from Robinhood<small>On Robinhood Chain testnet</small></span><ExternalLink className="i" /></a>
+            <a className="mi" role="menuitem" href={stockUrl} target="_blank" rel="noreferrer"><span className="row" style={{ gap: 8 }}><AssetStack syms={stocks.length ? stocks : ['TSLA', 'AMZN', 'NFLX']} size={20} label={false} /><span>{(stocks.length ? stocks : ['TSLA', 'AMZN', 'NFLX']).join(', ')} from Robinhood<small>On Robinhood Chain testnet</small></span></span><ExternalLink className="i" /></a>
           </>}
           {ours.length > 0 && <>
             <div className="sep" />
             <span className="label" style={{ padding: '4px 10px' }}>Test tokens on {chainName}</span>
-            {ours.map(t => <button key={t} className="mi" role="menuitem" style={{ border: 0, background: 'none', font: 'inherit', textAlign: 'left', cursor: 'pointer' }} disabled={state.busy} onClick={() => onClaim(t)}><span>{t}<small>Claim once an hour</small></span><span className="xs muted">{state.busy && active === t ? 'Claiming…' : 'Claim'}</span></button>)}
+            {ours.map(t => <button key={t} className="mi" role="menuitem" style={{ border: 0, background: 'none', font: 'inherit', textAlign: 'left', cursor: 'pointer' }} disabled={state.busy} onClick={() => onClaim(t)}><span className="row" style={{ gap: 8 }}><AssetIcon sym={t} size={20} /><span>{t}<small>Claim once an hour</small></span></span><span className="xs muted">{state.busy && active === t ? 'Claiming…' : 'Claim'}</span></button>)}
           </>}
           {state.text && <div className={`notice ${state.bad ? 'err' : 'ok'}`} role="status" style={{ marginTop: 6 }}>{state.text}</div>}
         </div>

@@ -10,7 +10,7 @@
     "app"
   ],
   "scripts": {
-    "test": "npm -w packages/core run test && npm -w packages/sdk run test && npm -w services/indexer run test && npm -w services/notifier run test && npm -w services/api run test && npm -w services/edge run test",
+    "test": "npm -w packages/core run test && npm -w packages/sdk run test && npm -w services/indexer run test && npm -w services/notifier run test && npm -w services/api run test && npm -w services/edge run test && npm -w app run test",
     "typecheck": "npm -w packages/core run typecheck && npm -w packages/sdk run typecheck && npm -w services/keeper-fallback run typecheck && npm -w services/indexer run typecheck && npm -w services/notifier run typecheck && npm -w services/api run typecheck && npm -w services/edge run typecheck && npm -w app run typecheck && (cd cre/notes-keeper-evm && npx tsc --noEmit)",
     "test:evm": "npm -w packages/evm-engine run test",
     "dev:local": "bash scripts/dev-local.sh",
