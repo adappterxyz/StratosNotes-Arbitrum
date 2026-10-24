@@ -15,6 +15,13 @@ fs_permissions = [{ access = "read", path = "./test/fixtures" }, { access = "rea
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
+  # Cross-chain (src/crosschain): CCIP client contracts, and Chainlink Local for tests. Pinned clones in lib/
+  # (gitignored); fetch with the commands in packages/evm-engine/README.md.
+  "@chainlink/contracts-ccip/=lib/chainlink-ccip/chains/evm/",
+  "@chainlink/contracts/=lib/chainlink-evm/contracts/",
+  "@chainlink/local/src/=lib/chainlink-local/src/",
+  "@openzeppelin/contracts@4.8.3/=lib/openzeppelin-contracts-4.8.3/contracts/",
+  "@openzeppelin/contracts@5.3.0/=lib/openzeppelin-contracts-5.3.0/contracts/",
 ]
 
 [profile.default.fuzz]

@@ -12,6 +12,12 @@ through the KeystoneForwarder (`onReport`).
 ```bash
 git clone --depth 1 --branch v1.9.4 https://github.com/foundry-rs/forge-std lib/forge-std
 git clone --depth 1 --branch v5.1.0 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+# Cross-chain collateral (src/crosschain, docs/CROSS-CHAIN.md): CCIP contracts and Chainlink Local for tests
+git clone --depth 1 --branch contracts-ccip-v2.0.0 https://github.com/smartcontractkit/chainlink-ccip lib/chainlink-ccip
+git clone --depth 1 --branch contracts-v1.5.0 https://github.com/smartcontractkit/chainlink-evm lib/chainlink-evm
+git clone --depth 1 --branch v0.3.1 https://github.com/smartcontractkit/chainlink-local lib/chainlink-local
+git clone --depth 1 --branch v4.8.3 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts-4.8.3
+git clone --depth 1 --branch v5.3.0 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts-5.3.0
 ```
 
 Then:
@@ -184,3 +190,14 @@ CHAIN=arbitrum-sepolia FORWARDER_MODE=mock OWNER=<deployer> TEST_TOKENS=1 \
 - **Pause:** pausing stops new actions but not withdrawals or reports.
 - **Not yet ported:** CCIP. `ccip_receive`, `withdraw_remote`, the outbox and payout reports (`0xFFFE`) come in
   Phase 5.
+
+## Cross-chain collateral (stage 1)
+
+`src/crosschain/`: `HomeGateway` (next to the engine on Arbitrum), `RemoteVault` (on an asset chain such as
+Robinhood Chain) and `RemoteReceipt` (the engine-only claim on locked collateral), over Chainlink CCIP. The engine
+is unchanged. Design, message formats, trust and the deploy plan: [docs/CROSS-CHAIN.md](../../docs/CROSS-CHAIN.md).
+
+```bash
+forge test --match-contract CrossChainTest                    # mock routers: lifecycle, duplicates, forgeries, freezes
+CCIP_FORK=true forge test --match-contract CrossChainForkTest # real routers on forks of Arbitrum Sepolia + Robinhood
+```
