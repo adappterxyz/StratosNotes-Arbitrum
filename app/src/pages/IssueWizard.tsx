@@ -326,7 +326,7 @@ export default function IssueWizard() {
                 <div className="field">
                   <label htmlFor="is-every">Observe every</label>
                   <div className="row" style={{ flexWrap: 'nowrap' }}>
-                    <input id="is-every" type="number" min={1} value={every.n} onChange={e => { setEvery({ ...every, n: Number(e.target.value) || 1 }); setTiming(null); }} style={{ width: 80 }} />
+                    <input id="is-every" type="number" min={1} value={every.n} onChange={e => { setEvery({ ...every, n: Number(e.target.value) || 1 }); setTiming(null); }} style={{ width: 64 }} />
                     <select aria-label="Interval unit" value={every.unit} onChange={e => { setEvery({ ...every, unit: e.target.value as typeof every.unit }); setTiming(null); }}>
                       <option value="minutes">minutes (demo)</option><option value="days">days</option><option value="months">months</option>
                     </select>

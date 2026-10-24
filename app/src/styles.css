@@ -130,11 +130,12 @@ svg.i { width: 14px; height: 14px; flex: none; }
 .field { display: grid; gap: 4px; }
 .field > label, .field > .lbl { font-size: 13px; font-weight: 500; color: hsl(var(--text-soft)); }
 .field .hint { font-size: 13px; color: hsl(var(--muted-foreground)); line-height: 1.45; }
-input, select, textarea { font: 400 15px var(--font); padding: 9px 11px; border-radius: 8px; border: 1px solid hsl(var(--border)); background: hsl(var(--background)); color: hsl(var(--foreground)); width: 100%; min-width: 0; }
+input, select, textarea { font: 400 15px var(--font); padding: 9px 11px; box-sizing: border-box; border-radius: 8px; border: 1px solid hsl(var(--border)); background: hsl(var(--background)); color: hsl(var(--foreground)); width: 100%; min-width: 0; }
+input:not([type="checkbox"]):not([type="radio"]), select { height: 40px; }
 input[type="checkbox"] { width: auto; accent-color: hsl(var(--accent-text)); }
 textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: hsl(var(--accent-text)); box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15); }
-.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 14px; }
 .form-grid .wide { grid-column: 1 / -1; }
 /* Line fields up across a row: label, control and hint each share one row track, so a label that wraps to two lines
    keeps every input in that row on the same line (labels sit just above their inputs). */
