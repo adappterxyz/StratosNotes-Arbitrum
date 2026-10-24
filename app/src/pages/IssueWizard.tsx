@@ -37,6 +37,14 @@ const STEPS = ['Product', 'Terms', 'Schedule', 'Collateral', 'Review & issue'] a
 
 const start = exampleOf;
 
+/** The recorded demo's note (?product=reverse-convertible&demo=tsla). */
+const DEMO_TSLA: ProductParams = {
+  ...EXAMPLE_PRODUCTS['reverse-convertible'], name: 'TSLA Reverse Convertible', underlyings: [FEEDS.TSLA], settlement: 'cash',
+  issuePricePct: 100, observations: 2, couponRatePct: 2.5, knockInBarrierPct: 70,
+  collateralChain: 'robinhood', collateral: [{ symbol: 'TSLA', haircutPct: 60 }], collateralRatioPct: 100,
+  defaultRule: 'cap-at-owed', payouts: 'claim',
+};
+
 function Num({ id, label, value, onChange, hint, suffix, step = 'any', min }: { id: string; label: string; value: number | undefined; onChange: (v: number) => void; hint?: string; suffix?: string; step?: string; min?: number }) {
   return (
     <div className="field">
@@ -62,12 +70,16 @@ export default function IssueWizard() {
   const kind: Kind | null = linked && (linked === 'worst-of' || EXAMPLE_PRODUCTS[linked as ProductType]) ? linked : null;
   const step = kind ? Math.min(4, Math.max(0, Number(search.get('step')) || 0)) : 0;
   const key = kind ? (ready ? `r:${ready}` : `k:${kind}`) : null;
+  // ?demo=tsla: the recorded demo's terms, every field filled in (a TSLA reverse convertible on Arbitrum, collateral TSLA
+  // locked on Robinhood Chain, a minutes-apart schedule): the presenter only clicks Continue and signs.
+  const demoTsla = kind === 'reverse-convertible' && search.get('demo') === 'tsla';
   // What can be filled in at once (a note type, a built-in, the AI's reading); a saved note loads in the effect below.
   const [init] = useState(() => {
     const hit = kind && ready && ready !== 'ai' ? readyMade(ready) : null;
     const ai = kind && ready === 'ai' ? loadAiReading() : null;
     if (hit && !(hit instanceof Promise)) return { p: hit.params, from: hit, ai, shown: key };
     if (ai) return { p: ai.params, from: null, ai, shown: key };
+    if (demoTsla) return { p: DEMO_TSLA, from: null, ai: null, shown: key };
     return { p: start(kind ?? 'phoenix'), from: null, ai: null, shown: kind && !ready ? key : null };
   });
   const [p, setP] = useState<ProductParams>(init.p);
@@ -79,7 +91,7 @@ export default function IssueWizard() {
   // collateral. Arbitrum Sepolia, the default, is left implicit so its definitions stay as they were.
   const defaultChain = config.chains.find(c => c.key === PREFERRED_CHAIN)?.key ?? config.chains[0]?.key ?? '';
   const chainKey = p.chain && config.chains.some(c => c.key === p.chain) ? p.chain : defaultChain;
-  const [size, setSize] = useState(init.ai?.schedule?.size ?? 10_000);
+  const [size, setSize] = useState(demoTsla ? 20 : init.ai?.schedule?.size ?? 10_000);
   const [strikeIn, setStrikeIn] = useState(5);
   const [every, setEvery] = useState<{ n: number; unit: 'minutes' | 'days' | 'months' }>(init.ai?.schedule ? { n: init.ai.schedule.every, unit: init.ai.schedule.unit } : { n: 3, unit: 'minutes' });
   const applyAi = (r: AiReading) => {
@@ -110,7 +122,7 @@ export default function IssueWizard() {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const go = (k: Kind | null, s = 0) => setSearch(k ? { ...(ready ? { ready } : {}), product: k, step: String(s) } : {});
   const setStep = (s: number) => go(kind, s);
-  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(null);
+  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(demoTsla ? { lag: 60, grace: 120 } : null);
   const set = (patch: Partial<ProductParams>) => setP(prev => ({ ...prev, ...patch }));
   /** Another network: its own tokens, so collateral it doesn't have is dropped (the stablecoin always stays). */
   const setChainKey = (k: string) => setP(prev => {
