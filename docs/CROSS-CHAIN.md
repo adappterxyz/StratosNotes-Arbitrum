@@ -236,7 +236,7 @@ it says so, one write per run, on the home chain:
   there, with the engine as the ledger of who is owed what.
 - Shortfall enforcement: CRE writes the vault backing into the note, so a seized vault opens a margin call.
 
-## v2 deploy plan (auto-release; not run yet)
+## v2 deploy plan (auto-release; run 2026-10-24 with a fresh vault, see below)
 
 The vault is kept: `setHomeGateway` is owner-settable at any time, and the vault itself does not change (the
 RELEASE format and its id check are the same). Switching it is only safe when nothing is locked under the old
@@ -307,6 +307,28 @@ the faucet-only tokens need a browser.
 | RELEASE 10 tTSLA.rh, Arbitrum → Robinhood | `0x1506ac86d61d3e5639b34e14cdeef8cb7eb682cbc67ad19a79ff228cf643efc5` (block 322242530) | [`0x48755825…a7cd3`](https://ccip.chain.link/msg/0x487558251499ae682ba78305d4355a6bd42fcae05277e4a17e0974be96fa7cd3) | `0x488a6fe75a57936c7123abc49d13025c1a1efecdbaa00cedd8d2d378a64ba39a`: vault released 10 tTSLA to the sender | **1,047 s (17 min 27 s)**, executed automatically |
 
 Times are source-block to destination-block timestamps. Neither message needed manual execution. Fees paid in native ETH: lock 0.0000674 ETH (Robinhood), release 0.0000504 ETH (Arbitrum Sepolia).
+
+### Live v2 proof: TSLA locked on Robinhood backs an Arbitrum note, then comes home (2026-10-24)
+
+Gateway v2 `0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89` (Arbitrum Sepolia), vault `0x6a11Ff8DD08d63Dc2a7C7AB6116d1F40Bf20d1C2`
+(Robinhood Chain testnet). The earlier pair (`0x3551…372A` / `0xE7a7…8846`) still holds 100 USDG for receipts already in a
+wallet, so it was left in place (deployments/archive/xc-1) rather than re-pointed.
+
+| Step (UTC) | Chain | Transaction |
+|---|---|---|
+| 14:56 lock 3 TSLA (Robinhood's own token) in the vault | Robinhood | `0xf4c7638f209771458a1899f63bea18d6a7d1f23f3b0f22b42e716c1661af90a4`, CCIP `0x5748e6f558f8c7c329c28891b8e18dd2d8772c4eb5fb5aa5172c065c7c33712a` |
+| 15:17 3 TSLA.rh credited by CCIP (about 21 min) | Arbitrum | — |
+| 15:18 note pid 2 issued, its only collateral the 3 TSLA.rh (60% haircut) | Arbitrum | `0x56ac84f32956e1934539c0dd30bed9d948222bc9517b149c428d278fd81beb99` |
+| 15:23 strike: CRE reads TSLA 372.07 from Robinhood Chain mainnet's Chainlink feed (HTTP) | Arbitrum | `0xe184aa4cd6b5531e47d69706c26c5a4c7f8f07f84c7f42eac641f000480a4f5b` |
+| 15:28 / 15:33 observations by CRE | Arbitrum | `0xfc82d555760e061e84565a7ac8b89bd68de92c13323eb5ae06d8e80783efd309`, `0xf1bdd91324ceb560562baeb72b128cba9026b07cf4aa32720e0bfacec19a34fe` |
+| ~15:35 coupon and redemption funded by the issuer bot; note redeemed | Arbitrum | — |
+| 15:38 issuer withdraws the collateral: TSLA.rh burned, release queued | Arbitrum | `0x48a13e1cf311c9c87ea7d24ed3a3ac5015576070326a2e711f3fc99460a5f11f` |
+| 15:38 release sent over CCIP from the fee pool (by the issuer bot's fallback flush) | Arbitrum | `0x924d033572f5a6561c8e674ffa27a53c52e217ec19c271264111a32fdd193a29`, CCIP `0xc42011d623aebeda428e368e605ac4480ee6cc32b6dca65decc2e18bc7f30b99` |
+| 15:56 vault pays the 3 TSLA back to the issuer (about 18 min) | Robinhood | `0x9f7f323d9b8f4dd76c7eda3e2c135a62ba81715ad795c3969ce0171eeba92496` |
+
+Found on the way (fixed in the bots): the issuer's released collateral had to be withdrawn by hand, and the bot's
+fallback flush beat CRE to the release. The bots now withdraw released receipts for the issuer, push receipt payouts
+to holders on a default, and leave flushing to CRE for the first few minutes.
 
 ## Testnet deploy plan (as approved and run)
 
