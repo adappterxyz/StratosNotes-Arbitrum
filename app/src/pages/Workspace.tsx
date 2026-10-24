@@ -6,7 +6,7 @@
  * Templates and edited workflows are issued from the same place.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Modeler from 'bpmn-js/lib/Modeler';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -220,6 +220,7 @@ export default function Workspace() {
       {aiOpen && <AiPanel draft={draft} onResult={onAi} onClose={() => setAiOpen(false)} />}
       <div className="ws-main">
         <div className="ws-bar">
+          <nav className="crumbs ws-crumbs" aria-label="Breadcrumb"><Link to="/issue">Issue</Link><span aria-hidden="true">/</span><span aria-current="page">Advanced studio</span></nav>
           <input ref={fileInput} type="file" accept=".bpmn,.xml" hidden onChange={e => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
           {doc && <button className="btn" onClick={close} title="Close this workflow"><X className="i" />Close</button>}
           <button className="btn" onClick={showTemplates} title="Products and published templates"><LayoutTemplate className="i" />Templates</button>

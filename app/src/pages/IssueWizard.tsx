@@ -4,7 +4,7 @@
  * out what the issuer commits to, then the same issue panel the studio uses publishes the note.
  * Templates, the AI and the BPMN canvas live in the studio (/issue/advanced).
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useRef, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowLeftRight, ArrowRight, Check, Flame, Layers, LayoutTemplate, Repeat, ShieldCheck, Snowflake, Sparkles, Workflow,
@@ -47,13 +47,23 @@ function Num({ id, label, value, onChange, hint, suffix, step = 'any', min }: { 
 }
 
 export default function IssueWizard() {
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
   const nav = useNavigate();
   const { config } = useChains();
+  // Where you are lives in the address (?product=…&step=…), so the browser's Back button walks back through the
+  // steps and then to the chooser, and a link reopens the same step.
   const linked = search.get('product') as Kind | null;
-  const [kind, setKind] = useState<Kind | null>(linked && (linked === 'worst-of' || EXAMPLE_PRODUCTS[linked as ProductType]) ? linked : null);
+  const kind: Kind | null = linked && (linked === 'worst-of' || EXAMPLE_PRODUCTS[linked as ProductType]) ? linked : null;
+  const step = kind ? Math.min(4, Math.max(0, Number(search.get('step')) || 0)) : 0;
   const [p, setP] = useState<ProductParams>(() => start(kind ?? 'phoenix'));
-  const [step, setStep] = useState(0);
+  const shownKind = useRef<Kind | null>(kind);
+  useEffect(() => {
+    // Arriving at another product (a link, or Back/Forward to the chooser and out again) starts from its defaults.
+    if (kind && kind !== shownKind.current) setP(start(kind));
+    shownKind.current = kind;
+  }, [kind]);
+  const go = (k: Kind | null, s = 0) => setSearch(k ? { product: k, step: String(s) } : {});
+  const setStep = (s: number) => go(kind, s);
   const [chainKey, setChainKey] = useState(config.chains.find(c => c.key === PREFERRED_CHAIN)?.key ?? config.chains[0]?.key ?? '');
   const [size, setSize] = useState(10_000);
   const [strikeIn, setStrikeIn] = useState(5);
@@ -76,7 +86,7 @@ export default function IssueWizard() {
   // A template link belongs to the studio.
   if (search.get('template')) return <Navigate to={`/issue/advanced?${search.toString()}`} replace />;
 
-  const choose = (k: Kind) => { setKind(k); setP(start(k)); setStep(0); };
+  const choose = (k: Kind) => { setP(start(k)); shownKind.current = k; go(k, 0); };
   const eco = economicsOf(p);
   const use = productUses(p.productType);
   const errors = validateProductParams(p);
@@ -141,7 +151,11 @@ export default function IssueWizard() {
 
   return (
     <main className="page iw">
-      <button className="linkish small row" style={{ gap: 4, textDecoration: 'none' }} onClick={() => setKind(null)}><ArrowLeft className="i" />Choose another note</button>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link to="/issue">Issue</Link><span aria-hidden="true">/</span>
+        <span>{PRODUCTS.find(x => x.kind === kind)?.title ?? PRODUCT_LABELS[p.productType]}</span><span aria-hidden="true">/</span>
+        <span aria-current="page">{STEPS[step]}</span>
+      </nav>
       <ol className="iw-progress" aria-label="Steps">
         {STEPS.map((s, i) => (
           <li key={s} className={i < step ? 'done' : i === step ? 'now' : ''} aria-current={i === step ? 'step' : undefined}>
@@ -334,8 +348,10 @@ export default function IssueWizard() {
           )}
 
           <div className="iw-nav">
-            {step > 0 && <button className="btn" onClick={() => setStep(s => s - 1)}><ArrowLeft className="i" />Back</button>}
-            {step < 4 && <button className="btn primary" disabled={!canNext} onClick={() => setStep(s => s + 1)}>Continue: {STEPS[step + 1]}<ArrowRight className="i" /></button>}
+            {step > 0
+              ? <button className="btn" onClick={() => setStep(step - 1)}><ArrowLeft className="i" />Back</button>
+              : <button className="btn" onClick={() => go(null)}><ArrowLeft className="i" />All note types</button>}
+            {step < 4 && <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue: {STEPS[step + 1]}<ArrowRight className="i" /></button>}
             {step === 4 && <button className="btn" onClick={() => nav(`/issue/advanced?product=${kind}`)}><Workflow className="i" />Open in the studio</button>}
           </div>
         </section>

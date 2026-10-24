@@ -78,9 +78,9 @@ export default function PropertiesPanel({ modeler, element, fieldNames, dateFiel
             const upd = (patch: Partial<TemplateField>) => setFields(fields.map((x, j) => j === i ? { ...x, ...patch } : x));
             return (
               <div key={i} className="stack" style={{ gap: 6, padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}>
-                <div className="row" style={{ flexWrap: 'nowrap' }}>
-                  <input aria-label="Field name" className="num" value={f.name} onChange={e => upd({ name: e.target.value })} style={{ flex: 1 }} />
-                  <select aria-label="Field type" value={f.type} onChange={e => upd({ type: e.target.value as FieldType })}>{TYPES.map(t => <option key={t}>{t}</option>)}</select>
+                <div className="row field-row" style={{ flexWrap: 'nowrap' }}>
+                  <input aria-label="Field name" className="num field-name" value={f.name} onChange={e => upd({ name: e.target.value })} />
+                  <select aria-label="Field type" className="field-type" value={f.type} onChange={e => upd({ type: e.target.value as FieldType })}>{TYPES.map(t => <option key={t}>{t}</option>)}</select>
                   <button className="btn ghost small" aria-label={`Remove ${f.name}`} onClick={() => setFields(fields.filter((_, j) => j !== i))}>×</button>
                 </div>
                 <select aria-label="Where the value comes from" value={src} onChange={e => {

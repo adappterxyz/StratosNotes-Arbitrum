@@ -504,3 +504,17 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 .full-terms dt { font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: hsl(var(--muted-foreground)); }
 .full-terms dd { margin: 0; display: grid; gap: 2px; }
 @media (max-width: 560px) { .full-terms .ft > div { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Breadcrumbs: where you are in Issue, with a way back. */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: hsl(var(--muted-foreground)); margin-bottom: 10px; }
+.crumbs a { color: hsl(var(--accent-text)); text-decoration: none; font-weight: 500; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs [aria-current] { color: hsl(var(--foreground)); font-weight: 600; }
+.ws-crumbs { margin: 0 8px 0 0; white-space: nowrap; }
+/* The main navigation's selected section: no background on any width (Ink text, underline). */
+.appbar-row .main-nav a.active, .main-nav a.active { background: none; color: hsl(var(--foreground)); font-weight: 600; box-shadow: inset 0 -2px 0 hsl(var(--foreground)); border-radius: 0; }
+
+/* BPMN properties, a field row: the name takes the room; the type select only what it needs. */
+.field-row { gap: 6px; }
+.field-row .field-name { flex: 1 1 auto; min-width: 0; width: auto; }
+.field-row .field-type { flex: 0 0 auto; width: auto; max-width: 112px; }
