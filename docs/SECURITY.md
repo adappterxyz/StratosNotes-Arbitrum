@@ -1,7 +1,8 @@
 # Security review: notes.markets contracts
 
-Scope: `packages/evm-engine/src` (FlowEngine, its libraries Def / DefCheck / EmailAttest / SSTORE2, CreReceiver,
-NotesLens) and the testnet-only TestToken / TokenFaucet. Solidity 0.8.24, via-IR, optimizer 200 runs, EVM Paris.
+Scope: `packages/evm-engine/src` (FlowEngine, its libraries Def / DefCheck / EmailAttest / SSTORE2 / Units,
+NoteToken, CreReceiver, NotesLens) and the testnet-only TestToken / TokenFaucet. Engine v4 (note units as ERC-20s,
+scale-free payouts pushed to wallets: docs/ERC20-NOTES.md) is reviewed in its own section below. Solidity 0.8.24, via-IR, optimizer 200 runs, EVM Paris.
 This is an internal review with static analysis, fuzzing and invariant testing. **It is not an audit**; an
 independent audit is required before any mainnet deployment that holds real value.
 
@@ -16,7 +17,8 @@ Reviewed 2026-10-24 at the commit that adds this file.
 | Fallback reporter | off by default; a signed keeper where CRE can't write (Robinhood mainnet) | the same as the forwarder, recorded with its address in `ReportProcessed` | anything else |
 | Verifier | the API's attestation key | sign EIP-712 email attestations; revoke them | anything about notes or funds |
 | Issuer | a note's creator | start it, approve terms, pledge collateral, fund payments, withdraw its proceeds | withdraw pledged collateral or funded payments (they sit on the engine-held ESCROW account) |
-| Holders / investors | anyone (with a verified email when `requireEmail` is on) | subscribe while the book is open, transfer units, withdraw what the ledger credits them | take another holder's balance, or units from escrow |
+| Holders / investors | anyone (with a verified email when `requireEmail` is on) | subscribe while the book is open, transfer units (v4: the note's ERC-20, to verified addresses only), withdraw what the ledger credits them | take another holder's balance, or units from escrow |
+| Payout keeper (v4) | anyone: the issuer bot, a keeper, a holder | push payouts to holders' wallets (`pushPayouts`, `pushTo`), paying the gas | pay anyone but the holder its own accrual; sweep cash that isn't a payout; change amounts |
 
 Trust assumptions:
 - **Prices.** CRE reads Chainlink feeds and the engine bounds-checks every value against the definition's
@@ -54,20 +56,53 @@ Checklist (all reviewed; findings above where any):
 - **SSTORE2:** pointer code starts with STOP, so it can't be called, and has no selfdestruct or delegatecall.
 - **Libraries:** external libraries take explicit storage pointers; no storage collisions.
 
+## Engine v4: ERC-20 note tokens and pushed payouts (2026-10-24)
+
+What changed (docs/ERC20-NOTES.md):
+
+- Each note's units are a NoteToken clone, and the token is the only record of units.
+- Payouts are an O(1) accumulator, settled whenever units move.
+- Holder transfers go through `beforeNoteTransfer`: verified recipients only, and only while the note runs.
+- Anyone may push payouts to wallets in batches, with a receipt id per payment.
+- `MAX_HOLDERS`, `transferUnits` and `holdersOf` are gone.
+
+| ID | Severity | Finding | Status |
+|---|---|---|---|
+| V4-1 | Medium | **Return bomb in a push.** The first version of `_send` used `token.call{gas: 150k}` with Solidity's return-data copy (Slither `return-bomb`). A cash token returning a huge buffer would make the copy burn the batch's gas, so one issuer-chosen token could block pushes. | **Fixed**: `_tryTransfer` calls in assembly and copies at most 32 bytes; it accepts what SafeERC20 accepts. Claims were never affected. |
+| V4-2 | Low | **Holder-set reordering.** Swap-and-pop moves the last holder into a seller's slot. If that slot is behind a round's cursor, `pushPayouts` can skip that holder. | **Mitigated**: nothing is lost. The skipped holder's payout stays accrued and claimable. The keeper sweeps each finished round with `pushTo` for every holder still owed (`scripts/issuer-bot.ts`), and the next round pushes it too. |
+| V4-3 | Low | **Gas griefing of pushes.** Dust holders make a push walk more addresses. A holder whose wallet burns the 150k gas cap gets deferred. | **Accepted**: a push is permissionless and paid by the caller, and a holder owed nothing costs about 10k gas to skip. Recipients need an email attestation (rate-limited), and deferral never blocks the batch. F-2 and F-3 no longer apply: nothing is capped, so dust deposits or holders block nobody. |
+| V4-4 | Info | **External call before state in the token.** `NoteToken._userMove` calls the engine's hook before moving the balances (Slither `reentrancy-no-eth`). | **By design**: the engine must settle at the old balances. The engine is set once at `initialize`, and the hook is `nonReentrant`, so a cash token can't re-enter a transfer mid-push (tested). |
+| V4-5 | Info | **Push sweeps only payouts.** `pushTo` could have swept any cash on an account, such as an issuer's raised funds that a later workflow step spends. | **Designed out**: `Book.unpushed` tracks which part of a ledger balance came from payouts (settled or deferred), capped by the balance on every debit. Only that part is pushed (tested). |
+| V4-6 | Info | **Read model.** An accumulator credits holders without per-holder events. | **Covered**: `DistributionRecorded` carries payer, perUnit, supply and retire. Every later cash `HoldingChanged` is absolute and includes all accruals, because workflow credits now settle first. The indexer reproduces balances exactly (sdk `payouts.test.ts`; the e2e checks the portfolio against the chain). |
+| V4-7 | Info | **Units after redemption.** Retiring is one write: `balanceOf` and `totalSupply` read zero, but the raw balances stay. Payouts made in the retiring step use the raw balances. | **By design**: a redemption must pay in full in the same step that retires (tested). Transfers are refused afterwards. |
+
+Checklist additions:
+
+- **Rounding.** Accumulator floors, so holders' shares never exceed a payout's total. The fuzz test bounds the dust
+  at one engine unit per holder per payout, plus under one token base unit per push.
+- **No double pay.** Push and claim both move the same checkpoint.
+- **Only the engine mints, burns or moves.** The hook answers only the note's own token.
+- **Clone initialisation.** `initialize` runs once, in the same transaction as the clone's creation.
+
 ## Static analysis
 
-**Slither 0.11.6** (`slither . --filter-paths "lib/|test/|script/"`) reported 40 results:
+**Slither 0.11.6**, engine v4 (`slither . --filter-paths "^lib/|/lib/openzeppelin|/lib/chainlink|/lib/forge-std|test/|script/"`).
+The earlier `lib/` filter also hid `src/lib`, i.e. DefCheck, EmailAttest and Units; they are analysed now.
+88 results, triaged:
 
 | Detector | Count | Triage |
 |---|---|---|
+| return-bomb (`Units._send`) | 1 → 0 | **Fixed** (V4-1) |
+| shadowing-local (NotesLens parameters) | 2 → 0 | Fixed (renamed) |
+| arbitrary-send-erc20 (`Units._pull`) | 1 | False positive: `from` is always `msg.sender` (a deposit, or the signer of the step that deposits) |
+| reentrancy-no-eth / reentrancy-benign / reentrancy-events | 15 | False positive or by design: the calls go to the note's own NoteToken clone or to the cash ERC-20 after the state change; every entry point is `nonReentrant`; the token's hook-first order is V4-4 |
+| calls-loop | 31 | Accepted: NotesLens views are read-only; Units loops over at most 8 holdings × 8 assets on our own clones; a push batch is sized by the caller and failure-safe |
 | incorrect-equality (`_core`: `id == 0`) | 1 | False positive: an unset sentinel, not a balance |
-| uninitialized-local | 7 | False positive: zero-initialised accumulators by intent |
-| unused-return (NotesLens) | 3 | False positive: deliberate partial destructuring of the engine's views |
-| missing-zero-check | 3 | By design: zero means "off" (fallback reporter, verifier, expected author) |
-| calls-loop | 13 | Accepted: NotesLens views are read-only; `_pull` loops ≤ 4 times over the note's own token |
-| reentrancy-events (TokenFaucet) | 1 | False positive: test token, minted by the trusted TestToken |
-| timestamp | 6 | Accepted: dates are the product; seconds of drift don't matter |
-| cyclomatic-complexity / assembly / solc-version / unindexed-event-address | 6 | Informational. Assembly reviewed and annotated `memory-safe`; the solc version is pinned; the event layout is kept for ABI stability |
+| uninitialized-local | 6 | False positive: zero-initialised accumulators by intent |
+| unused-return (NotesLens, `tryRecover`) | 5 | False positive: deliberate partial destructuring |
+| missing-zero-check | 5 | By design: zero means "off" (fallback reporter, verifier, expected author); receipts' constructor arguments are set by the deploy script |
+| timestamp | 8 | Accepted: dates are the product (permit deadlines included); seconds of drift don't matter |
+| assembly / cyclomatic-complexity / low-level-calls / naming (`DOMAIN_SEPARATOR`) / unindexed-event-address | 16 | Informational. Assembly reviewed and annotated `memory-safe`; the cross-chain low-level calls are the failure-safe transfers documented in docs/CROSS-CHAIN.md |
 
 **Aderyn 0.6.8**:
 
@@ -82,8 +117,10 @@ Checklist (all reviewed; findings above where any):
 
 | Suite | What it checks |
 |---|---|
-| `test/Products.t.sol` (21) | Every product end to end against the reference payoff: funded, missed coupons, cures in grace, half-funded redemption, margin calls cured or not, both default rules, physical delivery, worst-of. Plus escrow custody, closed windows, oracle bounds, roles, pause, two-step ownership, CRE identity checks, email attestation and gating, and gas with 30 and 62 holders. |
-| `test/Invariants.t.sol` | **Invariants** on three notes (paid in full; missed coupon → default; mixed collateral → capped default). Each runs **64 runs × 64 calls = 4,096 calls**, with the timeline interleaved with random transfers, withdrawals, deposits, attempts on escrow and stranger reports. The invariants: <ul><li>solvency (the vault covers the ledger; the engine holds its vaults);</li><li>units conserved by transfers and never exceeding issuance;</li><li>escrow only moved by the workflow;</li><li>only the forwarder reports and strangers can't deposit;</li><li>holders never paid more than the reference.</li></ul> **Fuzz** properties, 256 runs each: oracle bounds, exact withdrawals with an 18-decimal token, random subscriptions and transfers, funding only while a window is open, email gating for random addresses, only the forwarder reports. |
+| `test/Products.t.sol` (22) | Every product end to end against the reference payoff: funded, missed coupons, cures in grace, half-funded redemption, margin calls cured or not, both default rules, physical delivery, worst-of. It runs twice, once with holders claiming and once with a keeper pushing every payout to wallets. Plus escrow custody, closed windows, oracle bounds, roles, pause, two-step ownership, CRE identity checks, email attestation and gating on the note token (`transfer` and `transferFrom`), and gas with 10 and 1,000 holders (O(1) payouts). |
+| `test/NoteTokens.t.sol` (14) | v4: the ERC-20 (clone, 6 decimals, permit, engine-only mint/burn/move, holder set). **Fuzz**: random transfers interleaved with real coupon, default and redemption timelines pay each holder Σ(balance at payment × perUnit); claimable + pushed ≤ distributed; dust bounded. Also: totalSupply == sold − burned; the issuer's unsold units never accrue; 1,000 holders pushed in uneven batches, with every payoutId and the rolling hash recomputed from the logs; frozen recipients deferred, then claimable; no double pay between push and claim; a transfer between a distribution and its push leaves that payout with the seller; `pushTo` never sweeps workflow cash; redemption retires but still pays; transfers refused after completion; 18-decimal physical delivery; no re-entry through a hooked cash token; the lens's `position`/`claimable`/`holders`; gas of transfer, push and claim. |
+| `test/CrossChain.t.sol` (16) | Remote collateral (CCIP receipts) through every default rule, with v4 payouts. |
+| `test/Invariants.t.sol` | **Invariants** on three notes (paid in full; missed coupon → default; mixed collateral → capped default). Each runs **64 runs × 64 calls = 4,096 calls**, with the timeline interleaved with random note-token transfers, payout pushes of any batch size, withdrawals, deposits, attempts on escrow and stranger reports. The invariants: <ul><li>solvency (the vault covers the ledger and the accrued payouts; the engine holds its vaults);</li><li>units conserved by transfers and never exceeding issuance; the token's supply equals the sum of its holder set's balances, and the set lists only non-zero balances;</li><li>escrow only moved by the workflow;</li><li>only the forwarder reports; a stranger's deposit comes back in full and moves nobody else's balance;</li><li>holders never paid more than the reference, counting what was pushed to their wallets.</li></ul> **Fuzz** properties, 256 runs each: oracle bounds, exact withdrawals with an 18-decimal token, random subscriptions and transfers, funding only while a window is open, email gating for random addresses, only the forwarder reports. |
 | `test/TestTokens.t.sol` (6) | Faucet and test token permissions |
 
 Mutation check: removing the F-2 fix makes `invariant_accessControl` fail at once.
@@ -99,7 +136,9 @@ Coverage (`forge coverage --ir-minimum`, unit and fuzz suites):
 | DefCheck.sol | 98.5% | 18.8% (one revert per malformed field; the happy path is covered) | 100% |
 | NotesLens.sol | 88.7% | 100% | 71.4% |
 
-Bytecode: FlowEngine **23,384 / 24,576** bytes. Marking the assembly blocks memory-safe saved about 1.1 KB.
+Bytecode: FlowEngine **24,051 / 24,576** bytes in v4 (23,384 in v3). Units (11,657), DefCheck and EmailAttest are
+linked libraries, and the NoteToken implementation (5,800) is created by the constructor. Marking the assembly blocks
+memory-safe saved about 1.1 KB.
 
 ## Token risk: the cash token can be paused or frozen
 
@@ -126,5 +165,5 @@ not audited here.
 2. Owner = a multisig, with a timelock on the forwarder, fallback-reporter, workflow-identity and verifier setters.
 3. Production KeystoneForwarder with the workflow id, author and name checks set.
 4. Verifier, fallback reporter and keeper keys in a KMS or HSM, not files.
-5. F-3 hardening (a minimum lot, and reusing empty ledger slots), and an on-chain decimals check (F-6).
+5. An on-chain decimals check (F-6), and a minimum lot in the subscribe guard against dust holders that make pushes walk further (V4-3).
 6. Real stablecoins and stock tokens, re-tested with their actual decimals.

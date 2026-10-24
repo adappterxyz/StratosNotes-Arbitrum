@@ -67,13 +67,15 @@ provides three generic mechanisms for it:
 | Call | Who | What |
 |---|---|---|
 | `registerDefinition(data)` | anyone | publish a workflow (idempotent) |
-| `startProcess(def, ref, roles, assetTokens, startStep, inputs)` | the start step's role | a new issuance. `roles[i] = 0` makes an OPEN role (e.g. investors). `assetTokens[i]` is the ERC-20 behind a cash asset |
+| `startProcess(def, ref, roles, assetTokens, startStep, inputs, name, symbol)` | the start step's role | a new issuance. `roles[i] = 0` makes an OPEN role (e.g. investors). `assetTokens[i]` is the ERC-20 behind a cash asset. Each issued asset gets its own ERC-20, a NoteToken clone (`name`, `symbol`, 6 decimals) |
 | `executeStep(pid, step, choice, inputs)` | the step's role (anyone for OPEN) | user tasks, decisions, subscriptions. Deposits pull ERC-20 from the caller (approve first) |
 | `poke(pid)` | anyone | run what is due |
 | `onReport(metadata, report)` | KeystoneForwarder only | `report = abi.encode(uint256 pid, uint16 step, int256[] values)`. `step = 0xFFFF` only advances. `0xFFFE` is reserved for cross-chain payouts |
 | `fallbackReport(report)` | the fallback reporter only | the same report, from a signed keeper where CRE cannot write (services/keeper-fallback). Off by default |
 | `deposit` / `withdraw(pid, asset, base)` | holder | ERC-20 in and out of the process vault. `withdraw` works while paused |
-| `transferUnits(pid, asset, to, amount)` | holder | move note units, in whole or in part |
+| `NoteToken.transfer` / `transferFrom` / `permit` | holder | move note units: a standard ERC-20 transfer, to verified recipients only while the note runs (the token asks `beforeNoteTransfer`) |
+| `pushPayouts(pid, asset, start, count)` / `pushTo(pid, asset, holders)` | anyone | pay accrued payouts straight to holders' wallets, in batches (`start = 2^256-1`: from the round's cursor). A failed transfer stays claimable (`PayoutDeferred`) |
+| `balanceOf` / `pendingOf(pid, owner, asset)`, `assetTokenOf(pid, asset)` | view | units (from the token) or cash (ledger + accrued); the accrued part; the ERC-20 behind an asset (the note token for issued units) |
 | `pause` / `unpause`, `setForwarderAddress`, `setExpectedWorkflowId/Author/Name`, `setFallbackReporter` | owner (two-step) | admin |
 | `ESCROW()` | view | the address the engine holds escrow roles at |
 
@@ -92,10 +94,14 @@ Inputs are `(uint8 tag, bytes32 data)`:
 | `ProcessStarted(pid, definition, creator, ref, roles, assetTokens)` | an issuance starts |
 | `StepRun(pid, step, kind, actor)` | a step completes (`actor` = 0 for straight-through and reports) |
 | `FieldSet(pid, field, tag, value)` | a field is captured |
-| `HoldingChanged(pid, asset, owner, balance)` | after every ledger change |
+| `HoldingChanged(pid, asset, owner, balance)` | after every balance change: cash on the ledger, or a holder's units (token balance × 1e4), holder transfers included |
+| `NoteTokenCreated(pid, asset, token)` | a note's ERC-20 is created (in `startProcess`) |
+| `DistributionRecorded(pid, asset, period, holding, step, payer, perUnit, total, supplyAtPayment, retire, distributionHash)` | a payout (coupon, redemption, delivery, a default's distribution): O(1), an accumulator |
+| `PayoutPaid(pid, asset, period, holder, amount, payoutId)` / `PayoutDeferred(…)` | a payout pushed to a wallet, with its receipt id / one that could not be sent |
+| `DistributionSettled(pid, asset, period, paidCount, paidTotal, rollingHash)` | a push round reached the last holder (or was superseded) |
 | `TokensUpdated(pid, status, stepsRun, tokens)` | once per transaction: the live BPMN tokens |
 | `Deposited` / `Withdrawn(pid, asset, account, base)` | ERC-20 in or out |
-| `UnitsTransferred(pid, asset, from, to, amount)` | secondary transfer |
+| `UnitsTransferred(pid, asset, from, to, amount)` | secondary transfer (a note-token transfer, seen through the engine's hook) |
 | `ReportProcessed(pid, step, values, reporter)` | a report is applied; `reporter` is the KeystoneForwarder (CRE) or the fallback reporter |
 | `FallbackReporterUpdated(previous, next)` | the owner changed the fallback reporter |
 | `Milestone(pid, code, step, actor)` | a step marked as a business event completes (collateral, funding, payments, margin calls, default) |
@@ -111,6 +117,8 @@ Inputs are `(uint8 tag, bytes32 data)`:
 - **`running(from, scan, max)`** returns every running process's definition, status, tokens, captured values and
   every role's balance of every asset (escrow included) in one paged call, so a keeper sees what a "Funded?"
   check sees.
+- **`position(pid, holder)`**, **`claimable(pid, asset, accounts)`** and **`holders(pid, asset, start, count)`**: a
+  holder's tokens, balances and accrued payouts; what accounts can withdraw; the note token's holder set.
 
 It holds no funds and has no owner.
 
@@ -124,32 +132,31 @@ Each cap bounds a loop:
 | Fields | 64 |
 | Assets | 8 |
 | Live tokens | 32 |
-| Ledger accounts per process | 64 |
 | Straight-through steps per transaction | 256 |
 | ERC-20 pulls per step | 4 |
 
-Measured with `forge test --isolate` (each call priced as its own transaction, cold storage), 2026-10-24:
+Holders are not capped: payouts are an accumulator (docs/ERC20-NOTES.md), so a coupon or a default costs the same
+with 10 holders as with 1,000. Measured with `forge test --isolate` (each call priced as its own transaction, cold
+storage), 2026-10-24:
 
-| | Gas |
-|---|---|
-| Subscribe | 342k (max over the 20 timelines) |
-| Issuer funds a payment (deposit + move into escrow) | 218k |
-| Largest report in the 20 timelines | 742k |
-| Strike report with the margin check, 30 or 62 holders | 484k |
-| Observation with the margin check, 30 or 62 holders | 344k |
-| Payment date, coupon paid from escrow to 30 holders | 1.29M |
-| Payment date, coupon paid from escrow to 62 holders | 2.33M |
-| Default (cap-at-owed), owed to 30 holders, rest to the issuer | 2.79M |
-| Default (cap-at-owed), owed to 62 holders, rest to the issuer | 5.01M |
-| Default (all-to-holders), cash + USDC + ETH collateral to 62 holders | 4.79M |
+| | 10 holders | 1,000 holders |
+|---|---|---|
+| Strike report with the margin check | 535k | 536k |
+| Observation with the margin check | 355k | 356k |
+| Payment date, coupon paid from escrow to every holder | 393k | 393k |
+| Default (cap-at-owed), owed to every holder, rest to the issuer | 1.00M | 1.00M |
+| Default (all-to-holders), cash + USDC + ETH collateral to every holder | 717k | 718k |
+| Issuer funds a payment (deposit + move into escrow) | 266k | 266k |
+
+Pushing payouts to wallets costs about 55k gas per holder in batches of 100. A note-token transfer, which settles
+both sides, costs 176k–263k, and a claim 106k.
 
 Both target chains run Arbitrum Nitro (32M gas per transaction). The CRE workflow's write gas limit is 8M (CRE
-allows 10M per write); the forwarder adds signature checks on top, and Arbitrum adds L1 data gas. A first payment
-costs most, because each holder's balance goes from zero to non-zero (20k gas). A default pays every escrow asset to
-every holder: with the 8-asset cap, at most 8 x 64 credits.
+allows 10M per write).
 
-The engine's runtime is 22,992 bytes (the EIP-170 limit is 24,576); `DefCheck` (3,563 bytes) is a separate linked
-library. Phase 5's CCIP sender and receiver must go in a separate contract.
+The engine's runtime is 24,051 bytes (the EIP-170 limit is 24,576). `Units` (11,657 bytes: ledger, accumulator,
+push), `DefCheck` and `EmailAttest` are separate linked libraries. The NoteToken implementation (5,800 bytes) is
+created by the constructor.
 
 ## Security
 

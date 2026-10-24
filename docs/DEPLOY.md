@@ -9,6 +9,11 @@
 > Chain testnet `0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D`. Earlier engines: `deployments/archive/` (v1, v2). The
 > v3 redeploy reset the D1 read model for both chains (the reset in the notes of §8) and kept the email tables
 > and templates.
+>
+> **Engine v4 (built and tested, not deployed):** note units as ERC-20s and payouts pushed to wallets
+> (docs/ERC20-NOTES.md). Its redeploy plan, with gas measured on a fork (≈11M gas per chain), is in
+> docs/ERC20-NOTES.md §9 and waits for approval. With v4, reports cost the same for any number of holders (a coupon
+> about 0.4M gas, a default about 1.0M).
 
 Everything below runs from the repo root on the server. Keys live in `.keys/` (gitignored, mode 600) and are read
 from files by the scripts, never typed on a command line or printed.

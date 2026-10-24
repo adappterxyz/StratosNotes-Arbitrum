@@ -87,18 +87,22 @@ These three outcomes are among the timelines the engine is tested against (`pack
 fixtures from `scripts/fixtures.ts`): every holder's cash and tokens must equal `simulateNote` in
 `packages/core/src/products/payoff.ts`, the reference written independently of the workflow.
 
-## Costs (gas, `forge test --isolate`, 2026-10-23)
+## Costs (gas, `forge test --isolate`, 2026-10-24, engine v4)
 
-FCN with USDC and ETH collateral worth 1.2x the requirement; the issuer funds coupon 1 and misses coupon 2:
+FCN with USDC and ETH collateral worth 1.2x the requirement; the issuer funds coupon 1 and misses coupon 2. Payouts
+are an accumulator (docs/ERC20-NOTES.md), so the number of holders doesn't change the cost:
 
-| | 30 holders | 62 holders |
+| | 10 holders | 1,000 holders |
 |---|---|---|
-| Strike report (with the margin check) | 520k | 520k |
-| Observation report (with the margin check) | 345k | 345k |
-| Payment date: coupon paid to every holder from escrow | 1.30M | 2.34M |
-| Default, `cap-at-owed`: what is owed to every holder (cash, USDC, ETH), the rest to the issuer | 2.79M | 5.01M |
-| Default, `all-to-holders`: cash, USDC and ETH collateral to every holder | 2.57M | 4.79M |
-| Issuer funding a payment (deposit + move into escrow) | 218k | 218k |
+| Strike report (with the margin check) | 535k | 536k |
+| Observation report (with the margin check) | 355k | 356k |
+| Payment date: coupon paid to every holder from escrow | 393k | 393k |
+| Default, `cap-at-owed`: what is owed to every holder (cash, USDC, ETH), the rest to the issuer | 1.00M | 1.00M |
+| Default, `all-to-holders`: cash, USDC and ETH collateral to every holder | 717k | 718k |
+| Issuer funding a payment (deposit + move into escrow) | 266k | 266k |
+
+The money then goes to wallets in batches pushed by a keeper, about 55k gas per holder. Anything that can't be sent
+stays claimable. The v3 engine (a loop over at most 62 holders) cost 2.34M for the coupon and 5.01M for the default.
 
 Both chains run Arbitrum Nitro, which caps a single transaction at 32M gas. The CRE workflow writes reports with
 an 8M limit, under CRE's 10M per write. Anyone can also move a note past a deadline with `poke(pid)`.
