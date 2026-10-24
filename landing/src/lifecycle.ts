@@ -40,15 +40,15 @@ ${c('// Check Terms: grace <= 7 days, deadlines before the next observation')}`,
   {
     id: 'book', type: 'box', x: 25, y: 26, label: 'Subscribe',
     tag: 'Open book · Investors', title: 'Subscribe: funds to the issuer', actor: 'Any investor',
-    desc: 'Anyone subscribes until the strike date, swapping stablecoins for note units atomically. The stablecoin is the issuer\'s at once: the money the note raises. Units can be transferred in whole or in part.',
+    desc: 'Anyone subscribes until the strike date, swapping USDG for note units atomically. The USDG is the issuer\'s at once: the money the note raises. Units can be transferred in whole or in part.',
     code: {
       evm: `${c('// An OPEN role: anyone may run it, again and again,')}
 ${c('// until the strike date (a repeatable window)')}
 Task_Subscribe: until = strikeDate
   ops = [
-    ${f('deposit')}(tUSD, units * ${q('100 / 100')}),           ${c('// investor → engine')}
+    ${f('deposit')}(USDG, units * ${q('100 / 100')}),           ${c('// investor → engine')}
     ${f('swap')}(note: Issuer → Investor, units,
-         tUSD: Investor → Issuer, units * ${q('100 / 100')}),  ${c('// the issuer may withdraw it')}
+         USDG: Investor → Issuer, units * ${q('100 / 100')}),  ${c('// the issuer may withdraw it')}
   ]`,
     },
   },
@@ -97,9 +97,9 @@ ${c('// the validator refuses any payment without this check')}`,
   {
     id: 'redeem', type: 'end', x: 93, y: 50, label: 'Pay, release',
     tag: 'Settlement · every holder', title: 'Pay from escrow, release', actor: 'Holders, issuer',
-    desc: 'Every holder is paid units × per-unit amount from escrow, complete by construction. After the final payment the collateral is released to the issuer. Holders withdraw tUSD (or delivered tokens, or collateral after a default) when they like.',
+    desc: 'Every holder is paid units × per-unit amount from escrow, complete by construction. After the final payment the collateral is released to the issuer. Holders withdraw USDG (or delivered tokens, or collateral after a default) when they like.',
     code: {
-      evm: `Task_Pay2Call    ${f('distribute')}(tUSD per unit due, payer Escrow, retire)
+      evm: `Task_Pay2Call    ${f('distribute')}(USDG per unit due, payer Escrow, retire)
 Task_Release     ${f('transfer')}(Escrow → Issuer, balance(Escrow, col_USD))
 ${c('// then, by each holder, whenever they like:')}
 engine.${f('withdraw')}(pid, CASH, owed)`,

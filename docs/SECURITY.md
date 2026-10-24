@@ -101,6 +101,25 @@ Coverage (`forge coverage --ir-minimum`, unit and fuzz suites):
 
 Bytecode: FlowEngine **23,384 / 24,576** bytes. Marking the assembly blocks memory-safe saved about 1.1 KB.
 
+## Token risk: the cash token can be paused or frozen
+
+New notes settle in **USDG** (Paxos' Global Dollar): Arbitrum Sepolia `0xFFC95faa3d63Cde504a05B567C600B78C0b41892`,
+Robinhood Chain testnet `0x7E955252E15c84f5768B83c41a71F9eba181802F`. Checked on 2026-10-24:
+
+- It behaves as a plain ERC-20 for the engine: on an Arbitrum Sepolia fork, `transfer` and `transferFrom` delivered
+  the full amount (no fee on transfer), and `approve` set the allowance.
+- It is an upgradeable proxy (EIP-1967), and its admin roles (AccessControl) can call `pause()`, `freeze(address)`
+  and `wipeFrozenAddress(address)`. Both are currently unpaused.
+
+What that means for a note: if Paxos pauses USDG, or freezes the engine's address, a holder or the escrow, then
+subscriptions, funding, payouts, withdrawals and default distributions in USDG revert until it is lifted. Ledger
+balances are kept, so nothing is lost on-chain, but payments stall, and a frozen issuer cannot fund a payment, so the
+note could default on schedule. A wiped address loses its USDG outright; if that address is the engine, the engine
+would no longer be solvent in USDG. The engine cannot prevent any of this. It is the normal issuer risk of a
+regulated stablecoin: disclose it on the term sheet, and prefer collateral in assets with no freeze authority if that
+risk matters. Robinhood Chain's stock tokens (TSLA, AMZN, NFLX) are upgradeable proxies too; their admin powers were
+not audited here.
+
 ## Before mainnet
 
 1. An independent audit of `packages/evm-engine`.

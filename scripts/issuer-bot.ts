@@ -69,7 +69,8 @@ async function tick() {
     const actions = issuerActions(def, s, now); // windows still open: the engine refuses a late one
     const field = (name: string) => def.fields.findIndex(f => f.name === name);
     const run = async (step: number, fieldName: string, amount: number, assetName: string, label: string) => {
-      const asset = def.assets.findIndex(a => a.name === assetName);
+      // The cash asset is USDG on new notes and USDC (tUSD) on notes issued before USDG.
+      const asset = def.assets.findIndex(a => a.name === assetName || (assetName === 'USDG' && a.name === 'USDC'));
       const token = s.assetTokens[asset] as Address;
       if (!(await ensure(token, toBase(dec(amount.toFixed(9)), def.assets[asset].decimals)))) return;
       await adapter.executeStep(wallet as never, id, step, { [field(fieldName)]: { kind: 'number', value: dec(amount.toFixed(9)) } });
@@ -78,7 +79,7 @@ async function tick() {
     const call = e.nextCall;
     if (call && !call.funded && !miss.has(`${pid}:${call.period}`)) {
       const step = actions.fund.find(f => f.period === call.period);
-      if (step) await run(step.step, 'fundAmount', ceil6(call.total - e.escrowCash), 'USDC', `funded payment ${call.period}:`);
+      if (step) await run(step.step, 'fundAmount', ceil6(call.total - e.escrowCash), 'USDG', `funded payment ${call.period}:`);
       else log(`${id}: payment ${call.period}'s funding window has closed`);
     } else if (call && miss.has(`${pid}:${call.period}`)) {
       log(`${id}: leaving payment ${call.period} unfunded (MISS)`);
@@ -86,8 +87,9 @@ async function tick() {
     const period = e.periods.find(p => p.deliver && (p.status === 'due' || p.status === 'grace'));
     if (period?.deliver && !miss.has(`${pid}:${period.k}`)) {
       const d = actions.delivery.find(x => x.symbol === period.deliver!.symbol);
-      const assetName = `t${period.deliver.symbol}`;
-      const asset = def.assets.findIndex(a => a.name === assetName);
+      // Our test token (tTSLA…) or, for notes on Robinhood Chain's own stock tokens, the bare symbol (TSLA).
+      const asset = def.assets.findIndex(a => a.name === `t${period.deliver.symbol}` || a.name === period.deliver.symbol);
+      const assetName = asset >= 0 ? def.assets[asset].name : `t${period.deliver.symbol}`;
       const escrowRole = def.roleFlags.findIndex(f => (f & 1) === 1);
       const held = Number(BigInt(s.holdings.find(h => h.asset === asset && h.owner === s.roles[escrowRole])?.balance ?? '0')) / 1e10;
       const need = period.deliver.perUnit * v.sold - held;

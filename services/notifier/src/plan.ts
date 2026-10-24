@@ -73,7 +73,7 @@ const duration = (s: number) => (s >= DAY ? `${+(s / DAY).toFixed(1)} day${s ===
 
 /** A ledger asset's symbol for people: the stablecoin is USD; tokens drop the "Collateral"/"Deliver" prefix. */
 export function assetLabel(name: string): string {
-  if (/^(USDC|cash)$/i.test(name)) return 'USD';
+  if (/^(USDG|USDC|cash)$/i.test(name)) return 'USD';
   const m = /t?([A-Z]{2,6})$/.exec(name);
   return m ? `t${m[1]}` : name;
 }

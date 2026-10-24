@@ -8,7 +8,8 @@ import {
   type Preset, type Role, type Sym, type Terms,
 } from './model';
 
-const money = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
+/** Amounts in USDG, the dollar notes settle in. */
+const money = (v: number) => `${Math.round(v).toLocaleString('en-US')} USDG`;
 const pc = (v: number, d = 2) => `${(v * 100).toFixed(d).replace(/\.?0+$/, '')}%`;
 const reduceMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -280,7 +281,7 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
                   {COLLATERAL.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </label>
-              <Slider id="xs-haircut" label="Counts at (haircut)" value={haircut} min={30} max={100} step={5} onChange={setHaircut} hint={coll.id === 'tUSD' ? 'Stablecoin counts in full.' : 'Valued by Chainlink at every observation; a margin call opens if coverage falls short.'} />
+              <Slider id="xs-haircut" label="Counts at (haircut)" value={haircut} min={30} max={100} step={5} onChange={setHaircut} hint={coll.id === 'USDG' ? 'USDG counts in full.' : 'Valued by Chainlink at every observation; a margin call opens if coverage falls short.'} />
               <Slider id="xs-ratio" label="Collateral ratio" value={ratio} min={10} max={150} step={5} onChange={setRatio} hint="Set per note, shown to every investor." />
               <label className="xs-field" htmlFor="xs-grace">
                 <span className="xs-flabel">Grace period<b className="num">{grace} day{grace === 1 ? '' : 's'}</b></span>

@@ -83,7 +83,7 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
 
   const assets: AssetDefinition[] = [
     { id: 'note', name: 'Note', kind: 'issued' },
-    { id: 'cash', name: 'USDC', kind: 'cash', decimals: CASH_TOKEN.decimals, token: CASH_TOKEN.token },
+    { id: 'cash', name: 'USDG', kind: 'cash', decimals: CASH_TOKEN.decimals, token: CASH_TOKEN.token },
     // Physical delivery: each underlying's token, delivered below the knock-in barrier.
     ...(physical ? unds.map(u => { const d = deliverableToken(p, u.symbol)!; return { id: deliverAsset(u.symbol), name: d.token, kind: 'cash' as const, decimals: d.decimals, token: d.token }; }) : []),
     // Collateral: its own asset per token (even the stablecoin), so pledged collateral never mixes with payments.
@@ -470,6 +470,6 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     id: `product-${p.productType}`,
     name: p.name,
     params: p,
-    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDC until the strike date and the issuer receives the funds; the issuer pledges ${col.map(c => collateralTokenOf(p, c.symbol)!.token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map(u => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
+    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDG until the strike date and the issuer receives the funds; the issuer pledges ${col.map(c => collateralTokenOf(p, c.symbol)!.token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map(u => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
   };
 }

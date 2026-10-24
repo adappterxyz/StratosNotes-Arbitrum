@@ -118,7 +118,7 @@ const CARDS: Card[] = [
   },
   {
     side: 'Issuers', title: 'Raise funding', note: 'Fixed coupon note on ETH',
-    body: 'Raise stablecoins today against collateral locked in the note.',
+    body: 'Raise USDG today against collateral locked in the note.',
     chart: {
       aria: 'Funding comes in at the start; collateral is locked for the whole term; small payments go out each quarter and the repayment at the end, after which the collateral is released.',
       shapes: <>

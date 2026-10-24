@@ -28,7 +28,7 @@ const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
 const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
 const word = (v: bigint) => `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` as Hex;
-const CASH = c.def.assets.findIndex(a => a.name === 'USDC');
+const CASH = c.def.assets.findIndex(a => a.name === 'USDG');
 
 // The same scenarios as services/api/test/alerts.test.ts, on the Worker's API over a local D1.
 let d1: Awaited<ReturnType<typeof localD1>>;

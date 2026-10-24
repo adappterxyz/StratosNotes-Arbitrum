@@ -28,7 +28,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
   const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, stockTokens: p.stockTokens });
   const robinhood = p.stockTokens === 'robinhood';
   /** The token a collateral chip pledges, or null when this note's token set has none. */
-  const colToken = (c: CollateralSymbol) => (c === 'USD' ? 'USDC' : collateralTokenOf(p, c)?.token ?? null);
+  const colToken = (c: CollateralSymbol) => (c === 'USD' ? 'USDG' : collateralTokenOf(p, c)?.token ?? null);
   const delivered = p.underlyings.map(u => deliverableToken(p, u.symbol)?.token ?? `no ${u.symbol} token`).join('/');
   const eco = economicsOf(p);
   const colSyms = eco.collateral.map(c => c.symbol);
@@ -83,12 +83,12 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
         <div className="field">
           <label htmlFor="pd-settle">Settlement below the barrier</label>
           <select id="pd-settle" value={p.settlement ?? 'cash'} onChange={e => set({ settlement: e.target.value as 'cash' | 'physical' })}>
-            <option value="cash">Cash (USDC)</option>
+            <option value="cash">Cash (USDG)</option>
             <option value="physical">Physical delivery</option>
           </select>
           <span className="hint">{p.settlement === 'physical'
             ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (${delivered}${robinhood ? ', Robinhood Chain\'s own where it publishes one' : ''}); the issuer funds the delivery before maturity.`
-            : 'Holders receive final ÷ strike in USDC.'}</span>
+            : 'Holders receive final ÷ strike in USDG.'}</span>
         </div>
       )}
       <div className="field wide">

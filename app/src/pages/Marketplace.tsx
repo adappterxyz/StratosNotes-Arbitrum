@@ -37,7 +37,7 @@ export default function Marketplace() {
       <div className="page-head">
         <div>
           <h1>Marketplace</h1>
-          <p>Notes run on Arbitrum{config.chains.some(c => c.key === STOCK_CHAIN) ? '; Robinhood Chain is where the stock tokens live' : ''}. Buy units with {config.chains[0]?.stablecoin.symbol ?? 'USDC'} while a book is open. Chainlink then records the prices on each date, and every coupon and repayment is paid on-chain. Need test tokens? Connect a wallet and claim them with the faucet button.</p>
+          <p>Notes run on Arbitrum{config.chains.some(c => c.key === STOCK_CHAIN) ? '; Robinhood Chain is where the stock tokens live' : ''}. Buy units with {config.chains[0]?.stablecoin.symbol ?? 'USDG'} while a book is open. Chainlink then records the prices on each date, and every coupon and repayment is paid on-chain. Need test tokens? Connect a wallet and claim them with the faucet button.</p>
         </div>
         <Link to="/issue" className="btn primary lg"><Plus className="i" />Issue a note</Link>
       </div>

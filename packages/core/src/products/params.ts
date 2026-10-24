@@ -4,7 +4,7 @@
  * workflow from these parameters, never authored free-hand, so every issued
  * note runs one of a small set of tested payoff engines.
  *
- * Units: one note unit has a face value of 1 unit of the cash token (USDC).
+ * Units: one note unit has a face value of 1 unit of the cash token (USDG, Paxos' Global Dollar).
  * Percentages are of face (coupons, protection) or of the strike (barriers,
  * autocall level). Settlement is in cash: below the knock-in barrier a holder
  * receives final / strike per unit.
@@ -56,7 +56,7 @@ export interface ProductParams {
   /** One underlying, or a worst-of basket (up to MAX_UNDERLYINGS). */
   underlyings: Underlying[];
   /**
-   * Below the knock-in barrier: `cash` pays final / strike in USDC; `physical`
+   * Below the knock-in barrier: `cash` pays final / strike in USDG; `physical`
    * delivers units / strike of the (worst) underlying's token instead, from a
    * delivery reserve the issuer deposits at pre-trade. Default cash.
    */
@@ -230,9 +230,28 @@ export function maxCouponPerUnit(p: ProductParams, k: number): number {
   return 0;
 }
 
-/** Test tokens on the Arbitrum testnets (packages/evm-engine/src/test-tokens): cash and each underlying's
- * deliverable token, for physically settled notes. */
-export const CASH_TOKEN = { token: 'tUSD', decimals: 6 };
+/**
+ * The cash leg: USDG (Global Dollar, issued by Paxos; the dollar Robinhood uses), 6 decimals, on both testnets
+ * (CASH_TOKENS has the addresses). Paxos runs its faucet; notes.markets cannot mint it. tUSD, our own mintable test
+ * dollar, stays deployed as a fallback (TEST_CASH_TOKEN) for local dev and for notes issued before USDG.
+ */
+export const CASH_TOKEN = { token: 'USDG', decimals: 6 };
+export const TEST_CASH_TOKEN = { token: 'tUSD', decimals: 6 };
+
+/**
+ * USDG on each testnet (https://docs.paxos.com/guides/stablecoin/usdg/testnet), checked on 2026-10-24: symbol USDG,
+ * 6 decimals, non-zero supply; on an Arbitrum Sepolia fork transfer and transferFrom delivered in full (no fee on
+ * transfer). It is an upgradeable proxy whose admin roles can pause transfers and freeze or wipe an address
+ * (pause(), freeze(), wipeFrozenAddress() exist behind AccessControl): see docs/SECURITY.md.
+ */
+export const CASH_TOKENS: Record<string, `0x${string}`> = {
+  'arbitrum-sepolia': '0xFFC95faa3d63Cde504a05B567C600B78C0b41892',
+  'robinhood-testnet': '0x7E955252E15c84f5768B83c41a71F9eba181802F',
+};
+export const CASH_FAUCET = 'https://faucet.paxos.com';
+
+/** Our test tokens on the Arbitrum testnets (packages/evm-engine/src/test-tokens): each underlying's deliverable
+ * token, for physically settled notes. */
 export const DELIVERABLE: Record<string, { token: string; decimals: number }> = {
   ETH: { token: 'tETH', decimals: 9 },
   BTC: { token: 'tBTC', decimals: 8 },

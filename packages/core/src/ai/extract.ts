@@ -51,7 +51,7 @@ const SCHEMA = {
   properties: {
     productType: { type: ['string', 'null'], enum: [...Object.keys(PRODUCT_LABELS), null] },
     name: { type: ['string', 'null'], description: 'Short display name, e.g. "12M Phoenix on ETH"' },
-    size: { ...num, description: 'Issuance size in USDC of face' },
+    size: { ...num, description: 'Issuance size in USDG of face' },
     issuePricePct: { ...num, description: 'Issue price, % of face' },
     underlyingSymbols: { type: ['array', 'null'], items: { type: 'string' }, description: 'Tickers, e.g. ["ETH"]; several for a worst-of basket, e.g. ["ETH", "BTC"]' },
     observationEveryMonths: { type: ['integer', 'null'] },
@@ -84,7 +84,7 @@ Rules:
 - Schedule: a 12-month note observed quarterly has 4 observations every 3 months.
 - Barrier and autocall levels are % of the initial (strike) level.
 - Several underlyings ("worst of ETH and BTC", "on a basket of BTC, ETH, SOL") make a worst-of note: list every ticker.
-- Collateral: the assets the issuer pledges ("secured by USDC" -> ["USD"]; "ETH collateral" -> ["ETH"]) and the share of the notional it must cover; haircuts, settlement lag and grace period only if stated.
+- Collateral: the assets the issuer pledges ("secured by USDG" or "USDC" -> ["USD"]; "ETH collateral" -> ["ETH"]) and the share of the notional it must cover; haircuts, settlement lag and grace period only if stated.
 - Name: short, e.g. "12M Phoenix on ETH".`;
 }
 

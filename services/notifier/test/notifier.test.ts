@@ -19,7 +19,7 @@ const ESCROW = '0x000000000000000000000000000000000000e5c0';
 const NOW = 1_800_000_000;
 const DAY = 86_400;
 const fx = (n: number) => (BigInt(Math.round(n * 1e4)) * 1_000_000n).toString(); // engine fixed point (10 decimals)
-const CASH = asset('USDC');
+const CASH = asset('USDG');
 
 function state(over: Partial<NoteState> = {}): NoteState {
   return {

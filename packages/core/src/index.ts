@@ -18,3 +18,4 @@ export * from './eval';
 export * from './ai/pipeline';
 export * from './ai/runner';
 export * from './notify';
+export * from './crosschain';

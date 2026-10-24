@@ -10,7 +10,7 @@ import HoldersPanel from '../components/HoldersPanel';
 import BpmnView from '../components/BpmnView';
 import { useVerifiedEmail } from '../components/VerifiedEmail';
 import PayoffChart from '../components/PayoffChart';
-import { useAddress, useChains, useSigner } from '../lib/chains';
+import { useAddress, useChains, useSigner, cashSymbol } from '../lib/chains';
 import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
 
@@ -38,7 +38,7 @@ export default function OfferingPage() {
 
   const s = note.state;
   const chain = byKey[s.chain];
-  const sym = chain?.cfg.stablecoin.symbol ?? 'USDC';
+  const sym = cashSymbol(chain?.cfg, s.assetTokens?.[1]);
   const explorer = chain?.cfg.explorer;
   const mine = me ? positionOf(s, me, def ?? undefined) : null;
   const isIssuer = !!me && me.toLowerCase() === o.issuer.toLowerCase();

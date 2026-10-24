@@ -13,7 +13,7 @@ import { errText, fmtDate, fmtMoney, fmtPct } from '../lib/format';
 const STATUS: Record<PeriodStatus, string> = {
   'upcoming': 'Upcoming', 'nothing-due': 'Nothing due', 'due': 'Due', 'paid': 'Paid', 'grace': 'In grace', 'missed': 'Missed: default', 'cancelled': '—',
 };
-const tokenName = (symbol: string) => (symbol === 'USD' ? 'USDC' : `t${symbol}`);
+const tokenName = (symbol: string) => (symbol === 'USD' ? 'USDG' : `t${symbol}`);
 const countdown = (t: number, now: number) => {
   const s = Math.round(t - now);
   if (s <= 0) return 'now';

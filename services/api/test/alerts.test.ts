@@ -26,7 +26,7 @@ const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
 const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
 const word = (v: bigint) => `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` as Hex;
-const CASH = c.def.assets.findIndex(a => a.name === 'USDC');
+const CASH = c.def.assets.findIndex(a => a.name === 'USDG');
 
 let db: Db;
 let chain: FakeChain;

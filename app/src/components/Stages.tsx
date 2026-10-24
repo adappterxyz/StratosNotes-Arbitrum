@@ -171,7 +171,7 @@ export function PayoffPanel({ doc }: { doc: DocInfo }) {
           <label htmlFor="po-ratio">Collateral ratio, % of the notional</label>
           <input id="po-ratio" type="number" min={0} max={1000} value={ratioPct ?? eco.collateralRatioPct} onChange={e => setRatioPct(Number(e.target.value))} />
         </div>
-        <p className="small">The escrow holds collateral worth at least <strong className="num">{(ratio * 100).toFixed(2)}</strong> per 100 of face, counted after haircuts ({eco.collateral.map(c => `${c.symbol === 'USD' ? 'USDC' : `t${c.symbol}`} ${c.haircutPct}%`).join(', ')}) at the last Chainlink prices, plus any payment the issuer had funded but not yet paid. {eco.defaultRule === 'cap-at-owed'
+        <p className="small">The escrow holds collateral worth at least <strong className="num">{(ratio * 100).toFixed(2)}</strong> per 100 of face, counted after haircuts ({eco.collateral.map(c => `${c.symbol === 'USD' ? 'USDG' : `t${c.symbol}`} ${c.haircutPct}%`).join(', ')}) at the last Chainlink prices, plus any payment the issuer had funded but not yet paid. {eco.defaultRule === 'cap-at-owed'
           ? 'Holders take what they are owed from it, pro rata (the missed payment plus par: 100 per 100 of face plus the coupon), stablecoin first, then collateral at market value; anything above that goes back to the issuer.'
           : 'Holders receive all of it, pro rata, whatever it is worth.'} <span className="xs muted" data-default-rule={eco.defaultRule}>(Default rule: {eco.defaultRule === 'cap-at-owed' ? 'capped at what is owed' : 'all to holders'}.)</span></p>
         <p className="xs muted">{ratio >= 1 ? 'Fully secured: on a default, collateral at least matches the face value outstanding.' : `Partly secured: up to ${((1 - ratio) * 100).toFixed(0)} per 100 of face rests on the issuer's credit.`} Coverage is checked at the strike and every observation; below the requirement the issuer must top up within the grace period.</p>
@@ -263,7 +263,7 @@ export function IssuePanel({ doc, built }: { doc: DocInfo; built: Built | null }
     if (every.unit === 'months') { const d = new Date(strikeAt * 1000); d.setUTCMonth(d.getUTCMonth() + every.n * k); return Math.floor(d.getTime() / 1000); }
     return strikeAt + k * every.n * (every.unit === 'days' ? 86400 : 60);
   };
-  const sym = chain?.cfg.stablecoin.symbol ?? 'USDC';
+  const sym = chain?.cfg.stablecoin.symbol ?? 'USDG';
   // Collateral and payment timing: per issuance. Minutes-apart demo schedules get seconds; real ones, days.
   const names = new Set(inputs.map(f => f.name));
   const collateralSyms = [...names].filter(n => n.startsWith('pledge_')).map(n => n.slice(7));

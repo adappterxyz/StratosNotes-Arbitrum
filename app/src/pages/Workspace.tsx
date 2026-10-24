@@ -30,7 +30,7 @@ import { headline } from '@sn/sdk';
 import { short } from '../lib/format';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const NOTE_ASSETS: AssetDefinition[] = [{ id: 'note', name: 'Note', kind: 'issued' }, { id: 'cash', name: 'USDC', kind: 'cash', decimals: 6 }];
+const NOTE_ASSETS: AssetDefinition[] = [{ id: 'note', name: 'Note', kind: 'issued' }, { id: 'cash', name: 'USDG', kind: 'cash', decimals: 6, token: 'USDG' }];
 const STOCK: ProductParams[] = [...(Object.keys(EXAMPLE_PRODUCTS) as ProductType[]).map(t => EXAMPLE_PRODUCTS[t]), EXAMPLE_WORST_OF];
 
 /** A blank note: an Issuer pool with a pre-trade step, to build on. */

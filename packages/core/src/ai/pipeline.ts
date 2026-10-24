@@ -49,7 +49,7 @@ function termQuestions(t: ProductType): Array<[string, string, string]> {
   if (use.knockIn) q.push(['knockIn', 'the knock-in barrier', 'Does the request state a knock-in, protection or downside barrier level?']);
   if (use.protection) q.push(['protection', 'the capital protection level', 'Does the request state how much capital is protected?'], ['participation', 'the participation rate', 'Does the request state a participation rate in the upside?']);
   // The note is secured by collateral the issuer pledges: never assumed.
-  q.push(['collateral', 'the collateral (what the issuer pledges, e.g. USDC or ETH, and the share of the notional it must cover)', 'Does the request say what collateral the issuer pledges or what share of the notional the collateral must cover (e.g. "secured by USDC at 100%", "50% collateral in ETH")?']);
+  q.push(['collateral', 'the collateral (what the issuer pledges, e.g. USDG or ETH, and the share of the notional it must cover)', 'Does the request say what collateral the issuer pledges or what share of the notional the collateral must cover (e.g. "secured by USDG at 100%", "50% collateral in ETH")?']);
   return q;
 }
 
@@ -57,7 +57,7 @@ const list = (xs: string[]) => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1)
 
 export const BRIEF = `You are the StratosNotes assistant. Answer briefly and concretely, only from these facts; if the answer is not covered, say so rather than guess.
 StratosNotes issues structured notes on Arbitrum Sepolia and Robinhood Chain testnet (EVM). A note is a way for the issuer to raise funds against pledged collateral. It is a BPMN workflow with four pools:
-- Issuer: approves this issuance's terms (size, dates, settlement lag, grace period of 0-7 days, collateral ratio, haircuts) and pledges collateral (USDC, or tokens such as ETH valued by Chainlink after a haircut) into escrow; funds each payment through a "Fund Payment k" window before its payment date; can top up collateral at any time.
+- Issuer: approves this issuance's terms (size, dates, settlement lag, grace period of 0-7 days, collateral ratio, haircuts) and pledges collateral (USDG, or tokens such as ETH valued by Chainlink after a haircut) into escrow; funds each payment through a "Fund Payment k" window before its payment date; can top up collateral at any time.
 - Paying Agent (the calculation agent, Chainlink CRE): fixes the strike, observes on each date, checks the collateral covers the required share of the notional (else a margin call: top up within the grace period or default), and on each payment date pays holders from escrow if the issuer funded it; unfunded, a grace period runs, then default.
 - Investor (open to anyone): subscribes with USDC until the strike date; the USDC goes to the issuer (the funds raised) and the investor receives note units in one atomic swap.
 - Escrow: an account the engine holds for the note; nobody can withdraw from it. On default, everything in escrow (collateral in kind and any partial funding) goes to the holders pro rata; after the final payment, the collateral is released to the issuer.

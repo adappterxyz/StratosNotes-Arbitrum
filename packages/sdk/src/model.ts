@@ -293,11 +293,13 @@ export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000
   };
 }
 
-/** "Collateral tETH" -> ETH; "Collateral tUSD" -> USD. */
+/** "Collateral tETH" -> ETH; "Collateral USDG" / "Collateral tUSD" / "Collateral USDC" -> USD (the cash token). */
 const collateralSymbol = (assetName: string) => {
   const m = /^Collateral t?([A-Z]+)$/.exec(assetName);
-  return m ? (m[1] === 'USDC' ? 'USD' : m[1]) : null;
+  return m ? (m[1] === 'USDC' || m[1] === 'USDG' ? 'USD' : m[1]) : null;
 };
+/** The cash asset's name: USDG for new notes, USDC for notes issued before USDG. */
+const isCashName = (name: string) => name === 'USDG' || name === 'USDC';
 
 /**
  * The note's economics from its state: collateral in escrow and its coverage, the payment schedule with each
@@ -328,7 +330,7 @@ export function economicsView(def: WorkflowDef, s: NoteState, params: ProductPar
   const required = num('required') ?? (ratio !== null && sold !== null ? ratio * sold : null);
   const coverage = collateral.every(c => c.value !== null) ? collateral.reduce((a, c) => a + (c.value ?? 0), 0) : null;
   const lag = int('lag') ?? 0, grace = int('grace') ?? 0;
-  const cashAsset = def.assets.findIndex(a => a.name === 'USDC');
+  const cashAsset = def.assets.findIndex(a => isCashName(a.name));
   const escrowCash = cashAsset >= 0 ? bal(cashAsset) : 0;
 
   // What each period owes: the reference payoff along the observed path (the engine's own numbers once paid).

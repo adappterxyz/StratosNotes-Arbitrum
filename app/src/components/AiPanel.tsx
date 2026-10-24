@@ -17,7 +17,7 @@ type Msg = { who: 'you' | 'ai'; text: string; notes?: string[] };
 
 const EXAMPLES = [
   '12M phoenix on the worst of ETH and BTC, 10% p.a. quarterly, 70% coupon barrier with memory, autocall 100% from Q2, knock-in 60%',
-  'Snowball on SOL, 9% p.a. quarterly, autocall 100%, KI 65%, 1 year, 25k USDC',
+  'Snowball on SOL, 9% p.a. quarterly, autocall 100%, KI 65%, 1 year, 25k USDG',
   'Pay the paying agent a 0.1% servicing fee after each coupon',
 ];
 

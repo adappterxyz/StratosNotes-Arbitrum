@@ -11,7 +11,7 @@ const APP_URL = '/app/';
 
 export const BEAT_COPY = [
   { k: 'Issue', t: 'Collateral is locked in the note.' },
-  { k: 'Subscribe', t: 'Stablecoins in, note units out.' },
+  { k: 'Subscribe', t: 'USDG in, note units out.' },
   { k: 'Observe', t: 'Chainlink checks the prices on each date.' },
   { k: 'Pay', t: 'Coupons go to every holder.' },
   { k: 'Redeem', t: 'Paid in full: collateral released. Missed: it goes to holders.' },

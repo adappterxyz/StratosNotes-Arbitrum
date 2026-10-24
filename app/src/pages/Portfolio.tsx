@@ -40,7 +40,7 @@ export default function Portfolio() {
             <tbody>
               {positions.map(p => {
                 const issuer = p.view.issuer === address;
-                const sym = byKey[p.chain]?.cfg.stablecoin.symbol ?? 'USDC';
+                const sym = byKey[p.chain]?.cfg.stablecoin.symbol ?? 'USDG';
                 return (
                   <tr key={p.id} data-note={p.id}>
                     <td><Link to={`/note/${encodeURIComponent(p.id)}`}>{p.view.name}</Link><br /><span className="small muted">{p.view.isin}</span></td>

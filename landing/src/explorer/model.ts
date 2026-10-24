@@ -41,7 +41,7 @@ export interface Goal { id: string; label: string; detail: string; picks: Array<
 
 export const GOALS: Record<Role, Goal[]> = {
   investor: [
-    { id: 'yield', label: 'Earn yield', detail: 'Income above a stablecoin rate, in exchange for taking some market risk.', picks: [
+    { id: 'yield', label: 'Earn yield', detail: 'Income above a USDG savings rate, in exchange for taking some market risk.', picks: [
       { t: 'phoenix', why: 'Coupons while the market holds above a barrier; memory catches up missed ones.' },
       { t: 'fcn', why: 'A fixed coupon every period, whatever the market does, until it is called.' },
       { t: 'reverse-convertible', why: 'The highest fixed coupon, if you accept the downside below the knock-in.' },
@@ -205,7 +205,7 @@ export function explain(t: Terms, o: Outcome): string {
 
 export interface Collateral { id: string; label: string; haircut: number }
 export const COLLATERAL: Collateral[] = [
-  { id: 'tUSD', label: 'Stablecoin (tUSD)', haircut: 100 },
+  { id: 'USDG', label: 'USDG (Global Dollar)', haircut: 100 },
   { id: 'ETH', label: 'ETH', haircut: 70 },
   { id: 'BTC', label: 'BTC', haircut: 70 },
   { id: 'TSLA', label: 'Robinhood Chain TSLA', haircut: 60 },

@@ -1,12 +1,13 @@
 /**
- * Test tokens. On a testnet with a TokenFaucet the connected wallet claims them itself (tUSD to subscribe, and
- * tETH, tBTC, tTSLA… for a physically settled note's delivery reserve): one claim per token per hour, gas paid
- * by the wallet. On a local dev chain the API mints its mock stablecoin instead. A chain's own tokens (Robinhood
- * Chain's TSLA, AMZN, NFLX) are not ours to hand out: the button links to that chain's faucet for them.
+ * Test tokens. The cash leg is USDG, which Paxos hands out (we cannot mint it): the default choice links to the Paxos
+ * faucet. On a testnet with our TokenFaucet the connected wallet claims our own test tokens itself (tETH, tBTC,
+ * tTSLA… for delivery and collateral): one claim per token per hour, gas paid by the wallet. A chain's own tokens
+ * (Robinhood Chain's TSLA, AMZN, NFLX) come from that chain's faucet, linked. tUSD, our old test dollar, is not
+ * offered (it only settles notes issued before USDG). On a local dev chain the API mints its mock stablecoin.
  */
 import { useState } from 'react';
 import { Droplet, ExternalLink } from 'lucide-react';
-import { EXTERNAL_TOKENS, STOCK_TOKEN_FAUCETS } from '@sn/core';
+import { CASH_FAUCET, CASH_TOKEN, EXTERNAL_TOKENS, STOCK_TOKEN_FAUCETS, TEST_CASH_TOKEN } from '@sn/core';
 import { parseAbi } from 'viem';
 import { useAccount } from 'wagmi';
 import { api } from '../lib/api';
@@ -26,7 +27,7 @@ export default function FaucetButton() {
   const { chainId } = useAccount();
   const { config, byKey } = useChains();
   const signer = useSigner();
-  const [token, setToken] = useState('tUSD');
+  const [token, setToken] = useState(CASH_TOKEN.token);
   const [state, setState] = useState<{ busy: boolean; text: string; bad?: boolean }>({ busy: false, text: '' });
   if (!address) return null;
   // The wallet's current network if it has a faucet, else the first that does.
@@ -52,8 +53,11 @@ export default function FaucetButton() {
 
   const ch = onChain!;
   const external = new Set(Object.keys(EXTERNAL_TOKENS[ch.key] ?? {}));
-  const symbols = [...Object.keys(ch.tokens).filter(s => !external.has(s)), ...external];
-  const outside = external.has(token) ? STOCK_TOKEN_FAUCETS[ch.key] : undefined;
+  const ours = Object.keys(ch.tokens).filter(s => !external.has(s) && s !== TEST_CASH_TOKEN.token && s !== CASH_TOKEN.token);
+  const symbols = [CASH_TOKEN.token, ...ours, ...external];
+  // Where a token comes from when it is not ours to hand out.
+  const outside = token === CASH_TOKEN.token ? { url: CASH_FAUCET, who: 'Paxos' }
+    : external.has(token) ? { url: STOCK_TOKEN_FAUCETS[ch.key], who: 'Robinhood' } : undefined;
   const claim = async () => {
     const addr = ch.tokens[token];
     if (!addr || !ch.tokenFaucet) return;
@@ -76,7 +80,7 @@ export default function FaucetButton() {
         {symbols.map(s => <option key={s} value={s}>{external.has(s) ? `${s} (${ch.name})` : s}</option>)}
       </select>
       {outside
-        ? <a className="btn" href={outside} target="_blank" rel="noreferrer" title={`${ch.name}'s own ${token}: claimed from its faucet, not ours`}><ExternalLink className="i" />Get test {token} from Robinhood's faucet</a>
+        ? <a className="btn" href={outside.url} target="_blank" rel="noreferrer" title={`Test ${token} is handed out by ${outside.who}, not by notes.markets`}><ExternalLink className="i" />Get test {token} from {outside.who}</a>
         : <button className="btn" onClick={claim} disabled={state.busy} title={`Claim test ${token} on ${ch.name} (once an hour); gas is paid in testnet ETH`}><Droplet className="i" />Get {token}</button>}
     </span>
   );

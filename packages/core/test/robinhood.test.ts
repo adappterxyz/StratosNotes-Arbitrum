@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  collateralTokenOf, compileTemplate, deliverableToken, EXAMPLE_PRODUCTS, EXTERNAL_TOKENS, FEEDS, instantiateProduct,
+  CASH_TOKENS, collateralTokenOf, compileTemplate, deliverableToken, EXAMPLE_PRODUCTS, EXTERNAL_TOKENS, FEEDS, instantiateProduct,
   ROBINHOOD_STOCK_TOKENS, SEED_TEMPLATES, validateProductParams, type ProductParams,
 } from '../src';
 
@@ -16,7 +16,7 @@ describe("Robinhood Chain's own stock tokens", () => {
     expect(collateralTokenOf({}, 'AMZN')).toBeUndefined();
     // Stocks Robinhood does not publish fall back to the test tokens, which are deployed on Robinhood Chain too.
     expect(deliverableToken({ stockTokens: 'robinhood' }, 'NVDA')).toEqual({ token: 'tNVDA', decimals: 9 });
-    expect(collateralTokenOf({ stockTokens: 'robinhood' }, 'USD')).toEqual({ token: 'tUSD', decimals: 6 });
+    expect(collateralTokenOf({ stockTokens: 'robinhood' }, 'USD')).toEqual({ token: 'USDG', decimals: 6 });
   });
 
   it('compiles the token choice into the definition: real TSLA is an 18-decimal asset', () => {
@@ -37,6 +37,11 @@ describe("Robinhood Chain's own stock tokens", () => {
   it('maps every Robinhood stock token to its testnet address', () => {
     const addrs = EXTERNAL_TOKENS['robinhood-testnet'];
     for (const sym of Object.keys(ROBINHOOD_STOCK_TOKENS)) expect(addrs[ROBINHOOD_STOCK_TOKENS[sym].token]).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  });
+
+  it('settles in USDG on both testnets', () => {
+    expect(instantiateProduct(rc).assets.find(a => a.id === 'cash')).toMatchObject({ token: 'USDG', decimals: 6 });
+    for (const chain of ['arbitrum-sepolia', 'robinhood-testnet']) expect(CASH_TOKENS[chain]).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
   it('prices AMZN from Chainlink on Arbitrum One with the equity staleness allowance', () => {
