@@ -26,7 +26,7 @@
       "engine": "0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244",
       "startBlock": 141825174,
       "confirmations": 3,
-      "maxRange": 2000,
+      "maxRange": 20000,
       "pollMs": 2000,
       "legacyEngines": [
         {

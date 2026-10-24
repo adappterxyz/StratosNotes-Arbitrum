@@ -35,7 +35,9 @@ const indexer = {
   chains: deployed.map(c => ({
     key: c.key, family: 'evm', chainId: c.chainId, rpc: c.rpc, engine: c.d.engine, startBlock: c.d.block,
     // Arbitrum chains: read 'finalized' would lag ~L1 finality; a few confirmations is the demo-friendly depth.
-    confirmations: 3, maxRange: 2000, pollMs: 2000,
+    // Robinhood Chain testnet makes several blocks a second with few logs: 20,000-block ranges (its RPC answers them
+    // in well under a second) keep the indexer at the head; 2,000 fell ~170,000 blocks behind.
+    confirmations: 3, maxRange: c.key === 'robinhood-testnet' ? 20000 : 2000, pollMs: 2000,
     legacyEngines: legacyOf(c.key, c.d.engine).map(l => ({ engine: l.d.engine, startBlock: l.d.block, version: l.version })),
   })),
 };
