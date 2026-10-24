@@ -357,3 +357,22 @@ header.nav.scrolled, header.nav.open { background: rgba(255, 255, 255, 0.94); bo
 .xp-body { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 20px clamp(16px, 4vw, 32px) 60px; }
 .xp-intro { color: var(--text-soft); font-size: 15px; margin-bottom: 18px; max-width: 70ch; }
 .xp-loading { padding: 40px 0; color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
+
+/* Phones: the hero is taller than short screens, so anchor it under the nav (never centred up behind the logo)
+   and compact it as the height drops. */
+@media (max-width: 760px) {
+  .stage-hero { align-items: flex-start; padding-top: calc(76px + env(safe-area-inset-top, 0px)); padding-bottom: 16px; }
+  .hero-inner { gap: 14px; }
+  .outcomes li { font-size: 14px; }
+}
+@media (max-width: 760px) and (max-height: 760px) {
+  .stage-hero h1 { font-size: clamp(30px, 9vw, 40px); }
+  .stage-hero .sub { font-size: 16px; }
+  .hero-inner { gap: 11px; }
+  .outcomes li { font-size: 13px; padding-left: 10px; }
+  .scroll-cue { display: none; }
+}
+@media (max-width: 760px) and (max-height: 640px) {
+  .stage-hero .badge { display: none; }
+  .outcomes { display: none; }
+}
