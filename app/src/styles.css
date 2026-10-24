@@ -551,3 +551,5 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 .field-row .field-name { flex: 1 1 auto; min-width: 0; width: auto; }
 .field-row .field-type { flex: 0 0 auto; width: auto; max-width: 112px; }
 .rm-more { justify-self: start; }
+
+.new-version { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; border-radius: 0; border-width: 0 0 1px; padding: 8px 16px; }

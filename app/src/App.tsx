@@ -77,6 +77,7 @@ export default function App() {
   );
   return (
     <>
+      <NewVersion />
       <header className={`appbar${menu ? ' open' : ''}`}>
         <div className="appbar-row">
           <Link to="/" className="brand" aria-label="notes.markets marketplace"><Wordmark /></Link>
@@ -117,5 +118,38 @@ export default function App() {
         </footer>
       )}
     </>
+  );
+}
+
+/** The app's own bundle, as named in the page that loaded it. */
+const loadedBundle = () => document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.getAttribute('src') ?? null;
+
+/**
+ * A tab opened before a deploy keeps running the code it loaded. Every few minutes (and when the tab comes back into
+ * view) compare the live page's bundle with ours; when they differ, offer a one-click reload.
+ */
+function NewVersion() {
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    const mine = loadedBundle();
+    if (!mine) return;
+    let off = false;
+    const check = async () => {
+      try {
+        const html = await (await fetch(`${import.meta.env.BASE_URL}?v=${Date.now()}`, { cache: 'no-store' })).text();
+        const live = /src="([^"]*\/assets\/index-[^"]+\.js)"/.exec(html)?.[1];
+        if (!off && live && live !== mine) setStale(true);
+      } catch { /* offline: try later */ }
+    };
+    const t = setInterval(check, 5 * 60_000);
+    const vis = () => { if (document.visibilityState === 'visible') void check(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { off = true; clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  if (!stale) return null;
+  return (
+    <div className="notice ok new-version" role="status">
+      A newer version of notes.markets is live. <button type="button" className="btn sm" onClick={() => window.location.reload()}>Reload</button>
+    </div>
   );
 }

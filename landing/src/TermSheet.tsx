@@ -1,6 +1,8 @@
 /**
- * The term sheet of a real note from /api/notes: an open book first, then a running note. Without one (or while the
- * API is down) it shows the same rows as an illustrative sheet with no numbers in it. The coupon is annualised the way
+ * The term sheet of a real note from /api/notes, shown only when it is a fair example to verify: issued on Arbitrum
+ * (the anchor network), settled in USDG, and on a real schedule (not a compressed demo of minutes or days). An open
+ * book first, then a running note. Without one (or while the API is down) it shows the same rows as an illustrative
+ * sheet with no numbers in it. The coupon is annualised the way
  * the app does it (app/src/lib/listing.ts): coupon per period times the periods in a year, where a compressed demo
  * schedule uses the designed term from the name ("12M …", 12 months by default).
  */
@@ -18,7 +20,10 @@ type NoteView = {
   id: string; chain: string; name: string; phase: string; label?: string;
   params: Params; strikeDate?: number; obsDates?: number[];
   economics?: { ratio?: number; collateral?: Array<{ symbol: string; amount: number }> };
+  cashToken?: string;
 };
+/** Paxos USDG on Arbitrum Sepolia: the only cash a showcased note may settle in. */
+const USDG_ARBITRUM = '0xffc95faa3d63cde504a05b567c600b78c0b41892';
 type Chain = { key: string; explorer?: string; engine?: string };
 
 const STATUS: Record<string, string> = { book: 'Open for subscription', redeemed: 'Paid in full', defaulted: 'Defaulted' };
@@ -71,8 +76,13 @@ function rowsOf(v: NoteView, now: number): { rows: Row[]; next: string | null } 
   return { rows, next: nxt ? fmtDate(nxt) : null };
 }
 
+/** A note worth showing: on Arbitrum, in USDG, on a real schedule (at least a month to maturity). */
+const showcase = (n: NoteView) => n.chain === 'arbitrum-sepolia' && n.cashToken?.toLowerCase() === USDG_ARBITRUM && !schedule(n).demo
+  && !!n.strikeDate && !!n.obsDates?.length;
+
 function pick(notes: NoteView[]) {
-  return notes.find(n => n.phase === 'book') ?? notes.find(n => !['book', 'redeemed', 'defaulted'].includes(n.phase)) ?? null;
+  const ok = notes.filter(showcase);
+  return ok.find(n => n.phase === 'book') ?? ok.find(n => !['book', 'redeemed', 'defaulted'].includes(n.phase)) ?? null;
 }
 
 export default function TermSheet() {
