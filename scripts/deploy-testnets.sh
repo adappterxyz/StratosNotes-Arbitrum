@@ -7,6 +7,7 @@
 #   CHAINS=robinhood-testnet bash scripts/deploy-testnets.sh # one chain
 #   REHEARSAL=1 bash scripts/deploy-testnets.sh              # against local anvil forks; writes deployments/local/rehearsal/
 #   REHEARSAL=1 SEED=1 bash scripts/deploy-testnets.sh       # ... and issue a demo note per chain on them
+#   TEST_TOKENS=0 KEEP_TOKENS=deployments/archive/v3 bash scripts/deploy-testnets.sh  # new engine, same tokens
 #
 # The deployer key is read from .keys/deployer.json (never printed) and is OWNER of the engine, tokens and faucet.
 # Re-running redeploys: move deployments/<chain>.json aside first if you mean to keep the old one.
@@ -52,11 +53,15 @@ for c in $CHAINS; do
   # never echoed.
   head="$(cast block-number --rpc-url "$rpc")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
   (cd packages/evm-engine && export DEPLOYER_KEY="$(python3 -c "import json;k=json.load(open('$ROOT/.keys/deployer.json'))[0]['private_key'];print(k if k.startswith('0x') else '0x'+k)")" && \
-    CHAIN="$c" FORWARDER_MODE=mock OWNER="$DEPLOYER" TEST_TOKENS=1 OUT="$ROOT/$OUTDIR/$c.json" \
+    CHAIN="$c" FORWARDER_MODE=mock OWNER="$DEPLOYER" TEST_TOKENS="${TEST_TOKENS:-1}" OUT="$ROOT/$OUTDIR/$c.json" \
     VERIFIER="$VERIFIER" REQUIRE_EMAIL="${REQUIRE_EMAIL:-1}" \
     forge script script/Deploy.s.sol --rpc-url "$rpc" --broadcast --slow > "$ROOT/$OUTDIR/deploy-$c.log" 2>&1) \
     || { echo "$c: deploy failed (see $OUTDIR/deploy-$c.log)"; exit 1; }
   python3 scripts/set-deploy-block.py "$OUTDIR/$c.json" "$head"
+  # KEEP_TOKENS=<dir> (with TEST_TOKENS=0): keep the test tokens and faucet of an earlier deployment in <dir>.
+  if [ -n "${KEEP_TOKENS:-}" ]; then
+    python3 -c "import json,sys;o=json.load(open('${KEEP_TOKENS}/$c.json'));p='$OUTDIR/$c.json';d=json.load(open(p));d['tokens']=o['tokens'];d['faucet']=o['faucet'];json.dump(d,open(p,'w'),indent=2,sort_keys=True)"
+  fi
   echo "   $(python3 -c "import json;d=json.load(open('$OUTDIR/$c.json'));print('engine',d['engine'],'lens',d['lens'],'faucet',d['faucet'])")"
 done
 

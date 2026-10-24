@@ -31,11 +31,16 @@ function crossChainVaults() {
     label, stateBlock: 'latest' as const,
   })));
 }
+/** Earlier engines whose notes are still running (deployments/archive/<v>/<chain>.json): the keeper keeps
+ * driving them to maturity after a redeploy. Staging only; LEGACY=v3,... (default v3 when the folder exists). */
+const legacyEngines = (ch: { file: string; chainSelectorName: string }) => (target !== 'staging' ? [] : (process.env.LEGACY ?? 'v3').split(',').filter(Boolean)
+  .map(v => ch.file.replace('deployments/', `deployments/archive/${v}/`)).filter(f => existsSync(f))
+  .map(f => ({ file: f, chainSelectorName: ch.chainSelectorName })));
 const config = {
   schedule: target === 'production' ? '0 * * * * *' : '*/30 * * * * *',
   // A chain not deployed yet is left out, so staging can go live one chain at a time: the workflow refuses a zero
   // address, and listing one would stop every run. Production and local forks keep every entry.
-  chains: chains.filter(ch => target !== 'staging' || existsSync(ch.file)).map(ch => {
+  chains: chains.filter(ch => target !== 'staging' || existsSync(ch.file)).flatMap(ch => [ch, ...legacyEngines(ch)]).map(ch => {
     const d = existsSync(ch.file) ? JSON.parse(readFileSync(ch.file, 'utf8')) as { engine: string; lens: string } : { engine: ZERO, lens: ZERO };
     return {
       chainSelectorName: ch.chainSelectorName, engine: d.engine, lens: d.lens,

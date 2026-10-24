@@ -1,13 +1,14 @@
 {
-  "block": 322211118,
+  "block": 322330366,
   "chain": "arbitrum-sepolia",
   "chainId": 421614,
-  "deployedAt": 1792800551,
-  "engine": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
+  "deployedAt": 1792832931,
+  "engine": "0x7d36Da43724b09Bb03ED98a4574685070073020b",
   "faucet": "0x02BA09FB3409d310C1C8d145144c84e5bC5D09EE",
   "forwarder": "0xD41263567DdfeAd91504199b8c6c87371e83ca5d",
   "forwarderMode": "mock",
-  "lens": "0x7544378876D780E69968CD67c3FEf9a294C23A0B",
+  "l1Block": 11982812,
+  "lens": "0x7EE0F15F5DF7773C702C38d9d227466386974734",
   "owner": "0x298afB9424188C7eA7c01556D8CAE6ff4768de0a",
   "requireEmail": true,
   "tokens": {
@@ -20,6 +21,5 @@
     "tTSLA": "0xbd162AeFA4Cd5763c41257636084d93F36DECFf5",
     "tUSD": "0x9713Df733560aa5b7d3F4f13BaBc6Cd7f7F47787"
   },
-  "verifier": "0xBbAb30Cf49862BAfEb37a405D08949E81045093f",
-  "l1Block": 11980160
+  "verifier": "0xBbAb30Cf49862BAfEb37a405D08949E81045093f"
 }

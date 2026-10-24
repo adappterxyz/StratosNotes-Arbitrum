@@ -1,13 +1,14 @@
 {
-  "block": 141588428,
+  "block": 141825174,
   "chain": "robinhood-testnet",
   "chainId": 46630,
-  "deployedAt": 1792800657,
-  "engine": "0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D",
+  "deployedAt": 1792832963,
+  "engine": "0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244",
   "faucet": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
   "forwarder": "0x0b93082D9b3C7C97fAcd250082899BAcf3af3885",
   "forwarderMode": "mock",
-  "lens": "0x0969cCc3e714A3Ac5a49b1cD8e07989B8C7CaA41",
+  "l1Block": 141825203,
+  "lens": "0xFf16513462B43d4ECA78C6e092b2b1C850c80C17",
   "owner": "0x298afB9424188C7eA7c01556D8CAE6ff4768de0a",
   "requireEmail": true,
   "tokens": {
@@ -20,6 +21,5 @@
     "tTSLA": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
     "tUSD": "0x1D91004a9DA8D385196017727046cBA8CBbff397"
   },
-  "verifier": "0xBbAb30Cf49862BAfEb37a405D08949E81045093f",
-  "l1Block": 141588457
+  "verifier": "0xBbAb30Cf49862BAfEb37a405D08949E81045093f"
 }

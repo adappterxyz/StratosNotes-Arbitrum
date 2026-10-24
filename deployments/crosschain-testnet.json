@@ -4,10 +4,10 @@
     "chainId": 421614,
     "selector": "3478487238524512106",
     "router": "0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165",
-    "engine": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
-    "gateway": "0xcdee38dEbC2eE59Ae486c0829ff6a0028a5eFaEC",
-    "gatewayBlock": 322236840,
-    "deployTx": "0x7540437a26bc798c17032d425567d3f30b364e2158e6918ac128edbe4899e59c"
+    "engine": "0x7d36Da43724b09Bb03ED98a4574685070073020b",
+    "gateway": "0x355196434760Ce382315E2cDADaa5bA76b06372A",
+    "gatewayBlock": 322331377,
+    "deployTx": "0x58eb1a286d72a2312aca322a4dd16e2d95fe27b04334276b89428864d39a1d40"
   },
   "remotes": [
     {
@@ -15,36 +15,36 @@
       "chainId": 46630,
       "selector": "2032988798112970440",
       "router": "0x30D197C6F5bE050D5525dD94d01760FaCdB67e7C",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "gasLimit": 300000,
       "receipts": {
         "USDG.rh": {
-          "receipt": "0x62f28cF2EAF65eddA7FB57321f9809042e4f1B67",
+          "receipt": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
           "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
           "decimals": 6,
           "valuedAs": "USD"
         },
         "TSLA.rh": {
-          "receipt": "0xcDb6f71FeEEB73F3c001681A390EE7940575AAc2",
+          "receipt": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
           "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
           "decimals": 18,
           "valuedAs": "TSLA"
         },
         "AMZN.rh": {
-          "receipt": "0x67c475C9CbB9fa695dEeBae62A57291376a9FDD9",
+          "receipt": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
           "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
           "decimals": 18,
           "valuedAs": "AMZN"
         },
         "NFLX.rh": {
-          "receipt": "0xD07f12Fa6a657f4A0F6DdA6095a5FA10667248e9",
+          "receipt": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3",
           "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
           "decimals": 18,
           "valuedAs": null,
           "note": "no CRE-readable NFLX feed: not usable as collateral"
         },
         "tTSLA.rh": {
-          "receipt": "0x4A20107535C9d82310A3EfD7e4f9993Edeaade9B",
+          "receipt": "0xBF98A8Bd62fB5d5A92b5A12844388feD9f1Ad89D",
           "token": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
           "decimals": 9,
           "valuedAs": "TSLA",

@@ -37,7 +37,10 @@ contract DeployCrossChain is Script {
         string memory role = vm.envString("ROLE");
         bytes32 r = keccak256(bytes(role));
         Net memory here = _net(vm.envString("CHAIN"));
-        vm.startBroadcast();
+        // DEPLOYER_KEY (env) keeps the key off the command line; else --private-key.
+        uint256 pk = vm.envOr("DEPLOYER_KEY", uint256(0));
+        if (pk != 0) vm.startBroadcast(pk);
+        else vm.startBroadcast();
         if (r == keccak256("gateway")) {
             HomeGateway g = new HomeGateway(here.router, vm.envAddress("OWNER"), vm.envAddress("ENGINE"));
             console2.log("HomeGateway", address(g));

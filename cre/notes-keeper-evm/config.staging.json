@@ -3,8 +3,28 @@
   "chains": [
     {
       "chainSelectorName": "ethereum-testnet-sepolia-arbitrum-1",
+      "engine": "0x7d36Da43724b09Bb03ED98a4574685070073020b",
+      "lens": "0x7EE0F15F5DF7773C702C38d9d227466386974734",
+      "gasLimit": "8000000",
+      "fromPid": 1,
+      "scan": 200,
+      "maxProcesses": 50,
+      "stateBlock": "latest"
+    },
+    {
+      "chainSelectorName": "ethereum-testnet-sepolia-arbitrum-1",
       "engine": "0xAF8425A4b2d8994796e019D9b42Cd99D40297e10",
       "lens": "0x7544378876D780E69968CD67c3FEf9a294C23A0B",
+      "gasLimit": "8000000",
+      "fromPid": 1,
+      "scan": 200,
+      "maxProcesses": 50,
+      "stateBlock": "latest"
+    },
+    {
+      "chainSelectorName": "robinhood-testnet",
+      "engine": "0xf1a1Fa45770582d1EeBC173d9076E95f9cFA0244",
+      "lens": "0xFf16513462B43d4ECA78C6e092b2b1C850c80C17",
       "gasLimit": "8000000",
       "fromPid": 1,
       "scan": 200,
@@ -26,45 +46,45 @@
   "vaults": [
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0x62f28cF2EAF65eddA7FB57321f9809042e4f1B67",
+      "receipt": "0xd3Bc0e5736A51Db86f32073F7c7F5a6965FE4daA",
       "assetChain": "robinhood-testnet",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "token": "0x7E955252E15c84f5768B83c41a71F9eba181802F",
       "label": "USDG.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0xcDb6f71FeEEB73F3c001681A390EE7940575AAc2",
+      "receipt": "0xd8E7c3E8667B9e1B478658353C19f2141f536764",
       "assetChain": "robinhood-testnet",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "token": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
       "label": "TSLA.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0x67c475C9CbB9fa695dEeBae62A57291376a9FDD9",
+      "receipt": "0x2fF0D6c555b824d1b4c2fE0D4B14b3BBE73d8734",
       "assetChain": "robinhood-testnet",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "token": "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
       "label": "AMZN.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0xD07f12Fa6a657f4A0F6DdA6095a5FA10667248e9",
+      "receipt": "0x5e0Bd96cad2981E1d783e2A4bFfAa75856fe08C3",
       "assetChain": "robinhood-testnet",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "token": "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
       "label": "NFLX.rh",
       "stateBlock": "latest"
     },
     {
       "homeChain": "ethereum-testnet-sepolia-arbitrum-1",
-      "receipt": "0x4A20107535C9d82310A3EfD7e4f9993Edeaade9B",
+      "receipt": "0xBF98A8Bd62fB5d5A92b5A12844388feD9f1Ad89D",
       "assetChain": "robinhood-testnet",
-      "vault": "0xfB8b030FF7C059665daB3aF2D77F72445E341300",
+      "vault": "0xE7a70743263554eb4D7A5599F4bAd05d2A7E8846",
       "token": "0xA540f040Dc767d9F683a660e9b1fF004E8F82225",
       "label": "tTSLA.rh",
       "stateBlock": "latest"
