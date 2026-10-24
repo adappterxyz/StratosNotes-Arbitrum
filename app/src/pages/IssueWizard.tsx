@@ -22,7 +22,7 @@ import DescribeIt from '../components/issue/DescribeIt';
 import { AI_DRAFT_KEY, exampleOf, kindOf, loadAiReading, readyMade, saveAiReading, type AiReading, type NoteKind, type ReadyMade } from '../lib/readymade';
 import { Asset, AssetIcon, AssetStack } from '../components/AssetIcon';
 import { PREFERRED_CHAIN, useChains } from '../lib/chains';
-import { fmtMoney } from '../lib/format';
+import { fmtMoney, lockedAsset } from '../lib/format';
 
 type Kind = NoteKind;
 const PRODUCTS: Array<{ kind: Kind; icon: ReactNode; title: string; line: string }> = [
@@ -390,7 +390,7 @@ export default function IssueWizard() {
                     return (
                       <button key={c} type="button" className={`chip ${colSyms.includes(c) ? 'on' : ''}`} aria-pressed={colSyms.includes(c)} onClick={() => toggleCol(c)}
                         disabled={!colSyms.includes(c) && (colSyms.length >= MAX_COLLATERAL || !live)} title={live ? undefined : `${tok} is not registered on the gateway yet`}>
-                        <AssetIcon sym={tok} size={18} />{tok}
+                        <AssetIcon sym={tok} size={18} />{lockedAsset(tok)}
                       </button>
                     );
                   })}
@@ -410,7 +410,7 @@ export default function IssueWizard() {
                 <summary>More options: haircuts, the default rule and how holders get paid</summary>
                 <div className="adv-body form-grid">
                   {eco.collateral.filter(c => c.symbol !== 'USD').map(c => (
-                    <Num key={c.symbol} id={`iw-hc-${c.symbol}`} label={`${colToken(c.symbol) ?? c.symbol} counted at (of value)`} suffix="%" value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
+                    <Num key={c.symbol} id={`iw-hc-${c.symbol}`} label={`${lockedAsset(colToken(c.symbol) ?? c.symbol)} counted at (of value)`} suffix="%" value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
                   ))}
                   <div className="field">
                     <label htmlFor="iw-default">On a default, holders get</label>
@@ -444,7 +444,7 @@ export default function IssueWizard() {
                 <dt>You commit to</dt>
                 <dd>
                   <ul className="iw-list">
-                    <li>Lock {eco.collateral.map(c => colToken(c.symbol) ?? c.symbol).join(' + ')} worth at least {eco.collateralRatioPct}% of what's sold{remote ? ', on Robinhood Chain' : ''}, until the last payment.</li>
+                    <li>Lock {eco.collateral.map(c => lockedAsset(colToken(c.symbol) ?? c.symbol)).join(' + ')} worth at least {eco.collateralRatioPct}% of what's sold{remote ? ', on Robinhood Chain' : ''}, until the last payment.</li>
                     <li>Fund each payment within {dur(t.lag)} of its observation; a {dur(t.grace)} grace period follows.</li>
                     <li>If a payment is still missing, holders take {eco.defaultRule === 'cap-at-owed' ? "what they're owed" : 'everything in escrow'} from the collateral.</li>
                     {p.payouts === 'push' && <li>Send each payment to every holder's wallet and pay the gas (run the issuer bot).</li>}

@@ -20,7 +20,7 @@ import { useAddress, useChains, useSigner } from '../lib/chains';
 import { Steps } from './ui';
 import { useVerifiedEmail } from './VerifiedEmail';
 import { LockOnRobinhood } from './CrossChainCollateral';
-import { errText, fmtMoney, short } from '../lib/format';
+import { errText, fmtMoney, lockedAsset, lockedAssetWhere, short } from '../lib/format';
 
 export interface DocInfo {
   name: string;
@@ -412,8 +412,8 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
               const tok = tokOf(c);
               return (
                 <div key={c} className="field">
-                  <label htmlFor={`is-pledge-${c}`}>{tok} pledged{compact ? ` · ${haircuts[c] ?? 100}% counted` : <> · haircut <input aria-label={`${tok} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</>}</label>
-                  <input id={`is-pledge-${c}`} inputMode="decimal" value={pledgeOf(c)} onChange={e => setPledges(x => ({ ...x, [c]: e.target.value }))} placeholder={`${tok} amount`} />
+                  <label htmlFor={`is-pledge-${c}`}>{lockedAssetWhere(tok)} pledged{compact ? ` · ${haircuts[c] ?? 100}% counted` : <> · haircut <input aria-label={`${lockedAsset(tok)} share of value counted, %`} type="number" min={0} max={100} value={haircuts[c] ?? 100} onChange={e => setHaircuts(h => ({ ...h, [c]: Number(e.target.value) }))} style={{ width: 64, display: 'inline-block' }} />% counted</>}</label>
+                  <input id={`is-pledge-${c}`} inputMode="decimal" value={pledgeOf(c)} onChange={e => setPledges(x => ({ ...x, [c]: e.target.value }))} placeholder={`${lockedAsset(tok)} amount`} />
                   {c !== 'USD' && <span className="hint">Valued by Chainlink at the strike; with {collateralSyms.length > 1 ? 'the other assets' : 'nothing else'} it must cover {fmtMoney(required)} {sym}.</span>}
                 </div>
               );

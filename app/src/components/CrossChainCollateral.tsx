@@ -122,7 +122,7 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
       const hash = await w.writeContract({ address: leg.vault, abi: remoteVaultAbi, functionName: 'lock', args: [r.token, units, address as `0x${string}`], value: fee, account: w.account!, chain: w.chain });
       const rc = await client.waitForTransactionReceipt({ hash });
       const msg = messageIdOf(rc.logs);
-      setState({ busy: false, text: `Locked on ${leg.asset.name}. Chainlink CCIP is delivering it to ${leg.home.name}: usually 15–25 minutes, then the ${sym} receipts appear here.`, msg });
+      setState({ busy: false, text: `Locked on ${leg.asset.name}. Chainlink CCIP is delivering it to ${leg.home.name}: usually 15–25 minutes, then it shows here, ready to pledge.`, msg });
       setTick(t => t + 1);
     } catch (e) { setState({ busy: false, text: errText(e), bad: true }); }
   };
@@ -144,7 +144,7 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
       </div>
       <ul className="xs" style={{ margin: 0, paddingLeft: 18 }}>
         {needed.map(n => (
-          <li key={n.receipt}>{n.receipt} credited to you: <strong>{leg.receipts[n.receipt] ? formatUnits(bal[n.receipt] ?? 0n, leg.receipts[n.receipt].decimals) : '—'}</strong>{n.amount ? ` (this issuance needs ${n.amount})` : ''}</li>
+          <li key={n.receipt}>{receiptLabel(n.receipt)} locked on {leg.asset.name}, ready to pledge: <strong>{leg.receipts[n.receipt] ? formatUnits(bal[n.receipt] ?? 0n, leg.receipts[n.receipt].decimals) : '—'}</strong>{n.amount ? ` (this issuance needs ${n.amount})` : ''}</li>
         ))}
       </ul>
       {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
@@ -290,7 +290,7 @@ function RedeemLeg({ leg }: { leg: Leg }) {
       const client = byKey[leg.home.key].client;
       const amount = bal[s];
       const fee = await client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'quoteRedeem', args: [r.receipt, amount, address as `0x${string}`] }) as bigint;
-      setState({ busy: s, text: `Redeem ${formatUnits(amount, r.decimals)} ${s} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
+      setState({ busy: s, text: `Release ${formatUnits(amount, r.decimals)} ${receiptLabel(s)} on ${leg.asset.name} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
       const hash = await w.writeContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'redeem', args: [r.receipt, amount, address as `0x${string}`], value: fee, account: w.account!, chain: w.chain });
       const rc = await client.waitForTransactionReceipt({ hash });
       setState({ busy: '', text: `Sent. Chainlink CCIP releases your ${receiptLabel(s)} on ${leg.asset.name} in about 15–25 minutes.`, msg: messageIdOf(rc.logs) });
@@ -304,7 +304,7 @@ function RedeemLeg({ leg }: { leg: Leg }) {
       <p className="xs muted">Receipts in your wallet for tokens locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine; they redeem through its own gateway' : ''}: ones you locked and have not pledged{leg.version ? ', or a payout from an earlier note' : ''}. Redeem them to get the real tokens back there.</p>
       {held.map(s => (
         <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
-          <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {s}</span>
+          <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {receiptLabel(s)} locked on {leg.asset.name}</span>
           <button className="btn" onClick={() => redeem(s)} disabled={!!state.busy}>{state.busy === s ? 'Redeeming…' : `Redeem on ${leg.asset.name}`}</button>
         </div>
       ))}
