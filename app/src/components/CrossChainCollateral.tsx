@@ -353,6 +353,7 @@ function RedeemLeg({ leg }: { leg: Leg }) {
   const syms = leg ? Object.keys(leg.receipts) : [];
   const bal = useReceiptBalances(leg, syms, tick);
   const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({ busy: '', text: '' });
+  const [confirming, setConfirming] = useState<string | null>(null);
   if (!leg || !address) return null;
   const held = syms.filter(s => (bal[s] ?? 0n) > 0n);
   if (!held.length) return null;
@@ -376,13 +377,19 @@ function RedeemLeg({ leg }: { leg: Leg }) {
   return (
     <section className="card stack">
       <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3></div>
-      <p className="xs muted">Receipts in your wallet for tokens locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine; they redeem through its own gateway' : ''}: ones you locked and have not pledged{leg.version ? ', or a payout from an earlier note' : ''}. Redeem them to get the real tokens back there.</p>
+      <p className="xs muted">Tokens you locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine' : ''} and have not pledged into a note{leg.version ? ', or a payout from an earlier note' : ''}. To use them as collateral, pledge them when you issue. Send them back only if you no longer want to issue with them.</p>
       {held.map(s => (
         <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
           <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {receiptLabel(s)} locked on {leg.asset.name}</span>
-          <button className="btn" onClick={() => redeem(s)} disabled={!!state.busy}>{state.busy === s ? 'Redeeming…' : `Redeem on ${leg.asset.name}`}</button>
+          {confirming === s
+            ? <span className="row" style={{ gap: 6 }}>
+                <button className="btn" onClick={() => setConfirming(null)}>Keep locked</button>
+                <button className="btn danger" onClick={() => { setConfirming(null); void redeem(s); }} disabled={!!state.busy}>Yes, send back</button>
+              </span>
+            : <button className="btn" onClick={() => setConfirming(s)} disabled={!!state.busy}>{state.busy === s ? 'Sending back…' : `Send back to ${leg.asset.name}`}</button>}
         </div>
       ))}
+      {confirming && <div className="notice warn xs" role="alert">This unlocks your {receiptLabel(confirming)} and sends it back to your wallet on {leg.asset.name} (about 15–25 minutes). You can't pledge it to a note afterwards without locking it again.</div>}
       {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
     </section>
   );

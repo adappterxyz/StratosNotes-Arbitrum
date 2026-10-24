@@ -595,3 +595,4 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 .xc-steps li.active .i { color: #B7791F; animation: xc-pulse 1.6s ease-in-out infinite; }
 @keyframes xc-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .xc-steps li.active .i { animation: none; } }
+.btn.danger { background: hsl(var(--destructive)); color: #fff; border-color: transparent; font-weight: 600; }
