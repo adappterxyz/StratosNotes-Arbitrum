@@ -572,3 +572,14 @@ tr.link:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: -
 .mail-frame { width: 100%; height: 520px; border: 1px solid hsl(var(--border)); border-radius: 8px; background: #F4F5F7; }
 .mail-text { margin: 0; padding: 12px; border: 1px solid hsl(var(--border)); border-radius: 8px; background: hsl(var(--surface-elevated)); font: 13px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow-y: auto; }
 @media (max-width: 700px) { .mail-frame { height: 460px; } }
+
+/* Alerts: settings in a narrow column, the emails sent beside them (stacked on narrow screens). */
+.alerts-page { max-width: 720px; display: grid; gap: 16px; align-content: start; }
+.alerts-page.two { max-width: 1180px; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); grid-template-areas: "head head" "config mail"; align-items: start; }
+.alerts-page .alerts-head { grid-area: head; }
+.alerts-page.two .alerts-config { grid-area: config; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); }
+.alerts-page.two .alerts-mail { grid-area: mail; min-width: 0; }
+@media (max-width: 900px) {
+  .alerts-page.two { grid-template-columns: 1fr; grid-template-areas: "head" "config" "mail"; }
+  .alerts-page.two .alerts-config { position: static; }
+}

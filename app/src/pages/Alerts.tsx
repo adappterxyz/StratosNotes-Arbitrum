@@ -41,9 +41,12 @@ export default function AlertsPage() {
 
   if (!address) return <main className="page"><div className="empty"><strong>Connect a wallet to set up email alerts.</strong></div></main>;
   return (
-    <main className="page" style={{ maxWidth: 720 }} data-alerts>
-      <h1><Mail className="i" /> Email alerts</h1>
-      <p className="muted small">Payment calls, payouts, margin calls and defaults on the notes you issue or hold, by email. Issuing and subscribing need a verified email.</p>
+    <main className={`page alerts-page${status?.verified ? ' two' : ''}`} data-alerts>
+      <div className="alerts-head">
+        <h1><Mail className="i" /> Email alerts</h1>
+        <p className="muted small">Payment calls, payouts, margin calls and defaults on the notes you issue or hold, by email. Issuing and subscribing need a verified email.</p>
+      </div>
+      <div className="alerts-config stack" style={{ gap: 12 }}>
       <section className="card stack" style={{ gap: 12 }}>
         {status?.verified
           ? <div className="notice ok">Alerts go to {status.email}{status.unsubscribed ? ' (paused: you unsubscribed)' : ''}.{status.pending ? ` Waiting for you to verify ${status.pending}.` : ''}</div>
@@ -77,7 +80,8 @@ export default function AlertsPage() {
         </section>
       )}
       {msg && <div className={`notice ${msg.kind === 'ok' ? 'ok' : 'err'}`} role="status">{msg.text}</div>}
-      {status?.verified && <EmailsSent address={address} chainKey={chainKey} />}
+      </div>
+      {status?.verified && <div className="alerts-mail"><EmailsSent address={address} chainKey={chainKey} /></div>}
       {dialog}
     </main>
   );
