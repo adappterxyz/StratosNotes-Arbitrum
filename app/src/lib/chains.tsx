@@ -10,7 +10,7 @@ import { connectorsForWallets, darkTheme, lightTheme, RainbowKitProvider } from 
 import { injectedWallet } from '@rainbow-me/rainbowkit/wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, defineChain, http, type Chain, type PublicClient, type WalletClient } from 'viem';
-import { createConfig, WagmiProvider, useAccount } from 'wagmi';
+import { createConfig, deserialize, WagmiProvider, useAccount, type State } from 'wagmi';
 import { getAccount, getWalletClient, switchChain } from 'wagmi/actions';
 import { EvmAdapter, type EngineVersion } from '@sn/sdk';
 import { CASH_TOKEN, CASH_TOKENS, EXTERNAL_TOKENS, TEST_CASH_TOKEN } from '@sn/core';
@@ -70,8 +70,37 @@ function toChain(c: ChainConfig): Chain {
   });
 }
 
+/** How many wallets answer an EIP-6963 request right now (wallets announce synchronously, MetaMask included). */
+export function announcedWallets(): number {
+  if (typeof window === 'undefined') return 0;
+  let n = 0;
+  const on = () => { n++; };
+  window.addEventListener('eip6963:announceProvider', on);
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  window.removeEventListener('eip6963:announceProvider', on);
+  return n;
+}
+
+/**
+ * The wallet session wagmi saved last visit, read synchronously. wagmi loads its storage asynchronously, so without
+ * this the first renders after a reload have no session: the reconnect starts as 'connecting' and RainbowKit shows
+ * "Connect Wallet" until the wallet answers (about 5 s while MetaMask's service worker starts). Handed to
+ * WagmiProvider as `initialState`, the reconnect starts as 'reconnecting' with the saved account, which RainbowKit
+ * shows as connected; a failed reconnect still clears it.
+ */
+export function savedWalletState(): State | undefined {
+  try {
+    const raw = localStorage.getItem('wagmi.store');
+    const saved = raw ? (deserialize(raw) as { state?: Partial<State> }).state : undefined;
+    if (!saved?.current || !(saved.connections instanceof Map) || !saved.connections.has(saved.current)) return undefined;
+    return { chainId: saved.chainId ?? 0, connections: saved.connections, current: saved.current, status: 'reconnecting' };
+  } catch { return undefined; }
+}
+
 interface Chains {
   config: AppConfig;
+  /** The saved wallet session, if any (`savedWalletState`). */
+  initialState?: State;
   /** Each chain's current engine, with every engine it serves (`entryFor` picks a note's). */
   byKey: ByKey;
   wagmi: ReturnType<typeof createConfig>;
@@ -96,9 +125,13 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
       byKey[cfg.key] = { ...current, engines };
     }
     const chains = Object.values(byKey).map(x => x.chain);
-    // Injected wallets only (MetaMask, Rabby, Coinbase Wallet extension…, each discovered via EIP-6963).
+    const initialState = savedWalletState(); // before createConfig, which can write its empty state over the saved one
+    // Injected wallets only (MetaMask, Rabby, Coinbase Wallet extension…), each discovered via EIP-6963 as its own
+    // connector. The generic "Browser Wallet" connector is only a fallback for a wallet that does not announce
+    // itself: next to an announced MetaMask it is a second connector on the same provider, so one wallet showed
+    // twice in the modal and its session (recent connector, disconnect flags) was split between the two ids.
     // WalletConnect needs a project id; add it with VITE_WC_PROJECT_ID when mobile wallets are wanted.
-    const connectors = connectorsForWallets([{ groupName: 'Browser wallets', wallets: [injectedWallet] }], {
+    const connectors = announcedWallets() > 0 ? [] : connectorsForWallets([{ groupName: 'Browser wallets', wallets: [injectedWallet] }], {
       appName: 'notes.markets', projectId: import.meta.env.VITE_WC_PROJECT_ID ?? 'injected-only',
     });
     const wagmi = createConfig({
@@ -108,7 +141,7 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
       multiInjectedProviderDiscovery: true,
       ssr: false,
     });
-    return { config, byKey, wagmi };
+    return { config, byKey, wagmi, initialState };
   }, [config]);
   const queryClient = useMemo(() => new QueryClient(), []);
   // The wallet modal follows the app theme: light by default, navy when the user picks the dark theme.
@@ -123,7 +156,7 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     : lightTheme({ accentColor: '#0E1116', accentColorForeground: '#FFFFFF', borderRadius: 'medium', fontStack: 'system' })), [dark]);
   return (
     <Ctx.Provider value={value}>
-      <WagmiProvider config={value.wagmi}>
+      <WagmiProvider config={value.wagmi} initialState={value.initialState}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider theme={rkTheme} modalSize="compact">
             {children}
