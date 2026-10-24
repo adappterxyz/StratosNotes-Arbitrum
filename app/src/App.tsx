@@ -13,14 +13,16 @@ import { useChains } from './lib/chains';
 import { watchTables } from './lib/stackTables';
 
 function ThemeToggle() {
-  const [light, setLight] = useState(() => document.documentElement.classList.contains('light'));
+  // White is the default; the navy theme is an opt-in kept per browser.
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   useEffect(() => {
-    document.documentElement.classList.toggle('light', light);
-    try { localStorage.setItem('sn-theme', light ? 'light' : 'dark'); } catch { /* private mode */ }
-  }, [light]);
+    document.documentElement.classList.toggle('dark', dark);
+    try { localStorage.setItem('sn-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
+    window.dispatchEvent(new Event('sn-theme'));
+  }, [dark]);
   return (
-    <button className="btn" onClick={() => setLight(l => !l)} aria-label={light ? 'Switch to dark theme' : 'Switch to light theme'} title={light ? 'Dark theme' : 'Light theme'}>
-      {light ? <Moon className="i" /> : <Sun className="i" />}
+    <button className="btn" onClick={() => setDark(d => !d)} aria-label={dark ? 'Switch to the light theme' : 'Switch to the dark theme'} title={dark ? 'Light theme' : 'Dark theme'}>
+      {dark ? <Sun className="i" /> : <Moon className="i" />}
     </button>
   );
 }
@@ -38,9 +40,21 @@ function useNarrow(px = 1000) {
   return narrow;
 }
 
-/** The wordmark: lowercase, the dot in the accent blue. */
+/** The primary lockup (docs/brand/logo-guide.pdf): the payoff-note mark, "notes" in Geist Bold, a Signal-green square
+ *  dot, "markets" in Geist Regular, Slate. On the dark theme: the reversed mark, white and light grey. */
 function Wordmark() {
-  return <span className="wordmark">notes<i>.</i>markets</span>;
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const on = () => setDark(document.documentElement.classList.contains('dark'));
+    window.addEventListener('sn-theme', on);
+    return () => window.removeEventListener('sn-theme', on);
+  }, []);
+  return (
+    <span className="wordmark" aria-label="notes.markets">
+      <img className="wm-mark" src={`${import.meta.env.BASE_URL}brand/${dark ? 'mark-reversed' : 'mark'}.svg`} alt="" aria-hidden="true" />
+      <span className="wm-text" aria-hidden="true"><b>notes</b><i /><span>markets</span></span>
+    </span>
+  );
 }
 
 export default function App() {
