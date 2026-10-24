@@ -1,5 +1,7 @@
 /**
- * The seed template library: four equity notes (two on Robinhood Chain's own stock tokens), four crypto products and two custom workflows
+ * The seed template library: four equity notes (two on Robinhood Chain's own stock tokens), four crypto products and two custom workflows.
+ * Every token they deliver or pledge is a real one on the note's chain (CHAIN_TOKENS): USDG, WETH, Threshold tBTC or
+ * Robinhood's TSLA and AMZN; the rest settle in cash
  * (product workflows edited through the draft format the AI edits, then
  * checked by the validator). scripts/seed-templates.ts publishes them;
  * test/products.e2e.test.ts runs the custom ones on a local validator.
@@ -34,45 +36,46 @@ const worstOfFcn: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, name: '12M Worst-of
 const btcSnowball: ProductParams = { ...EXAMPLE_PRODUCTS.snowball, name: '12M Snowball on BTC', underlyings: [FEEDS.BTC], couponRatePct: 2.5 };
 const solPpn: ProductParams = { ...EXAMPLE_PRODUCTS.ppn, name: '6M 90% Protected Note on SOL', underlyings: [FEEDS.SOL], protectionPct: 90, participationPct: 100 };
 const ethPhoenix: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Step-down Phoenix on ETH' };
-// Equity notes: prices from Chainlink's TSLA, NVDA and AAPL feeds on Arbitrum One (NYSE hours).
+// Equity notes: prices from Robinhood Chain's Chainlink TSLA, NVDA and AAPL feeds (market hours).
 const equityPhoenix: ProductParams = {
   ...EXAMPLE_WORST_OF, name: '12M Worst-of Phoenix on TSLA, NVDA', underlyings: [FEEDS.TSLA, FEEDS.NVDA], couponRatePct: 3,
 };
+// No Apple token exists on either chain: this one settles in cash.
 const aaplRc: ProductParams = {
-  ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Reverse Convertible on AAPL, physical', underlyings: [FEEDS.AAPL],
-  couponRatePct: 2.5, knockInBarrierPct: 70, settlement: 'physical',
+  ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Reverse Convertible on AAPL', underlyings: [FEEDS.AAPL],
+  couponRatePct: 2.5, knockInBarrierPct: 70,
 };
-// Stock-token notes: they pledge or deliver Robinhood Chain's own stock tokens (the asset chain). Until the cross-chain
-// vaults exist they issue on Robinhood Chain testnet itself, where those tokens live.
+// Stock-token notes: they pledge or deliver Robinhood Chain's own stock tokens, so they issue on Robinhood Chain testnet,
+// where those tokens live (an Arbitrum note can lock them there instead: collateralChain 'robinhood').
 const tslaAmznPhoenix: ProductParams = {
   ...EXAMPLE_WORST_OF, name: '12M Worst-of Phoenix on TSLA, AMZN', underlyings: [FEEDS.TSLA, FEEDS.AMZN], couponRatePct: 3,
-  stockTokens: 'robinhood', collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'TSLA', haircutPct: 60 }],
+  chain: 'robinhood-testnet', collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'TSLA', haircutPct: 60 }],
 };
 const tslaRc: ProductParams = {
   ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Reverse Convertible on TSLA, physical', underlyings: [FEEDS.TSLA],
-  couponRatePct: 2.5, knockInBarrierPct: 70, settlement: 'physical', stockTokens: 'robinhood',
+  couponRatePct: 2.5, knockInBarrierPct: 70, settlement: 'physical', chain: 'robinhood-testnet',
 };
 const btcPhoenix: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix on BTC with servicing fee', underlyings: [FEEDS.BTC], couponRatePct: 2.5 };
 
 export const SEED_TEMPLATES: Array<{ name: string; description: string; source: TemplateSource }> = [
   {
     name: '12M Worst-of Phoenix on TSLA, AMZN',
-    description: '3% quarterly coupon while the worst of Tesla and Amazon holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in. The issuer may pledge Robinhood Chain TSLA tokens as collateral (60% haircut). Prices: Chainlink TSLA/USD and AMZN/USD on Arbitrum One.',
+    description: '3% quarterly coupon while the worst of Tesla and Amazon holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in. The issuer may pledge Robinhood Chain TSLA tokens as collateral (60% haircut). Prices: Chainlink TSLA/USD and AMZN/USD on Robinhood Chain.',
     source: { product: tslaAmznPhoenix },
   },
   {
     name: '12M Reverse Convertible on TSLA, physical',
-    description: '2.5% quarterly coupon; if Tesla ends below 70% of its strike, holders receive Robinhood Chain TSLA tokens (units ÷ strike) instead of cash. Prices: Chainlink TSLA/USD on Arbitrum One.',
+    description: '2.5% quarterly coupon; if Tesla ends below 70% of its strike, holders receive Robinhood Chain TSLA tokens (units ÷ strike) instead of cash. Prices: Chainlink TSLA/USD on Robinhood Chain.',
     source: { product: tslaRc },
   },
   {
     name: '12M Worst-of Phoenix on TSLA, NVDA',
-    description: '3% quarterly coupon while the worst of Tesla and NVIDIA holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in. Prices: Chainlink equity feeds on Arbitrum One.',
+    description: '3% quarterly coupon while the worst of Tesla and NVIDIA holds 70% of its strike, with memory; autocalls at 100% from Q2; 60% knock-in. Prices: Chainlink equity feeds on Robinhood Chain.',
     source: { product: equityPhoenix },
   },
   {
-    name: '12M Reverse Convertible on AAPL, physical',
-    description: '2.5% quarterly coupon; if Apple ends below 70% of its strike, holders receive Apple tokens (units ÷ strike) instead of cash. Prices: Chainlink AAPL/USD on Arbitrum One.',
+    name: '12M Reverse Convertible on AAPL',
+    description: '2.5% quarterly coupon; if Apple ends below 70% of its strike, holders are repaid final ÷ strike in USDG. Prices: Chainlink AAPL/USD on Robinhood Chain.',
     source: { product: aaplRc },
   },
   {

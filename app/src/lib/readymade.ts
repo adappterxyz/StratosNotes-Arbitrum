@@ -4,7 +4,7 @@
  * changes the workflow itself (a custom workflow) opens in the studio instead: the guided flow only issues
  * standard payoffs.
  */
-import { EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, normalizeParams, summarize, type ProductParams, type ProductType, type TemplateEntry, type TemplateSummary } from '@sn/core';
+import { EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, normalizeParams, summarize, templateOffered, type ProductParams, type ProductType, type TemplateEntry, type TemplateSummary } from '@sn/core';
 
 export type NoteKind = ProductType | 'worst-of';
 
@@ -30,8 +30,8 @@ const DESCRIPTION: Record<NoteKind, string> = {
   'worst-of': 'A phoenix on ETH, Bitcoin and Solana: the weakest of the three decides.',
 };
 
-/** A built-in starts on Robinhood Chain's own stock tokens, like a note type picked from scratch. */
-export const exampleOf = (k: NoteKind): ProductParams => ({ ...(k === 'worst-of' ? EXAMPLE_WORST_OF : EXAMPLE_PRODUCTS[k]), stockTokens: 'robinhood' });
+/** A built-in note type's example terms (on Arbitrum Sepolia unless the issuer picks another network). */
+export const exampleOf = (k: NoteKind): ProductParams => (k === 'worst-of' ? EXAMPLE_WORST_OF : EXAMPLE_PRODUCTS[k]);
 
 export const kindOf = (p: ProductParams): NoteKind => (p.underlyings.length > 1 ? 'worst-of' : p.productType);
 
@@ -45,6 +45,7 @@ const entries = new Map<string, Promise<ReadyMade | null>>();
 function fromEntry(e: TemplateEntry): ReadyMade | null {
   const p = e.product ?? e.basis;
   if (!p) return null; // a custom workflow drawn from scratch has no term sheet to fill the guided flow with
+  if (!templateOffered(e)) return null; // saved before the test tokens were retired (e.g. tAAPL delivery)
   const summary = summarize(e);
   return { id: e.definition, name: e.name, description: e.description, params: normalizeParams(p), author: e.author, custom: summary.kind === 'custom', summary };
 }

@@ -4,7 +4,7 @@ import './explorer.css';
 import { DEFAULT_START, type ExplorerStart } from './start';
 import {
   BLURB, calls, COLLATERAL, CRYPTO, defaultTerms, explain, GOALS, MONTHS, N, outcome, PRESETS, presetPaths, PRODUCT_LABELS,
-  PRODUCTS, productUses, SHORT, STOCKS, deliveredToken,
+  PRODUCTS, productUses, SHORT, STOCKS, deliveredToken, physicalPossible,
   type Preset, type Role, type Sym, type Terms,
 } from './model';
 
@@ -65,11 +65,11 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
   const pickRole = (r: Role) => { setRole(r); setGoalId(GOALS[r][0].id); setMiss(false); };
   const pickProduct = (t: Terms['type']) => {
     const syms = t === 'ppn' && basket ? [terms.syms[0]] : terms.syms;
-    setTerms({ ...defaultTerms(t, syms), physical: t !== 'ppn' && terms.physical });
+    setTerms({ ...defaultTerms(t, syms), physical: t !== 'ppn' && terms.physical && physicalPossible(syms) });
     setMiss(false);
   };
   const setSyms = (syms: Sym[]) => {
-    setTerms(t => ({ ...defaultTerms(t.type, syms), coupon: t.coupon, couponBarrier: t.couponBarrier, autocall: t.autocall, knockIn: t.knockIn, protection: t.protection, participation: t.participation, memory: t.memory, physical: t.physical }));
+    setTerms(t => ({ ...defaultTerms(t.type, syms), coupon: t.coupon, couponBarrier: t.couponBarrier, autocall: t.autocall, knockIn: t.knockIn, protection: t.protection, participation: t.participation, memory: t.memory, physical: t.physical && physicalPossible(syms) }));
     setPaths(presetPaths(preset ?? 'Flat', syms.length));
   };
   const toggleBasket = (on: boolean) => {
@@ -168,7 +168,7 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
                 );
               })}
             </div>
-            <span className="xs-hint">{basket ? 'Pick two or three. Every barrier looks at the worst performer.' : 'Crypto prices from Chainlink on Ethereum; stocks from Chainlink on Arbitrum One.'}</span>
+            <span className="xs-hint">{basket ? 'Pick two or three. Every barrier looks at the worst performer.' : 'Crypto prices from Chainlink on Ethereum; stocks from Chainlink on Robinhood Chain.'}</span>
           </div>
 
           <div className="xs-block xs-sliders">
@@ -181,7 +181,7 @@ export default function Explorer({ start = DEFAULT_START }: { start?: ExplorerSt
             {uses.protection && <Slider id="xs-part" label="Participation in the rise" value={terms.participation} min={0} max={150} step={5} onChange={v => set('participation', v)} />}
             <div className="xs-toggles">
               {uses.couponBarrier && <label className="xs-check"><input type="checkbox" checked={terms.memory} onChange={e => set('memory', e.target.checked)} /> Memory</label>}
-              {uses.knockIn && <label className="xs-check"><input type="checkbox" checked={terms.physical} onChange={e => set('physical', e.target.checked)} /> Physical delivery below knock-in</label>}
+              {uses.knockIn && <label className="xs-check" title={physicalPossible(terms.syms) ? undefined : 'No real token to deliver for this underlying: cash only'}><input type="checkbox" checked={terms.physical} disabled={!physicalPossible(terms.syms) && !terms.physical} onChange={e => set('physical', e.target.checked)} /> Physical delivery below knock-in</label>}
             </div>
           </div>
         </div>

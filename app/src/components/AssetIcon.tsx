@@ -1,14 +1,15 @@
 /**
  * Asset marks: a small neutral circle with the asset's logo, next to its ticker (the ticker always stays as text).
  *
- * Marks come from simple-icons (CC0-1.0): Bitcoin, Ethereum, Solana, Tesla, NVIDIA, Apple, Netflix. They identify the
- * asset (nominative use); trademarks belong to their owners. Where no openly licensed mark exists (AMZN, SPY, USDG,
- * HYPE) a plain text badge is shown instead of a lookalike. Sources: app/public/assets/SOURCES.md.
+ * Marks come from simple-icons (CC0-1.0): Bitcoin, Ethereum (also for WETH), Solana, Tesla, NVIDIA, Apple, Netflix,
+ * AMD, Palantir, Meta, Google, Coinbase. They identify the asset (nominative use); trademarks belong to their owners.
+ * Where no openly licensed mark exists (AMZN, SPY, MSFT, USDG, HYPE) a plain text badge is shown instead of a
+ * lookalike. Sources: app/public/assets/SOURCES.md.
  *
- * Variants: test tokens (tETH, tTSLA…) carry a small "t" tag; receipts for collateral held on Robinhood Chain
- * (TSLA.rh, USDG.rh…) carry a small Robinhood Chain tag.
+ * Variants: tUSD (the retired test dollar older notes settle in) carries a small "t" tag; receipts for collateral
+ * locked on Robinhood Chain (TSLA.rh, USDG.rh…) carry a small Robinhood Chain tag.
  */
-import { siApple, siBitcoin, siEthereum, siNetflix, siNvidia, siSolana, siTesla } from 'simple-icons';
+import { siAmd, siApple, siBitcoin, siCoinbase, siEthereum, siGoogle, siMeta, siNetflix, siNvidia, siPalantir, siSolana, siTesla } from 'simple-icons';
 
 type Mark = { path: string; hex: string; title: string };
 const MARKS: Record<string, Mark> = {
@@ -19,25 +20,29 @@ const MARKS: Record<string, Mark> = {
   NVDA: { path: siNvidia.path, hex: siNvidia.hex, title: 'NVIDIA' },
   AAPL: { path: siApple.path, hex: siApple.hex, title: 'Apple' },
   NFLX: { path: siNetflix.path, hex: siNetflix.hex, title: 'Netflix' },
+  AMD: { path: siAmd.path, hex: siAmd.hex, title: 'AMD' },
+  PLTR: { path: siPalantir.path, hex: siPalantir.hex, title: 'Palantir' },
+  META: { path: siMeta.path, hex: siMeta.hex, title: 'Meta' },
+  GOOGL: { path: siGoogle.path, hex: siGoogle.hex, title: 'Alphabet (Google)' },
+  COIN: { path: siCoinbase.path, hex: siCoinbase.hex, title: 'Coinbase' },
+  WETH: { path: siEthereum.path, hex: siEthereum.hex, title: 'Wrapped Ether (WETH)' },
 };
 /** No openly licensed mark: a short text badge (never a drawn lookalike). */
-const BADGES: Record<string, string> = { AMZN: 'AMZN', SPY: 'S&P', USDG: '$G', USDC: '$C', TUSD: '$t', HYPE: 'HY' };
+const BADGES: Record<string, string> = { AMZN: 'AMZN', SPY: 'S&P', MSFT: 'MSFT', USDG: '$G', USDC: '$C', TUSD: '$t', HYPE: 'HY' };
 
-/** "tTSLA" -> { base: TSLA, test }, "TSLA.rh" -> { base: TSLA, rh }, "USDG" -> { base: USDG }. */
+/** "tUSD" -> { base: TUSD, test }, "TSLA.rh" -> { base: TSLA, rh }, "USDG" -> { base: USDG }. */
 export function parseAsset(sym: string): { base: string; test: boolean; rh: boolean } {
   let s = sym.trim();
   const rh = /\.rh$/i.test(s);
   if (rh) s = s.slice(0, -3);
-  let test = false;
   if (s === 'tUSD') return { base: 'TUSD', test: true, rh };
-  if (/^t[A-Z]{2,}$/.test(s)) { test = true; s = s.slice(1); }
-  return { base: s.toUpperCase(), test, rh };
+  return { base: s.toUpperCase(), test: false, rh };
 }
 
 export function AssetIcon({ sym, size = 18, title }: { sym: string; size?: number; title?: string }) {
   const { base, test, rh } = parseAsset(sym);
   const mark = MARKS[base];
-  const label = title ?? `${mark?.title ?? base}${test ? ' (test token)' : ''}${rh ? ' (held on Robinhood Chain)' : ''}`;
+  const label = title ?? `${mark?.title ?? base}${test ? ' (retired test dollar)' : ''}${rh ? ' (locked on Robinhood Chain)' : ''}`;
   return (
     <span className="asset-ic" style={{ width: size, height: size }} role="img" aria-label={label} title={label}>
       {mark ? (

@@ -114,7 +114,7 @@ describe('term sheet economics', () => {
     expect(validateProductParams({ ...p, collateral: [{ symbol: 'ETH', haircutPct: 120 }] }).join(' ')).toMatch(/haircut must be between 0 and 100/);
     expect(validateProductParams({ ...p, collateral: [{ symbol: 'DOGE' as never, haircutPct: 50 }] }).join(' ')).toMatch(/cannot be pledged/);
     // Assets: note + stablecoin + 3 deliverables + 3 collateral = 8 is the engine's limit; one more is refused.
-    const basket: ProductParams = { ...p, settlement: 'physical', underlyings: [FEEDS.ETH, FEEDS.BTC, FEEDS.SOL],
+    const basket: ProductParams = { ...p, chain: 'robinhood-testnet', settlement: 'physical', underlyings: [FEEDS.ETH, FEEDS.AMZN, FEEDS.TSLA],
       collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'ETH', haircutPct: 70 }, { symbol: 'TSLA', haircutPct: 60 }] };
     expect(validateProductParams(basket)).toEqual([]);
   });

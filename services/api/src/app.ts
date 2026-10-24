@@ -23,7 +23,7 @@ import { createWalletClient, http, isAddress, verifyMessage, type Hex } from 'vi
 import { privateKeyToAccount } from 'viem/accounts';
 import { z } from 'zod';
 import {
-  compileTemplate, definitionId, runAi, summarize, templateMessage,
+  compileTemplate, definitionId, runAi, summarize, templateMessage, templateOffered,
   type AiRunner, type TemplateEntry, type WorkflowDraft,
 } from '@sn/core';
 import { CHAINS, mockErc20Abi, noteView, parseNoteId, positionOf, type NoteState } from '@sn/sdk';
@@ -250,9 +250,10 @@ export function createApp(deps: AppDeps) {
   // ---- templates ----------------------------------------------------------------------------------------------
 
   app.get('/api/templates', async c => {
-    const rows = await db.query<{ definition: string; name: string; description: string; author: string; kind: string; label: string; created_at: string }>(
-      'SELECT definition, name, description, author, kind, label, created_at FROM templates ORDER BY created_at DESC LIMIT 500');
-    return c.json(rows.map(r => ({ definition: r.definition, name: r.name, description: r.description, author: r.author, kind: r.kind, label: r.label, createdAt: Number(r.created_at) })));
+    const rows = await db.query<{ definition: string; name: string; description: string; author: string; kind: string; label: string; created_at: string; entry: TemplateEntry | string }>(
+      'SELECT definition, name, description, author, kind, label, created_at, entry FROM templates ORDER BY created_at DESC LIMIT 500');
+    // Entries saved before the test tokens were retired (tAAPL delivery…) are kept but no longer listed.
+    return c.json(rows.filter(r => templateOffered(typeof r.entry === 'string' ? JSON.parse(r.entry) : r.entry)).map(r => ({ definition: r.definition, name: r.name, description: r.description, author: r.author, kind: r.kind, label: r.label, createdAt: Number(r.created_at) })));
   });
 
   app.get('/api/templates/:definition', async c => {

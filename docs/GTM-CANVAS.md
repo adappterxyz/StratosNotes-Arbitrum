@@ -66,8 +66,8 @@ compliance layer exists. `[[BEACHHEAD: confirm, name 3–5 target issuers]]`
   Each report is labelled on the note (CRE or fallback keeper).
 - **Payments are enforced, not promised:** escrowed collateral, funding deadlines, grace and default are all steps
   the contract runs.
-- **Stocks are the differentiator.** We read Chainlink's TSLA/NVDA/AAPL/SPY feeds on Arbitrum One, so notes on stocks
-  work today.
+- **Stocks are the differentiator.** We read Robinhood Chain's own Chainlink equity feeds (TSLA, AMZN, AMD, PLTR, NVDA, AAPL,
+  SPY, META, MSFT, GOOGL, COIN), so notes on stocks work today, fixed on the stocks' native chain.
 
 ## 6. Channels
 
@@ -126,7 +126,8 @@ compliance layer exists. `[[BEACHHEAD: confirm, name 3–5 target issuers]]`
 - **Smart-contract risk.** The engine has not been audited yet; an internal security pass (static analysis,
   invariant and fuzz tests) is in [SECURITY.md](SECURITY.md), and its fixes are deployed (v3). The engine is at
   23,384 of 24,576 bytes, so new features need code moved into libraries.
-- **Test assets.** Notes use our test tokens (tUSD, tTSLA…), not real stablecoins or stock tokens.
+- **Testnet assets.** Notes use real testnet tokens only: Paxos USDG, each chain's WETH, Robinhood's stock tokens (our
+  own test tokens are retired). BTC is synthetic for now (priced, cash-settled).
 
 ## 11. Assumptions to test
 

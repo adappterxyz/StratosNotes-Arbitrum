@@ -10,13 +10,14 @@
  * No secrets: DATABASE_URL, SN_PROXY_SECRET and the rest come from the environment (docs/DEPLOY.md).
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { CHAIN_TOKENS, isRetiredTestToken, TEST_CASH_TOKEN, type NoteChain } from '../packages/core/src/products/params';
 
 const SITE = process.env.SITE ?? 'https://notes.markets';
 const CHAINS = [
   { key: 'arbitrum-sepolia', chainId: 421614, rpc: process.env.RPC_ARBITRUM_SEPOLIA ?? 'https://sepolia-rollup.arbitrum.io/rpc' },
   { key: 'robinhood-testnet', chainId: 46630, rpc: process.env.RPC_ROBINHOOD_TESTNET ?? 'https://rpc.testnet.chain.robinhood.com' },
 ];
-type Deployment = { engine: string; lens: string; block: number; faucet: string; tokens: Record<string, string> };
+type Deployment = { engine: string; lens: string; block: number; faucet?: string; tokens?: Record<string, string> };
 const read = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 const deployed = CHAINS.filter(c => existsSync(`deployments/${c.key}.json`)).map(c => ({ ...c, d: read<Deployment>(`deployments/${c.key}.json`) }));
 if (!deployed.length) throw new Error('no deployments/<chain>.json yet: run scripts/deploy-testnets.sh');
@@ -38,29 +39,24 @@ const indexer = {
     legacyEngines: legacyOf(c.key, c.d.engine).map(l => ({ engine: l.d.engine, startBlock: l.d.block, version: l.version })),
   })),
 };
-/** Paxos testnet USDG (6 decimals), verified on-chain 2026-10-24. */
-const USDG: Record<string, string> = {
-  'arbitrum-sepolia': '0xFFC95faa3d63Cde504a05B567C600B78C0b41892',
-  'robinhood-testnet': '0x7E955252E15c84f5768B83c41a71F9eba181802F',
-};
-/** Robinhood Chain testnet's own stock tokens (18 decimals). */
-const REAL_STOCKS: Record<string, Record<string, string>> = {
-  'robinhood-testnet': {
-    TSLA: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E',
-    AMZN: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02',
-    NFLX: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',
-  },
-};
+/** Each chain's real tokens (packages/core CHAIN_TOKENS: USDG, WETH, Robinhood's stock tokens), verified on-chain. */
+const REAL = (key: string): Record<string, string> =>
+  Object.fromEntries(Object.values(CHAIN_TOKENS[key as NoteChain] ?? {}).map(t => [t.token, t.address]));
+/** Of the deployment's own test tokens, only tUSD stays: notes issued before USDG settle in it. The others (tETH,
+ * tTSLA…) are retired and never served. */
+const legacyCash = (tokens: Record<string, string> | undefined) => (tokens?.[TEST_CASH_TOKEN.token] ? { [TEST_CASH_TOKEN.token]: tokens[TEST_CASH_TOKEN.token] } : {});
+/** Receipts of retired test tokens (tTSLA.rh…) are disabled in the vault: dropped from what is served. */
+const liveReceipts = (r: CrossChain['remotes'][number]['receipts']) => Object.fromEntries(Object.entries(r).filter(([sym]) => !isRetiredTestToken(sym)));
 /** Cross-chain collateral (deployments/crosschain-testnet.json): receipts are tokens on the home chain; both
  * sides get the addresses the app needs to lock, follow and redeem. */
 type CrossChain = { home: { chain: string; selector: string; router: string; gateway: string }; remotes: Array<{ chain: string; selector: string; router: string; vault: string; receipts: Record<string, { receipt: string; token: string; decimals: number; valuedAs: string | null }> }> };
 const XC_CURRENT: CrossChain | null = existsSync('deployments/crosschain-testnet.json') ? read<CrossChain>('deployments/crosschain-testnet.json') : null;
 const receiptsOn = (key: string, xc = XC_CURRENT) => (xc && xc.home.chain === key
-  ? Object.fromEntries(xc.remotes.flatMap(r => Object.entries(r.receipts).map(([sym, v]) => [sym, v.receipt]))) : {});
+  ? Object.fromEntries(xc.remotes.flatMap(r => Object.entries(liveReceipts(r.receipts)).map(([sym, v]) => [sym, v.receipt]))) : {});
 const crossChainOn = (key: string, XC: CrossChain | null = XC_CURRENT) => {
   if (!XC) return null;
   if (XC.home.chain === key) return { role: 'home', gateway: XC.home.gateway, router: XC.home.router, selector: XC.home.selector,
-    remotes: XC.remotes.map(r => ({ chain: r.chain, selector: r.selector, vault: r.vault, receipts: r.receipts })) };
+    remotes: XC.remotes.map(r => ({ chain: r.chain, selector: r.selector, vault: r.vault, receipts: liveReceipts(r.receipts) })) };
   const r = XC.remotes.find(x => x.chain === key);
   return r ? { role: 'asset', vault: r.vault, router: r.router, selector: r.selector, home: { chain: XC.home.chain, gateway: XC.home.gateway, selector: XC.home.selector } } : null;
 };
@@ -71,8 +67,9 @@ const api = {
   chains: deployed.map(c => ({
     key: c.key, rpc: c.rpc, engine: c.d.engine, lens: c.d.lens, fromBlock: c.d.block,
     // Cash is Paxos's testnet USDG (docs.paxos.com/guides/stablecoin/usdg/testnet); tUSD stays for older notes.
-    stablecoin: { symbol: 'USDG', address: USDG[c.key], decimals: 6 },
-    tokenFaucet: c.d.faucet, tokens: { ...c.d.tokens, USDG: USDG[c.key], ...(REAL_STOCKS[c.key] ?? {}), ...receiptsOn(c.key) },
+    // The TokenFaucet (test tokens) is retired: not served.
+    stablecoin: { symbol: 'USDG', address: REAL(c.key).USDG, decimals: 6 },
+    tokens: { ...legacyCash(c.d.tokens), ...REAL(c.key), ...receiptsOn(c.key) },
     ...(crossChainOn(c.key) ? { crossChain: crossChainOn(c.key) } : {}),
     // Earlier engines: their notes render and their holders withdraw and settle with the engine's own address,
     // lens and ABI; their cross-chain receipts (symbols shared with the current pair) and gateway–vault pair.

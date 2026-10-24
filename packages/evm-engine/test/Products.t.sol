@@ -70,8 +70,8 @@ abstract contract ProductsBase is Test {
     FlowEngine engine;
     address forwarder = makeAddr("forwarder");
     address admin = makeAddr("admin");
-    MockERC20[5] tokens; // 1 tUSD, 2 tETH, 3 tBTC, 4 tSOL
-    uint8[5] decimals = [0, 6, 9, 8, 9];
+    MockERC20[5] tokens; // stand-ins for the real tokens: 1 USDG, 2 WETH, 3 AMZN, 4 TSLA
+    uint8[5] decimals = [0, 6, 18, 18, 18];
     uint256 t0;
     bytes[] fixtures;
     uint256 maxReportGas;
@@ -88,10 +88,10 @@ abstract contract ProductsBase is Test {
 
     function setUp() public virtual {
         engine = new FlowEngine(admin, forwarder);
-        tokens[1] = new MockERC20("tUSD", 6);
-        tokens[2] = new MockERC20("tETH", 9);
-        tokens[3] = new MockERC20("tBTC", 8);
-        tokens[4] = new MockERC20("tSOL", 9);
+        tokens[1] = new MockERC20("USDG", 6);
+        tokens[2] = new MockERC20("WETH", 18);
+        tokens[3] = new MockERC20("AMZN", 18);
+        tokens[4] = new MockERC20("TSLA", 18);
         string memory json = vm.readFile("test/fixtures/products.json");
         t0 = vm.parseJsonUint(json, ".t0");
         bytes[] memory runs = vm.parseJsonBytesArray(json, ".runs");

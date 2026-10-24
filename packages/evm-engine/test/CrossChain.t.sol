@@ -30,7 +30,7 @@ contract CrossChainTest is ProductsBase {
     HomeGateway gateway;
     RemoteVault rhVault;
     RemoteVault baseVault;
-    FreezableERC20 rhEth; // the ETH-like collateral token on Robinhood (9 decimals, as the fixtures' tETH)
+    FreezableERC20 rhEth; // the ETH-like collateral token on Robinhood (18 decimals, as the fixtures' WETH)
     FreezableERC20 baseUsdg; // a stablecoin on Base (6 decimals, as the fixtures' USD collateral)
     RemoteReceipt rEth;
     RemoteReceipt rUsd;
@@ -48,7 +48,7 @@ contract CrossChainTest is ProductsBase {
         gateway = new HomeGateway(address(homeRouter), admin, address(engine));
         rhVault = new RemoteVault(address(rhRouter), admin, ARB);
         baseVault = new RemoteVault(address(baseRouter), admin, ARB);
-        rhEth = new FreezableERC20("ETH.rh", 9);
+        rhEth = new FreezableERC20("ETH.rh", 18);
         baseUsdg = new FreezableERC20("USDG.base", 6);
 
         vm.startPrank(admin);
@@ -58,7 +58,7 @@ contract CrossChainTest is ProductsBase {
         baseVault.setToken(address(baseUsdg), true);
         gateway.setRemote(RH, address(rhVault), 300_000);
         gateway.setRemote(BASE, address(baseVault), 300_000);
-        rEth = RemoteReceipt(gateway.registerReceipt(RH, address(rhEth), 9, "ETH locked on Robinhood Chain", "ETH.rh"));
+        rEth = RemoteReceipt(gateway.registerReceipt(RH, address(rhEth), 18, "ETH locked on Robinhood Chain", "ETH.rh"));
         rUsd = RemoteReceipt(gateway.registerReceipt(BASE, address(baseUsdg), 6, "USDG locked on Base", "USDG.base"));
         vm.stopPrank();
     }

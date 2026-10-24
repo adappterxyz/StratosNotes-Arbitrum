@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarClock, LifeBuoy, ShieldCheck, Undo2, Workflow } from 'lucide-react';
-import { economicsOf } from '@sn/core';
+import { collateralTokenOf, economicsOf, NOTE_CHAIN_LABELS, noteChainOf } from '@sn/core';
 import { listingOf } from '../../lib/listing';
 import { BUILT_IN, libraryReadyMade, type ReadyMade } from '../../lib/readymade';
 import { short } from '../../lib/format';
@@ -19,8 +19,9 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
 
 function collateralLine(r: ReadyMade) {
   const e = economicsOf(r.params);
-  const names = [...new Set(e.collateral.map(c => (c.symbol === 'USD' ? 'USDG' : c.symbol)))];
-  return `Backed by ${e.collateralRatioPct}% collateral (${names.join(' + ')}${r.params.collateralChain === 'robinhood' ? ' on Robinhood Chain' : ''})`;
+  const names = [...new Set(e.collateral.map(c => (collateralTokenOf(r.params, c.symbol)?.token ?? c.symbol).replace(/\.rh$/, '')))];
+  const where = r.params.collateralChain === 'robinhood' ? 'locked on Robinhood Chain' : `on ${NOTE_CHAIN_LABELS[noteChainOf(r.params)]}`;
+  return `Backed by ${e.collateralRatioPct}% collateral (${names.join(' + ')}, ${where})`;
 }
 
 function Card({ r, onPick }: { r: ReadyMade; onPick: (r: ReadyMade) => void }) {

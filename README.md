@@ -13,7 +13,7 @@ holders claim it from their portfolio whenever they like, with a receipt per cla
 | Path | What it is |
 |---|---|
 | `packages/core` | BPMN, compiler (EVM definition bytes), products and reference payoffs, templates, AI pipeline, keeper decisions |
-| `packages/evm-engine` | `FlowEngine.sol`, `NotesLens.sol`, test tokens and faucet, Foundry tests, deploy script |
+| `packages/evm-engine` | `FlowEngine.sol`, `NotesLens.sol`, Foundry tests, deploy script (the retired test tokens and faucet stay only for local tests) |
 | `packages/sdk` | chain adapter (viem), events and the read model |
 | `cre/notes-keeper-evm` | the Chainlink CRE workflow |
 | `services/indexer`, `services/api` | Postgres read model and the REST/SSE API |

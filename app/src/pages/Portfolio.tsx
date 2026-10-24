@@ -322,7 +322,7 @@ export default function Portfolio() {
                     {c.balances.map(b => (
                       <li key={b.sym}>
                         <Asset sym={b.sym} size={20} />
-                        <span className="xs muted">{b.kind === 'gas' ? 'gas' : b.kind === 'cash' ? 'cash' : b.kind === 'receipt' ? 'receipt' : b.kind === 'test' ? 'test token' : b.kind === 'stock' ? 'stock token' : ''}</span>
+                        <span className="xs muted">{b.kind === 'gas' ? 'gas' : b.kind === 'cash' ? 'cash' : b.kind === 'receipt' ? 'receipt' : b.kind === 'legacy' ? 'older notes\' dollar' : b.kind === 'stock' ? 'stock token' : ''}</span>
                         <span className="num r">{fmtMoney(b.amount, b.amount !== 0 && Math.abs(b.amount) < 1 ? 6 : 2)}</span>
                       </li>
                     ))}

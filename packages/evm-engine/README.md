@@ -178,9 +178,10 @@ CHAIN=arbitrum-sepolia FORWARDER_MODE=mock OWNER=<deployer> TEST_TOKENS=1 \
 
 - **Output:** writes `deployments/<chain>.json` at the repo root.
 - **Forwarder:** `FORWARDER_MODE=mock` trusts the MockKeystoneForwarder, which `cre workflow simulate --broadcast` writes through. `production` trusts the KeystoneForwarder. Robinhood mainnet has no CRE forwarder yet: pass `FORWARDER`.
-- **Test tokens:** `TEST_TOKENS=1` (testnets only) also deploys tUSD, tETH, tBTC, tSOL, tTSLA, tNVDA, tAAPL and
-  tSPY (`src/test-tokens/TestToken.sol`) and a `TokenFaucet` that mints a fixed amount of each, once an hour per
-  account. The deployer must be `OWNER` for this (it sets the faucet as minter).
+- **Test tokens (retired):** notes use real tokens only (USDG, WETH, Robinhood's stock tokens). `TEST_TOKENS=1` still
+  deploys the old tUSD, tETH, tBTC, tSOL, tTSLA, tNVDA, tAAPL and tSPY (`src/test-tokens/TestToken.sol`) and their
+  `TokenFaucet`, for local rehearsals only; scripts/deploy-testnets.sh no longer does on testnets. The deployer must
+  be `OWNER` for this (it sets the faucet as minter).
 - **Gas:** the engine needs about 6.7M gas of execution; see docs/DEPLOY.md for per-chain funding.
 - **EVM version:** the build targets the Paris EVM (no PUSH0 or MCOPY), so one bytecode runs on every target chain.
 

@@ -13,9 +13,10 @@ export interface ChainConfig extends ChainInfo {
   stablecoin: { symbol: string; address: `0x${string}`; decimals: number };
   /** The API mints the stablecoin (local dev chains). */
   faucet: boolean;
-  /** Testnets: the on-chain TokenFaucet, claimed from with the user's own wallet. */
+  /** The retired notes.markets TokenFaucet, when the API still names one: the app no longer offers it. */
   tokenFaucet: `0x${string}` | null;
-  /** Test tokens by symbol (tUSD, tETH, tTSLA…): what physically settled notes deliver. */
+  /** Tokens by symbol: the chain's real tokens (USDG, WETH, Robinhood's stock tokens), receipts (TSLA.rh…) on the
+   * home chain, and tUSD where older notes settle in it. */
   tokens: Record<string, `0x${string}`>;
   /** Cross-chain collateral (docs/CROSS-CHAIN.md): home = this chain runs notes and holds receipts; asset = vault. */
   crossChain?: CrossChainConfig | null;

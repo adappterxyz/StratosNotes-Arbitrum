@@ -82,7 +82,7 @@ near the 24 KB size limit, so new logic goes into libraries.
 
 **Why Robinhood Chain and not just Arbitrum One?**
 Notes on stocks need the stocks and their prices together. Robinhood Chain has tokenized stocks, and Chainlink
-publishes equity feeds. We read those feeds on Arbitrum One. Deploying to Arbitrum One itself, for crypto notes and
+publishes equity feeds. We fix each stock on Robinhood Chain's own Chainlink feeds (and crypto on Ethereum's). Deploying to Arbitrum One itself, for crypto notes and
 DeFi liquidity, comes with mainnet, after production CRE access and an audit; until then we stay on testnets.
 
 ## Placeholders to fill

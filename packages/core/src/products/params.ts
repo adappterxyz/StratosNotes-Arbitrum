@@ -40,8 +40,12 @@ export interface Underlying {
   staleness?: number;
 }
 
-/** A collateral asset the issuer may pledge: the stablecoin (USD) or a token valued by its Chainlink feed. */
-export type CollateralSymbol = 'USD' | 'ETH' | 'BTC' | 'SOL' | 'TSLA' | 'NVDA' | 'AAPL' | 'SPY' | 'AMZN';
+/**
+ * A collateral asset the issuer may pledge: the stablecoin (USD) or a real token valued by its Chainlink feed (ETH as
+ * the chain's WETH, TSLA, AMZN, AMD and PLTR as Robinhood Chain's stock tokens). Which ones a note can use depends on
+ * its chain (CHAIN_TOKENS, REMOTE_COLLATERAL). BTC is synthetic for now: an underlying, cash-settled, never pledged.
+ */
+export type CollateralSymbol = 'USD' | 'ETH' | 'TSLA' | 'AMZN' | 'AMD' | 'PLTR';
 export interface CollateralTerm {
   symbol: CollateralSymbol;
   /** Value counted toward coverage, % of market value (USD 100; volatile tokens lower). Per issuance, 0–100. */
@@ -87,18 +91,16 @@ export interface ProductParams {
    */
   defaultRule?: DefaultRule;
   /**
-   * Which stock tokens a physically settled note delivers and a stock collateral pledge uses:
-   *  'test' (default): notes.markets' own test tokens (tTSLA, tNVDA…), deployed on every testnet here.
-   *  'robinhood': Robinhood Chain's own testnet stock tokens (TSLA, AMZN, NFLX; 18 decimals), for notes issued
-   *    on Robinhood Chain next to the stocks. Stocks Robinhood does not publish still fall back to the test tokens.
-   * Token decimals are compiled into the definition, so this is part of the note's design, not just a network choice.
+   * The chain the note is issued on (default: Arbitrum Sepolia, HOME_CHAIN). It decides which real tokens a
+   * physically settled note delivers and which the issuer can pledge (CHAIN_TOKENS): token symbols and decimals are
+   * compiled into the definition, so the chain is part of the note's design, not just a network choice.
    */
-  stockTokens?: StockTokens;
+  chain?: NoteChain;
   /**
    * Where the collateral is held (docs/CROSS-CHAIN.md). Absent or 'note': the tokens are pledged into the note on
    * its own chain. 'robinhood': the issuer locks USDG, TSLA or AMZN in the vault on Robinhood Chain and pledges the
-   * receipts (USDG.rh, TSLA.rh, AMZN.rh, and tETH.rh… for the test tokens) that Chainlink CCIP mints on Arbitrum; they are valued with the same
-   * Chainlink feed and haircut as the token itself. Only for notes on Arbitrum Sepolia.
+   * receipts (USDG.rh, TSLA.rh, AMZN.rh) that Chainlink CCIP mints on Arbitrum; they are valued with the same Chainlink
+   * feed and haircut as the token itself. Only for notes on Arbitrum Sepolia.
    */
   collateralChain?: CollateralChain;
   /**
@@ -119,25 +121,92 @@ export const PAYOUT_METHODS: readonly PayoutMethod[] = ['claim', 'push'];
 /** The note's payout method: 'claim' unless its terms opt in to 'push'. */
 export const payoutMethodOf = (p: Pick<ProductParams, 'payouts'> | null | undefined): PayoutMethod => (p?.payouts === 'push' ? 'push' : 'claim');
 
-export type StockTokens = 'test' | 'robinhood';
 export type CollateralChain = 'note' | 'robinhood';
-/** Receipts on Arbitrum for collateral locked on Robinhood Chain (deployments/crosschain-testnet.json). NFLX has no
- * CRE-readable feed, so its receipt exists but is not offered as collateral. */
-export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
-  robinhood: {
-    USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 },
-    // notes.markets test tokens on Robinhood Chain testnet (no native token there yet), vaulted the same way.
-    ETH: { token: 'tETH.rh', decimals: 9 }, BTC: { token: 'tBTC.rh', decimals: 8 }, SOL: { token: 'tSOL.rh', decimals: 9 },
-    NVDA: { token: 'tNVDA.rh', decimals: 9 }, AAPL: { token: 'tAAPL.rh', decimals: 9 }, SPY: { token: 'tSPY.rh', decimals: 9 },
+
+/** The chains notes are issued on: Arbitrum Sepolia (home: notes run there) and Robinhood Chain testnet (asset chain). */
+export type NoteChain = 'arbitrum-sepolia' | 'robinhood-testnet';
+export const HOME_CHAIN: NoteChain = 'arbitrum-sepolia';
+export const ASSET_CHAIN: NoteChain = 'robinhood-testnet';
+export const NOTE_CHAINS: readonly NoteChain[] = [HOME_CHAIN, ASSET_CHAIN];
+export const NOTE_CHAIN_LABELS: Record<NoteChain, string> = { 'arbitrum-sepolia': 'Arbitrum Sepolia', 'robinhood-testnet': 'Robinhood Chain testnet' };
+/** The note's chain: its terms' `chain`, else the home chain. */
+export const noteChainOf = (p: Pick<ProductParams, 'chain'> | null | undefined): NoteChain => (p?.chain && NOTE_CHAINS.includes(p.chain) ? p.chain : HOME_CHAIN);
+
+/** A real token on one of the note chains. */
+export interface ChainToken {
+  /** The symbol notes.markets uses for it (in definitions and the app). */
+  token: string;
+  decimals: number;
+  address: `0x${string}`;
+  /** Full name, for labels and tooltips. */
+  name: string;
+  issuer: string;
+  /** What it is priced as (its Chainlink feed), or null when no feed CRE can read exists: held, not used. */
+  valuedAs: CollateralSymbol | null;
+}
+
+/**
+ * The real tokens on each chain; notes.markets mints none of them. Checked on-chain on 2026-10-24 with eth_call
+ * (symbol, name, decimals, supply; WETH's deposit() simulated with value; no transaction sent):
+ *  - USDG: Paxos's Global Dollar testnet deployment (docs.paxos.com/guides/stablecoin/usdg/testnet), 6 decimals.
+ *  - WETH on Arbitrum Sepolia: the Arbitrum token bridge's WETH (l1Address() = Sepolia WETH 0x7b79…E7f9, the WETH
+ *    gateway's calculateL2TokenAddress(Sepolia WETH) returns it).
+ *  - WETH on Robinhood Chain testnet: the chain's own token-bridge WETH (aeWETH proxy; l1Address() = Sepolia WETH, the
+ *    gateway router's WETH gateway 0x5A8F…E413 maps Sepolia WETH to it). The other "Wrapped ETH" there
+ *    (0x33e4…0B94, a plain WETH9) is not the bridge's.
+ *  - No wrapped BTC: Robinhood Chain testnet has only user-deployed mocks, and the one issuer-run token on Arbitrum
+ *    Sepolia (Threshold's tBTC v2, 0xb8f3…7Cd0, minted only from Bitcoin testnet) is not used. BTC is synthetic: an
+ *    underlying priced by Chainlink BTC/USD, settled in cash.
+ *  - TSLA, AMZN, AMD, PLTR, NFLX: Robinhood's testnet stock tokens (18 decimals; one deployer, BeaconProxy). TSLA,
+ *    AMZN, AMD and PLTR are priced by Robinhood Chain mainnet's Chainlink feeds (FEEDS); NFLX has no feed CRE reads,
+ *    so it is held and shown, never pledged or delivered.
+ */
+export const CHAIN_TOKENS: Record<NoteChain, Record<string, ChainToken>> = {
+  'arbitrum-sepolia': {
+    USDG: { token: 'USDG', decimals: 6, address: '0xFFC95faa3d63Cde504a05B567C600B78C0b41892', name: 'Global Dollar', issuer: 'Paxos', valuedAs: 'USD' },
+    WETH: { token: 'WETH', decimals: 18, address: '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73', name: 'Wrapped Ether', issuer: 'Arbitrum token bridge', valuedAs: 'ETH' },
+  },
+  'robinhood-testnet': {
+    USDG: { token: 'USDG', decimals: 6, address: '0x7E955252E15c84f5768B83c41a71F9eba181802F', name: 'Global Dollar', issuer: 'Paxos', valuedAs: 'USD' },
+    WETH: { token: 'WETH', decimals: 18, address: '0x7943e237c7F95DA44E0301572D358911207852Fa', name: 'Wrapped Ether', issuer: 'Robinhood Chain token bridge', valuedAs: 'ETH' },
+    TSLA: { token: 'TSLA', decimals: 18, address: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E', name: 'Tesla', issuer: 'Robinhood', valuedAs: 'TSLA' },
+    AMZN: { token: 'AMZN', decimals: 18, address: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02', name: 'Amazon', issuer: 'Robinhood', valuedAs: 'AMZN' },
+    AMD: { token: 'AMD', decimals: 18, address: '0x71178BAc73cBeb415514eB542a8995b82669778d', name: 'AMD', issuer: 'Robinhood', valuedAs: 'AMD' },
+    PLTR: { token: 'PLTR', decimals: 18, address: '0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0', name: 'Palantir Technologies', issuer: 'Robinhood', valuedAs: 'PLTR' },
+    NFLX: { token: 'NFLX', decimals: 18, address: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93', name: 'Netflix', issuer: 'Robinhood', valuedAs: null },
   },
 };
+
+/** Robinhood's stock tokens with no Chainlink feed CRE can read: shown as held, never offered as collateral or delivery. */
+export const UNPRICED_STOCKS = Object.values(CHAIN_TOKENS['robinhood-testnet']).filter(t => t.valuedAs === null).map(t => t.token);
+
+/** The real local token valued as `sym` on `chain` (USD: the stablecoin), if any. */
+export function chainTokenFor(chain: NoteChain, sym: string): ChainToken | undefined {
+  return Object.values(CHAIN_TOKENS[chain] ?? {}).find(t => t.valuedAs === sym);
+}
+
+/**
+ * Receipts on Arbitrum for collateral locked on Robinhood Chain (deployments/crosschain-testnet.json): the tokens stay
+ * in the vault there; a receipt only records the lock for the note and moves only into or out of the engine. Just
+ * these three: nothing else is carried over (NFLX's receipt exists but has no feed; no others will be added).
+ */
+export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
+  robinhood: { USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 } },
+};
+
+/**
+ * notes.markets' own test tokens, retired 2026-10-24: never offered, priced or listed. tUSD alone stays known
+ * (TEST_CASH_TOKEN) because notes issued before USDG settle in it.
+ */
+export const RETIRED_TEST_TOKENS: readonly string[] = ['tETH', 'tBTC', 'tSOL', 'tTSLA', 'tNVDA', 'tAAPL', 'tSPY'];
+export const isRetiredTestToken = (sym: string) => RETIRED_TEST_TOKENS.includes(sym.replace(/\.rh$/, ''));
 
 export type DefaultRule = 'cap-at-owed' | 'all-to-holders';
 export const DEFAULT_RULES: DefaultRule[] = ['cap-at-owed', 'all-to-holders'];
 
 export const MAX_COLLATERAL = 3;
 export const MAX_GRACE_DAYS = 7;
-export const DEFAULT_HAIRCUT: Record<CollateralSymbol, number> = { USD: 100, ETH: 70, BTC: 70, SOL: 70, TSLA: 60, NVDA: 60, AAPL: 60, SPY: 60, AMZN: 60 };
+export const DEFAULT_HAIRCUT: Record<CollateralSymbol, number> = { USD: 100, ETH: 70, TSLA: 60, AMZN: 60, AMD: 60, PLTR: 60 };
 export const COLLATERAL_SYMBOLS = Object.keys(DEFAULT_HAIRCUT) as CollateralSymbol[];
 export const DEFAULT_COLLATERAL: CollateralTerm[] = [{ symbol: 'USD', haircutPct: 100 }];
 
@@ -153,22 +222,42 @@ export function economicsOf(p: ProductParams) {
 }
 
 /**
- * The token an underlying is delivered in, for this note's stock-token choice: Robinhood Chain's own stock token
- * where the note uses them and Robinhood publishes one, else notes.markets' test token. Undefined when neither exists.
+ * The token an underlying is delivered in on the note's chain: the real token there priced as it (WETH for ETH on
+ * both; Robinhood's TSLA, AMZN, AMD and PLTR on Robinhood Chain). Undefined when the chain has none (BTC anywhere,
+ * stocks on Arbitrum: nothing is bridged over): such a note settles in cash.
  */
-export function deliverableToken(p: Pick<ProductParams, 'stockTokens'>, symbol: string): { token: string; decimals: number } | undefined {
-  if (p.stockTokens === 'robinhood' && ROBINHOOD_STOCK_TOKENS[symbol]) return ROBINHOOD_STOCK_TOKENS[symbol];
-  return DELIVERABLE[symbol];
+export function deliverableToken(p: Pick<ProductParams, 'chain'>, symbol: string): { token: string; decimals: number } | undefined {
+  if (symbol === 'USD') return undefined;
+  const local = chainTokenFor(noteChainOf(p), symbol);
+  return local ? { token: local.token, decimals: local.decimals } : undefined;
 }
 
-/** The token behind a collateral asset (USD: the stablecoin), for this note's stock-token choice. */
-export const collateralTokenOf = (p: Pick<ProductParams, 'stockTokens' | 'collateralChain'>, c: CollateralSymbol) =>
-  (p.collateralChain && p.collateralChain !== 'note'
-    ? REMOTE_COLLATERAL[p.collateralChain]?.[c]
-    : (c === 'USD' ? CASH_TOKEN : deliverableToken(p, c)));
+/** The token behind a collateral asset (USD: the stablecoin) for this note: on its chain, or a Robinhood receipt. */
+export function collateralTokenOf(p: Pick<ProductParams, 'chain' | 'collateralChain'>, c: CollateralSymbol): { token: string; decimals: number } | undefined {
+  const chain = noteChainOf(p);
+  if (p.collateralChain === 'robinhood' && chain === HOME_CHAIN) return REMOTE_COLLATERAL.robinhood[c];
+  if (c === 'USD') return CASH_TOKEN;
+  const local = chainTokenFor(chain, c);
+  return local ? { token: local.token, decimals: local.decimals } : undefined;
+}
 
-/** The token behind a collateral asset with notes.markets' test tokens (kept for callers without a term sheet). */
-export const collateralToken = (c: CollateralSymbol) => collateralTokenOf({}, c);
+/** What each collateral symbol is pledged as on a chain (local tokens, or Robinhood receipts), for pickers. */
+export const collateralChoices = (p: Pick<ProductParams, 'chain' | 'collateralChain'>) =>
+  COLLATERAL_SYMBOLS.map(symbol => ({ symbol, token: collateralTokenOf(p, symbol)?.token ?? null }));
+
+/**
+ * The collateral symbol behind a definition's collateral asset name ("Collateral WETH" -> ETH, "Collateral TSLA.rh"
+ * -> TSLA, "Collateral USDG" -> USD), including the names older notes used ("Collateral tETH", "Collateral tUSD").
+ */
+export function collateralSymbolOfAsset(assetName: string): string | null {
+  const m = /^Collateral (\S+)$/.exec(assetName);
+  if (!m) return null;
+  const t = m[1].replace(/\.rh$/, '');
+  if (['USD', 'USDG', 'USDC', 'tUSD'].includes(t)) return 'USD';
+  for (const chain of NOTE_CHAINS) { const v = CHAIN_TOKENS[chain][t]?.valuedAs; if (v) return v; }
+  const bare = t.replace(/^t(?=[A-Z]{2,}$)/, '');
+  return /^[A-Z][A-Z0-9]*$/.test(bare) ? bare : null;
+}
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
   'fcn': 'Fixed Coupon Note',
@@ -191,10 +280,19 @@ export function productUses(t: ProductType) {
 export const MAX_OBSERVATIONS = 12;
 export const MAX_UNDERLYINGS = 3;
 
-/** Term sheets stored before baskets had a single `underlying`: read either shape. */
-export function normalizeParams(p: ProductParams & { underlying?: Underlying }): ProductParams {
-  if (Array.isArray(p.underlyings) && p.underlyings.length) return p;
-  const { underlying, ...rest } = p;
+/**
+ * Term sheets stored in older shapes: a single `underlying` (before baskets), and `stockTokens`, the retired switch
+ * between notes.markets' test tokens ('test', dropped) and Robinhood's stock tokens ('robinhood': such a note was
+ * meant for Robinhood Chain, so it becomes `chain: 'robinhood-testnet'` unless it names a chain). Read any of them.
+ */
+export function normalizeParams(p: ProductParams & { underlying?: Underlying; stockTokens?: unknown }): ProductParams {
+  let q: ProductParams & { underlying?: Underlying } = p;
+  if ('stockTokens' in p) {
+    const { stockTokens, ...rest } = p;
+    q = stockTokens === 'robinhood' && !rest.chain ? { ...rest, chain: ASSET_CHAIN } : rest;
+  }
+  if (Array.isArray(q.underlyings) && q.underlyings.length) return q;
+  const { underlying, ...rest } = q;
   return { ...rest, underlyings: underlying ? [underlying] : [] };
 }
 
@@ -233,7 +331,7 @@ export function validateProductParams(p: ProductParams): string[] {
   }
   if (p.settlement === 'physical') {
     if (!use.knockIn) e.push('Physical delivery applies below a knock-in barrier: this payoff has none.');
-    for (const u of unds) if (!deliverableToken(p, u.symbol)) e.push(`There is no deliverable token for ${u.symbol}${p.stockTokens === 'robinhood' ? ' on Robinhood Chain' : ''}: settle in cash, or pick another underlying.`);
+    for (const u of unds) if (!deliverableToken(p, u.symbol)) e.push(`There is no ${u.symbol} token to deliver on ${NOTE_CHAIN_LABELS[noteChainOf(p)]} (${deliverableList(p)}): settle in cash, or pick another underlying.`);
   }
   if (use.protection) {
     if (!(Number(p.protectionPct) > 0 && Number(p.protectionPct) <= 100)) e.push('Protection must be between 0 and 100% of face.');
@@ -244,15 +342,16 @@ export function validateProductParams(p: ProductParams): string[] {
   if (new Set(eco.collateral.map(c => c.symbol)).size !== eco.collateral.length) e.push('Each collateral asset can appear once.');
   for (const c of eco.collateral) {
     if (!COLLATERAL_SYMBOLS.includes(c.symbol)) e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
-    else if (!collateralTokenOf(p, c.symbol)) e.push(p.collateralChain === 'robinhood'
-      ? `${c.symbol} can't be locked on Robinhood Chain: pledge USD (USDG), TSLA or AMZN there.`
-      : `There is no ${c.symbol} token to pledge${p.stockTokens === 'robinhood' ? '' : ' with the test tokens: use Robinhood Chain\'s stock tokens'}.`);
+    else if (!collateralTokenOf(p, c.symbol)) e.push(p.collateralChain === 'robinhood' && noteChainOf(p) === HOME_CHAIN
+      ? `${c.symbol} can't be locked on Robinhood Chain for an Arbitrum note: lock USD (USDG), TSLA or AMZN there.`
+      : `There is no ${c.symbol} token to pledge on ${NOTE_CHAIN_LABELS[noteChainOf(p)]}: pledge ${collateralChoices(p).filter(x => x.token).map(x => `${x.symbol}${x.token !== x.symbol ? ` (${x.token})` : ''}`).join(', ')}${noteChainOf(p) === HOME_CHAIN ? ', or lock TSLA or AMZN on Robinhood Chain' : ''}.`);
     if (!(c.haircutPct >= 0 && c.haircutPct <= 100)) e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
   }
   if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
   if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
   if (p.collateralChain !== undefined && !['note', 'robinhood'].includes(p.collateralChain)) e.push('Collateral must be held on the note\'s chain or on Robinhood Chain.');
-  if (p.stockTokens !== undefined && !STOCK_TOKEN_SETS.includes(p.stockTokens)) e.push(`Stock tokens must be one of ${STOCK_TOKEN_SETS.join(', ')}.`);
+  if (p.chain !== undefined && !NOTE_CHAINS.includes(p.chain)) e.push(`The note's chain must be one of ${NOTE_CHAINS.join(', ')}.`);
+  if (p.collateralChain === 'robinhood' && noteChainOf(p) !== HOME_CHAIN) e.push('A note on Robinhood Chain holds its collateral there already: choose the note\'s chain.');
   if (p.payouts !== undefined && !PAYOUT_METHODS.includes(p.payouts)) e.push(`Payouts must be one of ${PAYOUT_METHODS.join(', ')}.`);
   if (!DEFAULT_RULES.includes(eco.defaultRule)) e.push(`The default rule must be one of ${DEFAULT_RULES.join(', ')}.`);
   if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
@@ -272,8 +371,8 @@ export function maxCouponPerUnit(p: ProductParams, k: number): number {
 
 /**
  * The cash leg: USDG (Global Dollar, issued by Paxos; the dollar Robinhood uses), 6 decimals, on both testnets
- * (CASH_TOKENS has the addresses). Paxos runs its faucet; notes.markets cannot mint it. tUSD, our own mintable test
- * dollar, stays deployed as a fallback (TEST_CASH_TOKEN) for local dev and for notes issued before USDG.
+ * (CASH_TOKENS has the addresses). Paxos runs its faucet; notes.markets cannot mint it. tUSD, our retired test
+ * dollar, is known only to label notes issued before USDG, which still settle in it (TEST_CASH_TOKEN).
  */
 export const CASH_TOKEN = { token: 'USDG', decimals: 6 };
 export const TEST_CASH_TOKEN = { token: 'tUSD', decimals: 6 };
@@ -285,65 +384,61 @@ export const TEST_CASH_TOKEN = { token: 'tUSD', decimals: 6 };
  * (pause(), freeze(), wipeFrozenAddress() exist behind AccessControl): see docs/SECURITY.md.
  */
 export const CASH_TOKENS: Record<string, `0x${string}`> = {
-  'arbitrum-sepolia': '0xFFC95faa3d63Cde504a05B567C600B78C0b41892',
-  'robinhood-testnet': '0x7E955252E15c84f5768B83c41a71F9eba181802F',
+  'arbitrum-sepolia': CHAIN_TOKENS['arbitrum-sepolia'].USDG.address,
+  'robinhood-testnet': CHAIN_TOKENS['robinhood-testnet'].USDG.address,
 };
 export const CASH_FAUCET = 'https://faucet.paxos.com';
 
-/** Our test tokens on the Arbitrum testnets (packages/evm-engine/src/test-tokens): each underlying's deliverable
- * token, for physically settled notes. */
-export const DELIVERABLE: Record<string, { token: string; decimals: number }> = {
-  ETH: { token: 'tETH', decimals: 9 },
-  BTC: { token: 'tBTC', decimals: 8 },
-  SOL: { token: 'tSOL', decimals: 9 },
-  TSLA: { token: 'tTSLA', decimals: 9 },
-  NVDA: { token: 'tNVDA', decimals: 9 },
-  AAPL: { token: 'tAAPL', decimals: 9 },
-  SPY: { token: 'tSPY', decimals: 9 },
-};
+/** Every real token's address by symbol per chain (the app merges these with the deployment's config). */
+export const EXTERNAL_TOKENS: Record<string, Record<string, `0x${string}`>> = Object.fromEntries(
+  NOTE_CHAINS.map(c => [c, Object.fromEntries(Object.values(CHAIN_TOKENS[c]).map(t => [t.token, t.address]))]));
 
-export const STOCK_TOKEN_SETS: StockTokens[] = ['test', 'robinhood'];
+/** Where to get each chain's testnet tokens (plain links: notes.markets mints nothing). */
+export const FAUCETS = {
+  /** USDG on both chains. */
+  usdg: CASH_FAUCET,
+  /** Robinhood Chain testnet: ETH for gas and the stock tokens. */
+  robinhood: 'https://faucet.testnet.chain.robinhood.com',
+  /** Arbitrum Sepolia ETH for gas. */
+  arbitrumSepolia: ['https://faucets.chain.link/arbitrum-sepolia', 'https://www.alchemy.com/faucets/arbitrum-sepolia'],
+} as const;
+/** Where to get each chain's own stock tokens. */
+export const STOCK_TOKEN_FAUCETS: Record<string, string> = { 'robinhood-testnet': FAUCETS.robinhood };
+
+/** The tokens a note can deliver on its chain, for messages ("WETH for ETH, …"). */
+function deliverableList(p: Pick<ProductParams, 'chain'>): string {
+  const list = (Object.keys(FEEDS) as string[]).map(s => [s, deliverableToken(p, s)?.token] as const).filter(([, t]) => t);
+  return list.length ? `deliverable: ${list.map(([s, t]) => (s === t ? s : `${s} as ${t}`)).join(', ')}` : 'none deliverable';
+}
 
 /**
- * Robinhood Chain testnet's own stock tokens (ERC-20, 18 decimals). Checked on 2026-10-24 against
- * https://rpc.testnet.chain.robinhood.com: symbol, decimals and supply on-chain, and on a local fork a 1-token
- * transfer arrived in full (no fee on transfer) and approve set the allowance. They come from Robinhood's faucet
- * (https://faucet.testnet.chain.robinhood.com). NFLX has no Chainlink feed CRE can read, so it can be held but not
- * priced: it is listed for completeness and is neither an underlying nor collateral here.
+ * Chainlink price feeds (8 decimals) the CRE workflow reads: each asset's fixing comes from its native chain's oracle.
+ * Crypto: Ethereum mainnet (ETH/USD and BTC/USD update at least hourly, SOL/USD at least daily).
+ * US equities: Robinhood Chain mainnet (CRE chain 'robinhood-mainnet'), Robinhood's own stock feeds. They follow
+ * market hours with a 24 h heartbeat, so they do not move from Friday's close to Monday's open: the staleness
+ * allowance is 4 days, which spans a weekend. Checked on 2026-10-24 with eth_call on https://rpc.mainnet.chain.robinhood.com:
+ * description ("RHTSLA / USD", "Robinhood AMZN / USD"…), 8 decimals, latestRoundData updated within the last day.
+ * There is no NFLX feed there. Notes issued before keep the feeds compiled into their definitions (equities on
+ * Arbitrum One, CRE 'ethereum-mainnet-arbitrum-1').
  */
-export const ROBINHOOD_STOCK_TOKENS: Record<string, { token: string; decimals: number }> = {
-  TSLA: { token: 'TSLA', decimals: 18 },
-  AMZN: { token: 'AMZN', decimals: 18 },
-  NFLX: { token: 'NFLX', decimals: 18 },
-};
-
-/** Token addresses this app knows besides the ones each deployment records (the chain's own tokens). */
-export const EXTERNAL_TOKENS: Record<string, Record<string, `0x${string}`>> = {
-  'robinhood-testnet': {
-    TSLA: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E',
-    AMZN: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02',
-    NFLX: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',
-  },
-};
-
-/** Where to get each chain's own stock tokens. */
-export const STOCK_TOKEN_FAUCETS: Record<string, string> = { 'robinhood-testnet': 'https://faucet.testnet.chain.robinhood.com' };
-
-// Chainlink price feeds (8 decimals) the CRE workflow reads; the testnets themselves have none.
-// Crypto: Ethereum mainnet. ETH/USD and BTC/USD update at least hourly, SOL/USD at least daily.
-// Equities: Arbitrum One (CRE reads it as ethereum-mainnet-arbitrum-1). They follow NYSE hours with a 24 h
-// heartbeat, so they do not move from Friday's close to Monday's open: the staleness allowance is 4 days, which
-// spans a weekend. Checked against Chainlink's feed directory and on-chain on 2026-10-23 (AMZN on 2026-10-24: it is
-// the AMZN / USD AggregatorV3 proxy on Arbitrum One; NFLX/USD exists only as Data Streams there, so there is no NFLX).
-export const FEEDS: Record<'ETH' | 'BTC' | 'SOL' | 'TSLA' | 'NVDA' | 'AAPL' | 'SPY' | 'AMZN', Underlying> = {
+type FeedSymbol = 'ETH' | 'BTC' | 'SOL' | 'TSLA' | 'AMZN' | 'AMD' | 'PLTR' | 'NVDA' | 'AAPL' | 'SPY' | 'META' | 'MSFT' | 'GOOGL' | 'COIN';
+const equity = (symbol: FeedSymbol, feed: string): Underlying =>
+  ({ symbol, feed, feedChain: 'robinhood-mainnet', minPrice: 1, maxPrice: 100_000, staleness: 345_600 });
+export const FEEDS: Record<FeedSymbol, Underlying> = {
   ETH: { symbol: 'ETH', feed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419', feedChain: 'ethereum-mainnet', minPrice: 1, maxPrice: 1_000_000, staleness: 3600 },
   BTC: { symbol: 'BTC', feed: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c', feedChain: 'ethereum-mainnet', minPrice: 1, maxPrice: 10_000_000, staleness: 3600 },
   SOL: { symbol: 'SOL', feed: '0x4ffC43a60e009B551865A93d232E33Fce9f01507', feedChain: 'ethereum-mainnet', minPrice: 0.01, maxPrice: 100_000, staleness: 86400 },
-  TSLA: { symbol: 'TSLA', feed: '0x3609baAa0a9b1f0FE4d6CC01884585d0e191C3E3', feedChain: 'ethereum-mainnet-arbitrum-1', minPrice: 1, maxPrice: 100_000, staleness: 345_600 },
-  NVDA: { symbol: 'NVDA', feed: '0x4881A4418b5F2460B21d6F08CD5aA0678a7f262F', feedChain: 'ethereum-mainnet-arbitrum-1', minPrice: 1, maxPrice: 100_000, staleness: 345_600 },
-  AAPL: { symbol: 'AAPL', feed: '0x8d0CC5f38f9E802475f2CFf4F9fc7000C2E1557c', feedChain: 'ethereum-mainnet-arbitrum-1', minPrice: 1, maxPrice: 100_000, staleness: 345_600 },
-  SPY: { symbol: 'SPY', feed: '0x46306F3795342117721D8DEd50fbcF6DF2b3cc10', feedChain: 'ethereum-mainnet-arbitrum-1', minPrice: 1, maxPrice: 100_000, staleness: 345_600 },
-  AMZN: { symbol: 'AMZN', feed: '0xd6a77691f071E98Df7217BED98f38ae6d2313EBA', feedChain: 'ethereum-mainnet-arbitrum-1', minPrice: 1, maxPrice: 100_000, staleness: 345_600 },
+  TSLA: equity('TSLA', '0x4A1166a659A55625345e9515b32adECea5547C38'),
+  AMZN: equity('AMZN', '0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C'),
+  AMD: equity('AMD', '0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72'),
+  PLTR: equity('PLTR', '0x820ABedFF239034956B7A9d2F0a331f9F075eB4c'),
+  NVDA: equity('NVDA', '0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15'),
+  AAPL: equity('AAPL', '0x6B22A786bAa607d76728168703a39Ea9C99f2cD0'),
+  SPY: equity('SPY', '0x319724394D3A0e3669269846abE664Cd621f9f6A'),
+  META: equity('META', '0x7C38C00C30BEe9378381E7B6135d7283356D71b1'),
+  MSFT: equity('MSFT', '0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E'),
+  GOOGL: equity('GOOGL', '0xF6f373a037c30F0e5010d854385cA89185AE638b'),
+  COIN: equity('COIN', '0xA3a468A452940B7D6b69991207B508c609a98Ef2'),
 };
 
 const base = { issuePricePct: 100, underlyings: [FEEDS.ETH], observations: 4 };

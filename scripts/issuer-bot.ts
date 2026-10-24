@@ -22,14 +22,15 @@
  *   [PIDS=3,4] [MISS=4:1,7:2] [MINT=1] [TOP_UP=1] [PUSH=1|0] [PUSH_MIN=0.5] [INTERVAL=10] npx tsx scripts/issuer-bot.ts [--once]
  *
  * PIDS: the notes to look after (default: every note whose Issuer role is this key). MISS: pid:period payments
- * to leave unfunded. MINT=1: mint test tokens the wallet lacks (the key must be the test token's owner, e.g.
- * the deployer on a testnet, or any account on a local MockERC20). The key is read from a file (a
+ * to leave unfunded. MINT=1: mint tokens the wallet lacks where the key may mint (a local MockERC20, or the retired
+ * tUSD older demo notes settle in, as its owner). Real tokens (USDG, WETH, Robinhood's stock tokens) must already be
+ * in the wallet. The key is read from a file (a
  * `cast wallet new --json` array, or a bare hex key) or ISSUER_KEY, and never printed.
  */
 import { readFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, parseAbi, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { dec, toBase } from '@sn/core';
+import { CHAIN_TOKENS, collateralSymbolOfAsset, dec, toBase } from '@sn/core';
 import { CHAINS, engineAbi, EvmAdapter, issuerActions, lensAbi, noteId, noteView, pushesNote, pushPolicyFromEnv, type ChainInfo } from '@sn/sdk';
 
 const env = (k: string, d?: string) => { const v = process.env[k] ?? d; if (v === undefined) throw new Error(`set ${k}`); return v; };
@@ -187,10 +188,11 @@ async function tick() {
     const period = e.periods.find(p => p.deliver && (p.status === 'due' || p.status === 'grace'));
     if (period?.deliver && !miss.has(`${pid}:${period.k}`)) {
       const d = actions.delivery.find(x => x.symbol === period.deliver!.symbol);
-      // Our test token (tTSLA…) or, for notes on Robinhood Chain's own stock tokens, the bare symbol (TSLA).
+      // The real token delivered for the underlying (WETH for ETH, Robinhood's TSLA…); older notes named it tTSLA.
       const sym = period.deliver.symbol;
-      const asset = def.assets.findIndex(a => a.name === `t${sym}` || a.name === sym);
-      const assetName = asset >= 0 ? def.assets[asset].name : `t${period.deliver.symbol}`;
+      const names = new Set([sym, `t${sym}`, ...Object.values(CHAIN_TOKENS).flatMap(c => Object.values(c)).filter(t => t.valuedAs === sym).map(t => t.token)]);
+      const asset = def.assets.findIndex(a => names.has(a.name));
+      const assetName = asset >= 0 ? def.assets[asset].name : sym;
       const escrowRole = def.roleFlags.findIndex(f => (f & 1) === 1);
       const held = Number(BigInt(s.holdings.find(h => h.asset === asset && h.owner === s.roles[escrowRole])?.balance ?? '0')) / 1e10;
       const need = period.deliver.perUnit * v.sold - held;
@@ -200,7 +202,8 @@ async function tick() {
       const c = e.collateral.find(x => x.price && x.haircut) ?? e.collateral[0];
       const t = actions.topUp.find(x => x.symbol === c.symbol);
       const need = (e.required - e.coverage) / ((c.price ?? 1) * (c.haircut || 1));
-      if (t && need > 0) await run(t.step, `topUp_${c.symbol}`, Math.ceil(need * 1.01 * 1e6) / 1e6, c.symbol === 'USD' ? 'Collateral tUSD' : `Collateral t${c.symbol}`, `topped up ${c.symbol} collateral:`);
+      const colName = def.assets.find(a => collateralSymbolOfAsset(a.name) === c.symbol)?.name ?? `Collateral ${c.symbol}`;
+      if (t && need > 0) await run(t.step, `topUp_${c.symbol}`, Math.ceil(need * 1.01 * 1e6) / 1e6, colName, `topped up ${c.symbol} collateral:`);
     }
   }
   if (policy.mode !== 'off') await pushPayouts(await toPush(mine));

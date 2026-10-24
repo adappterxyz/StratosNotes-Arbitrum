@@ -15,7 +15,7 @@ a second is issued live.
    CHAIN=arbitrum-sepolia NOTE=crypto STRIKE_IN=1400 OBS_EVERY=120 npx tsx scripts/seed-note.ts   # note B
    MISS=<pid of B>:1 pm2 restart sn-arb-issuer-arbitrum-sepolia --update-env
    ```
-3. **Wallet:** MetaMask (or Rabby) on Arbitrum Sepolia with a little testnet ETH; in the app's top bar, **Get tUSD**.
+3. **Wallet:** MetaMask (or Rabby) on Arbitrum Sepolia with a little testnet ETH; USDG from Paxos's faucet (faucet.paxos.com; the app's top bar, **Get testnet tokens**, links every faucet).
 4. **Tabs:**
    1. https://notes.markets (landing)
    2. https://notes.markets/app (marketplace)
@@ -34,7 +34,7 @@ One. So notes on Tesla or NVIDIA belong here."
 
 **0:50 Marketplace and subscribe (50 s).** Tab 2, then tab 3: underlyings and feeds, the schedule, the collateral
 panel (ratio, coverage, the payment schedule), the workflow with its current step lit. Subscribe 100 units and
-approve in the wallet: one transaction, tUSD for units. "That tUSD goes to the issuer: a note raises money. The
+approve in the wallet: one transaction, USDG for units. "That USDG goes to the issuer: a note raises money. The
 issuer's collateral sits in escrow, and it must fund every payment before its date."
 
 **1:40 Issue (60 s).** Tab 4: open **12M Worst-of Phoenix on TSLA, NVDA** under Published templates: the BPMN
@@ -57,7 +57,7 @@ collateral and funding are part of it; one CRE workflow observes them all, on st
 
 - **Strike not written yet:** CRE reads feeds at a finalized block; a report lands a minute or two after its time.
 - **Equity prices look stale:** outside NYSE hours the feeds hold the last close; that's expected.
-- **Faucet says already claimed:** one claim per token per hour per wallet; switch to another wallet.
+- **Faucet says already claimed:** Paxos and Robinhood rate-limit their faucets; switch to another wallet.
 - **API unreachable:** `pm2 logs sn-arb-api` and `pm2 logs sn-arb-tunnel`.
-- **A demo note defaulted by surprise:** the issuer bot was down or short of tUSD: `pm2 logs sn-arb-issuer-<chain>`
-  (it mints test tUSD itself, `MINT=1`, as the token's owner).
+- **A demo note defaulted by surprise:** the issuer bot was down or short of USDG: `pm2 logs sn-arb-issuer-<chain>`
+  (top up the issuer from faucet.paxos.com; notes.markets mints nothing).

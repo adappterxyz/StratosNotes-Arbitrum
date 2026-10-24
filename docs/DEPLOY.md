@@ -3,7 +3,8 @@
 > **Networks: testnets only.** notes.markets runs on Robinhood Chain testnet and Arbitrum Sepolia. Chainlink runs
 > through the CRE simulator (`cre workflow simulate --broadcast` against the mock forwarders), so there is no mainnet
 > deployment: Arbitrum One and Robinhood Chain mainnet wait on CRE production (DON) access and an audit
-> (docs/MILESTONES.md). Arbitrum One is only read, for Chainlink's equity price feeds.
+> (docs/MILESTONES.md). Mainnets are only read, for Chainlink prices: crypto on Ethereum, equities on Robinhood Chain
+> (notes issued before 2026-10-24 keep the Arbitrum One equity feeds compiled into them).
 >
 > **Current engines (v3, 2026-10-24):** Arbitrum Sepolia `0xAF8425A4b2d8994796e019D9b42Cd99D40297e10`, Robinhood
 > Chain testnet `0xCbF6eeC598b8f3b4a4082f5583Db6bD6f488b22D`. Earlier engines: `deployments/archive/` (v1, v2). The
@@ -20,13 +21,14 @@ from files by the scripts, never typed on a command line or printed.
 
 | Key | Address | Role |
 |---|---|---|
-| `.keys/deployer.json` | `0x298afB9424188C7eA7c01556D8CAE6ff4768de0a` | Deploys and owns the engine, test tokens and faucet; issuer and paying agent of the seeded demo notes |
+| `.keys/deployer.json` | `0x298afB9424188C7eA7c01556D8CAE6ff4768de0a` | Deploys and owns the engine (and the retired test tokens and faucet of earlier deployments); issuer and paying agent of the seeded demo notes |
 | `.keys/keeper.json` | `0xcA06AbE78eCBcC861a8eE12fd980035dC91d118f` | Pays gas for the CRE simulator's `--broadcast` reports |
 | `.keys/investor1.json`, `investor2.json` | created by `scripts/seed-note.ts` | Demo investors in the seeded notes (the deployer sends each 0.001 ETH for gas) |
 
-The deployer is also the **issuer** of the seeded notes: it pledges their tUSD collateral and, through
-`scripts/issuer-bot.ts` (pm2 `sn-arb-issuer-<chain>`), funds each payment as it falls due, minting test tUSD as the
-token's owner. Each funding costs about 0.22M gas.
+The deployer is also the **issuer** of the seeded notes: it pledges their USDG collateral and, through
+`scripts/issuer-bot.ts` (pm2 `sn-arb-issuer-<chain>`), funds each payment as it falls due, from USDG it holds (claim
+it at faucet.paxos.com: notes.markets mints no token). Older demo notes settle in the retired tUSD, which the bot
+can still mint for them with `MINT=1` as the token's owner. Each funding costs about 0.22M gas.
 
 ## 1. Fund the two addresses
 

@@ -5,20 +5,24 @@
  */
 import { simulatePerf, simulateWorstOf, totalPerUnit, type PayoffResult } from '../../../packages/core/src/products/payoff';
 import {
-  DELIVERABLE, EXAMPLE_PRODUCTS, ROBINHOOD_STOCK_TOKENS, EXAMPLE_WORST_OF, FEEDS, PRODUCT_LABELS, productUses,
+  ASSET_CHAIN, deliverableToken, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, HOME_CHAIN, PRODUCT_LABELS, productUses,
   type ProductParams, type ProductType,
 } from '../../../packages/core/src/products/params';
 
-export { PRODUCT_LABELS, productUses, totalPerUnit, DELIVERABLE };
+export { PRODUCT_LABELS, productUses, totalPerUnit };
 export type { ProductType, PayoffResult };
 
 export type Role = 'investor' | 'issuer';
 export type Sym = keyof typeof FEEDS;
 export const CRYPTO: Sym[] = ['ETH', 'BTC', 'SOL'];
-export const STOCKS: Sym[] = ['TSLA', 'AMZN', 'NVDA', 'AAPL', 'SPY'];
+export const STOCKS: Sym[] = ['TSLA', 'AMZN', 'AMD', 'PLTR', 'NVDA', 'AAPL', 'SPY'];
 
-/** What a physically settled note delivers: Robinhood Chain's own token where it publishes one, else our test token. */
-export const deliveredToken = (sym: string) => (ROBINHOOD_STOCK_TOKENS[sym] ? `Robinhood Chain ${sym}` : DELIVERABLE[sym]?.token ?? sym);
+/** What a physically settled note delivers: the real token on the note's chain (WETH for ETH; Robinhood Chain's own
+ * stock tokens there), or cash where neither chain has one. */
+export const deliveredToken = (sym: string) => (deliverableToken({ chain: HOME_CHAIN }, sym)?.token
+  ?? (deliverableToken({ chain: ASSET_CHAIN }, sym) ? `Robinhood Chain ${sym}` : null));
+/** Physical delivery needs a real token for every underlying (none for BTC, SOL or stocks without one). */
+export const physicalPossible = (syms: string[]) => syms.every(s => !!deliveredToken(s));
 export const PRODUCTS: ProductType[] = ['fcn', 'reverse-convertible', 'phoenix', 'snowball', 'ppn'];
 
 /** Quarterly over 12 months: four observations, the last one is maturity. */
@@ -206,12 +210,11 @@ export function explain(t: Terms, o: Outcome): string {
 export interface Collateral { id: string; label: string; haircut: number }
 export const COLLATERAL: Collateral[] = [
   { id: 'USDG', label: 'USDG (Global Dollar)', haircut: 100 },
-  { id: 'ETH', label: 'ETH', haircut: 70 },
-  { id: 'BTC', label: 'BTC', haircut: 70 },
+  { id: 'ETH', label: 'ETH (as WETH)', haircut: 70 },
   { id: 'TSLA', label: 'Robinhood Chain TSLA', haircut: 60 },
   { id: 'AMZN', label: 'Robinhood Chain AMZN', haircut: 60 },
-  { id: 'NVDA', label: 'Tokenized NVDA', haircut: 60 },
-  { id: 'SPY', label: 'Tokenized SPY', haircut: 60 },
+  { id: 'AMD', label: 'Robinhood Chain AMD', haircut: 60 },
+  { id: 'PLTR', label: 'Robinhood Chain PLTR', haircut: 60 },
 ];
 
 export interface Call { k: number; month: number; label: string; amount: number }

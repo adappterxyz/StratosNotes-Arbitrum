@@ -76,7 +76,7 @@ template / term sheet / AI / canvas -> BPMN -> compiler -> definition (bytes, co
    issuer: pledge, fund, top up -> escrow (engine-held) -> pay holders | default: escrow to holders | release
    verified email -> salted-hash attestation (EIP-712, verifier) -> required to issue, subscribe, receive units
                                    ^ onReport via KeystoneForwarder
-Chainlink feeds (Ethereum; TSLA/NVDA/AAPL/SPY on Arbitrum One) -> CRE notes-keeper-evm (observations,
+Chainlink feeds (crypto on Ethereum; equities on Robinhood Chain) -> CRE notes-keeper-evm (observations,
                                    collateral prices, deadlines)
 notes.markets = one Cloudflare Worker: landing, app, AI, email (Cloudflare Email Service); API and indexer
                                    (moving from Postgres on our server to Cloudflare D1 in the Worker)
@@ -190,8 +190,9 @@ verify email and attest on-chain, then issue, subscribe, fund and get paid throu
   state at the latest block; the engine re-checks every step on-chain.
 - **No CRE on Robinhood mainnet** yet; a fallback keeper (off by default, labelled on every report) covers it until
   CRE supports it.
-- **Test assets.** Cash is Paxos testnet USDG; Robinhood's own testnet TSLA and AMZN can be collateral and
-  delivery tokens; tETH, tBTC and the other stock tokens are ours, from an on-chain faucet.
+- **Testnet assets.** Only real tokens: cash is Paxos testnet USDG; ETH collateral and delivery is each chain's
+  canonical WETH; on Robinhood Chain its own TSLA, AMZN, AMD and PLTR are collateral and delivery tokens (NFLX is held
+  only: no feed). BTC is synthetic (priced, cash-settled). Our own test tokens and faucet are retired.
 - **Equity feeds** follow NYSE hours with a 24 h heartbeat; notes accept a 4-day-old round so weekends don't block
   them.
 - **Margin** is checked at each observation, not continuously.

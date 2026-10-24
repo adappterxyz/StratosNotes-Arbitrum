@@ -6,6 +6,11 @@ stocks (TSLA, AMZN, NFLX) and Paxos USDG are locked in place in a vault on Robin
 carries the two value commands between the chains, and Chainlink **CRE** checks every run that each vault still
 backs what the note counts. Nothing is bridged and no wrapped token can be traded.
 
+Receipts in use: USDG.rh, TSLA.rh and AMZN.rh (NFLX.rh exists but has no feed). The receipts of our retired test
+tokens (tTSLA.rh, tETH.rh, tBTC.rh, tSOL.rh, tNVDA.rh, tAAPL.rh, tSPY.rh) are disabled in the vault and no longer
+served (deployments/crosschain-testnet.json lists them under `retiredReceipts`); no other token is carried over.
+Each receipt is valued by its stock's Chainlink feed on Robinhood Chain.
+
 Status: **live on testnet** (2026-10-24): HomeGateway on Arbitrum Sepolia, RemoteVault on Robinhood Chain testnet,
 wired and verified on-chain, with one lock and one release delivered by Chainlink CCIP (below). Built and tested
 locally (Chainlink Local, mock routers) and on forks of both testnets with the real routers first.

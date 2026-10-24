@@ -51,8 +51,9 @@ export const ChainCfg = z.object({
   stablecoin: z.object({ symbol: z.string(), address: addr, decimals: z.number().int().min(0).max(36) }),
   /** Dev chains only: the API mints this MockERC20 to callers (the key comes from FAUCET_KEY). */
   faucet: z.object({ token: addr, amount: z.string().regex(/^\d+$/) }).optional(),
-  /** Testnets: the on-chain TokenFaucet (callers claim from it with their own wallet) and the test tokens by
-   * symbol (tUSD, tETH, tTSLA…), which physically settled notes deliver. From deployments/<chain>.json. */
+  /** The retired notes.markets TokenFaucet (optional; scripts/server-config.ts no longer writes it). `tokens`: the
+   * chain's real tokens by symbol (USDG, WETH, Robinhood's stock tokens), receipts on the home chain, and tUSD where
+   * older notes settle in it. */
   tokenFaucet: addr.optional(),
   tokens: z.record(addr).default({}),
   /**

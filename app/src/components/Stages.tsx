@@ -7,8 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import { isAddress, zeroAddress } from 'viem';
 import { signMessage } from 'wagmi/actions';
 import { AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import WrapEth from './WrapEth';
 import {
-  collateralTokenOf, dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, PRODUCT_LABELS, ROBINHOOD_STOCK_TOKENS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
+  CASH_FAUCET, CHAIN_TOKENS, collateralTokenOf, dec, definitionId, economicsOf, FKIND, MAX_GRACE_DAYS, noteChainOf, NOTE_CHAIN_LABELS, PRODUCT_LABELS, simulateNote, simulatePerf, STOCK_TOKEN_FAUCETS,
   templateMessage, totalPerUnit, underlyingLabel,
   type CollateralSymbol, type Compiled, type Issue, type ProductParams, type TemplateSource, type TemplateSummary, type WorkflowIR,
 } from '@sn/core';
@@ -247,7 +248,11 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
   const { config, byKey } = useChains();
   const signer = useSigner();
   const plan = useMemo(() => { try { return built ? planIssuance(built.ir, built.c) : null; } catch (e) { return e instanceof Error ? e.message : String(e); } }, [built]);
-  const [chainKey, setChainKey] = useState(preset?.chainKey ?? config.chains[0]?.key ?? '');
+  const [pickedChain, setChainKey] = useState(preset?.chainKey ?? config.chains[0]?.key ?? '');
+  // A product's terms name its network (the real tokens it delivers and takes come from there): issue it there.
+  const basisChain = doc.basis ? noteChainOf(doc.basis) : null;
+  const locked = !!basisChain && config.chains.some(c => c.key === basisChain);
+  const chainKey = locked ? basisChain! : pickedChain;
   const emailGate = useVerifiedEmail(); // a verified email before issuing
   const [values, setValues] = useState<Record<string, string>>({});
   const [size, setSize] = useState(preset?.size ?? doc.hint?.size ?? 10_000);
@@ -265,7 +270,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
   const chain = byKey[chainKey];
   // Collateral locked on Robinhood Chain: the note pledges the CCIP receipts (TSLA.rh…), not the token itself.
   const remote = doc.basis?.collateralChain === 'robinhood';
-  const tokOf = (c: string) => collateralTokenOf(doc.basis ?? {}, c as CollateralSymbol)?.token ?? (c === 'USD' ? (chain?.cfg.stablecoin.symbol ?? 'USDG') : `t${c}`);
+  const tokOf = (c: string) => collateralTokenOf(doc.basis ?? {}, c as CollateralSymbol)?.token ?? (c === 'USD' ? (chain?.cfg.stablecoin.symbol ?? 'USDG') : c);
 
   if (!built) return <><Head title="Issue" /><div className="section"><p className="small muted">Fix the errors in Validate first.</p></div></>;
   if (typeof plan === 'string' || !plan) return <><Head title="Issue" /><div className="section"><div className="notice err">{plan}</div></div></>;
@@ -308,7 +313,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
   const valueOf = (name: string) => auto(name) ?? values[name] ?? (kindOf(name) === FKIND.Date ? toLocalInput(strikeAt) : '');
   const handled = (n: string) => ['notional', 'isin', 'lag', 'grace', 'collateralRatio'].includes(n) || /^(haircut|pledge)_/.test(n) || (hasSchedule && plan.dateFields.includes(n));
   const generic = inputs.filter(f => !handled(f.name));
-  // Cash settles in the network's stablecoin; a delivered underlying (tETH, tTSLA…) needs its token on that network.
+  // Cash settles in the network's stablecoin; a delivered underlying (WETH, TSLA…) needs its token on that network.
   const isCash = (token?: string) => !token || /^(t?USD|USDC|USDG)$/i.test(token);
   const tokenOf = (token?: string) => (isCash(token) ? chain?.cfg.stablecoin.address : chain?.cfg.tokens?.[token!]);
   const unsupported = built.ir.assets.filter(a => a.kind === 'cash' && !tokenOf(a.token)).map(a => a.token ?? 'cash');
@@ -319,7 +324,7 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
     const step = (s: string) => setProgress(x => [...x, s]);
     try {
       if (hasSchedule && strikeAt < Date.now() / 1000 + 60) throw new Error('The strike date must be at least a minute away.');
-      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.${unsupported.some(t => ROBINHOOD_STOCK_TOKENS[t]?.token === t) ? ' This note uses Robinhood Chain\'s own stock tokens: until the cross-chain vaults are live, issue it on Robinhood Chain testnet.' : ''}`);
+      if (unsupported.length) throw new Error(`${chain.cfg.name} has no token configured for ${unsupported.join(', ')}.${unsupported.some(t => !!CHAIN_TOKENS['robinhood-testnet'][t]) ? ' This note uses Robinhood Chain\'s own tokens: set its network to Robinhood Chain testnet.' : ''}`);
       if (timingBad) throw new Error(timingBad);
       const value = (f: { name: string; kind: number }): InputValue => {
         const raw = valueOf(f.name).trim();
@@ -360,9 +365,10 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
         {config.chains.length > 1 && !compact && (
           <div className="field">
             <label htmlFor="is-chain">Network</label>
-            <select id="is-chain" value={chainKey} onChange={e => setChainKey(e.target.value)}>
+            <select id="is-chain" value={chainKey} disabled={locked} onChange={e => setChainKey(e.target.value)}>
               {config.chains.map(c => <option key={c.key} value={c.key}>{c.name}{c.key === 'robinhood-testnet' ? ' (asset chain: stock tokens)' : ''}{c.cre ? '' : ' (fallback keeper)'}</option>)}
             </select>
+            {locked && <span className="hint">Set by the term sheet ({NOTE_CHAIN_LABELS[basisChain!]}): the tokens it delivers and takes live there.</span>}
           </div>
         )}
         <div className="form-grid" hidden={compact}>
@@ -444,7 +450,8 @@ export function IssuePanel({ doc, built, preset, compact = false }: { doc: DocIn
         </div>
       )}
       <div className="section">
-        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. Test tokens come from the faucet in the top bar{built.ir.assets.some(a => a.token && ROBINHOOD_STOCK_TOKENS[a.token]?.token === a.token) ? <>; Robinhood Chain's own TSLA and AMZN come from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a></> : ''}.</p>}
+        {deposits.length > 0 && <p className="xs muted">{deposits.map(s => s.name).join(', ')} {deposits.length > 1 ? 'deposit' : 'deposits'} the collateral from your wallet; the wallet asks you to approve exactly each amount first. USDG comes from <a href={CASH_FAUCET} target="_blank" rel="noreferrer">Paxos's faucet</a>{built.ir.assets.some(a => a.token && CHAIN_TOKENS['robinhood-testnet'][a.token]?.issuer === 'Robinhood') ? <>; Robinhood Chain's stock tokens from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a></> : ''}{built.ir.assets.some(a => a.token === 'WETH') ? '; WETH by wrapping testnet ETH (below)' : ''}.</p>}
+        {deposits.length > 0 && built.ir.assets.some(a => a.token === 'WETH') && <WrapEth chainKey={chainKey} />}
         {unsupported.length > 0 && <div className="notice warn">This note needs {unsupported.join(', ')} on {chain?.cfg.name}, which this deployment does not configure yet.</div>}
         <button className="btn primary lg" disabled={!me || busy || !chain} onClick={() => void emailGate.require(chainKey, issue)}>
           {me ? (busy ? 'Confirm each step in your wallet…' : 'Publish and open the book') : 'Connect a wallet to issue'}

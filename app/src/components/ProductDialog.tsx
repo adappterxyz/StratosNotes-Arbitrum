@@ -7,8 +7,9 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
-  COLLATERAL_SYMBOLS, REMOTE_COLLATERAL, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, STOCK_TOKEN_FAUCETS, EXAMPLE_PRODUCTS, FEEDS, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, PRODUCT_LABELS, productUses,
-  simulatePerf, totalPerUnit, validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
+  COLLATERAL_SYMBOLS, collateralTokenOf, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS, HOME_CHAIN, MAX_COLLATERAL, MAX_GRACE_DAYS,
+  MAX_UNDERLYINGS, NOTE_CHAIN_LABELS, NOTE_CHAINS, noteChainOf, PRODUCT_LABELS, productUses, simulatePerf, STOCK_TOKEN_FAUCETS, totalPerUnit, UNPRICED_STOCKS,
+  validateProductParams, type CollateralSymbol, type DefaultRule, type NoteChain, type ProductParams, type ProductType,
 } from '@sn/core';
 import PayoffChart from './PayoffChart';
 
@@ -25,12 +26,22 @@ function NumField({ id, label, value, onChange, hint, step = 'any' }: { id: stri
 
 export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial<ProductParams>) => void }) {
   const use = productUses(p.productType);
-  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, stockTokens: p.stockTokens, collateralChain: p.collateralChain });
-  const robinhood = p.stockTokens === 'robinhood';
-  /** The token a collateral chip pledges, or null when this note's token set has none. */
-  const colToken = (c: CollateralSymbol) => (c === 'USD' && p.collateralChain !== 'robinhood' ? 'USDG' : collateralTokenOf(p, c)?.token ?? null);
+  const pick = (t: ProductType) => set({ ...EXAMPLE_PRODUCTS[t], name: EXAMPLE_PRODUCTS[t].name, underlyings: p.underlyings, issuePricePct: p.issuePricePct, collateral: p.collateral, collateralRatioPct: p.collateralRatioPct, settlementLagDays: p.settlementLagDays, gracePeriodDays: p.gracePeriodDays, defaultRule: p.defaultRule, chain: p.chain, collateralChain: p.collateralChain });
+  const chain = noteChainOf(p);
+  const onHome = chain === HOME_CHAIN;
+  /** The token a collateral chip pledges, or null when the note's chain has none. */
+  const colToken = (c: CollateralSymbol) => collateralTokenOf(p, c)?.token ?? null;
   const delivered = p.underlyings.map(u => deliverableToken(p, u.symbol)?.token ?? `no ${u.symbol} token`).join('/');
   const eco = economicsOf(p);
+  /** Collateral that stays pledgeable under other terms (the stablecoin when nothing does). */
+  const keepCol = (q: ProductParams) => {
+    const kept = eco.collateral.filter(c => !!collateralTokenOf(q, c.symbol));
+    return kept.length ? kept : [{ symbol: 'USD' as const, haircutPct: 100 }];
+  };
+  const setChain = (k: NoteChain) => {
+    const q: ProductParams = { ...p, chain: k === HOME_CHAIN ? undefined : k, collateralChain: k === HOME_CHAIN ? p.collateralChain : undefined };
+    set({ chain: q.chain, collateralChain: q.collateralChain, collateral: keepCol(q) });
+  };
   const colSyms = eco.collateral.map(c => c.symbol);
   const toggleCol = (c: CollateralSymbol) => {
     if (colSyms.includes(c)) { if (colSyms.length > 1) set({ collateral: eco.collateral.filter(x => x.symbol !== c) }); }
@@ -62,10 +73,11 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
               {k}/USD
             </button>
           ))}
+          {UNPRICED_STOCKS.map(k => <button key={k} type="button" className="chip" disabled title={`${k}: a Robinhood Chain stock token, no Chainlink price yet`}>{k}/USD</button>)}
         </div>
         <span className="hint">{symbols.length > 1
           ? `Worst-of: every barrier, autocall and the redemption use the weakest of ${symbols.join(', ')} against its own strike. Up to ${MAX_UNDERLYINGS}.`
-          : 'Pick more than one for a worst-of basket. Chainlink price feeds, read by CRE.'}</span>
+          : 'Pick more than one for a worst-of basket. Chainlink price feeds on each asset\'s own chain (crypto: Ethereum; stocks: Robinhood Chain), read by CRE.'} {UNPRICED_STOCKS.join(', ')}: held only, no feed yet.</span>
       </div>
       <NumField id="pd-obs" label="Observations" value={p.observations} step="1" onChange={v => set({ observations: v, ...(p.autocallFromPeriod && p.autocallFromPeriod > v ? { autocallFromPeriod: 1 } : {}) })} hint="The last is maturity" />
       <NumField id="pd-price" label="Issue price %" value={p.issuePricePct} onChange={v => set({ issuePricePct: v })} />
@@ -87,46 +99,46 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
             <option value="physical">Physical delivery</option>
           </select>
           <span className="hint">{p.settlement === 'physical'
-            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (${delivered}${robinhood ? ', Robinhood Chain\'s own where it publishes one' : ''}); the issuer funds the delivery before maturity.`
+            ? `Holders receive units ÷ strike of ${p.underlyings.length > 1 ? 'the worst performer\'s' : `the ${p.underlyings[0]?.symbol}`} token (${delivered}, on ${NOTE_CHAIN_LABELS[chain]}); the issuer funds the delivery before maturity.`
             : 'Holders receive final ÷ strike in USDG.'}</span>
         </div>
       )}
       <div className="field wide">
-        <label htmlFor="pd-stock">Stock tokens</label>
-        <select id="pd-stock" value={p.stockTokens ?? 'test'} onChange={e => set({ stockTokens: e.target.value as 'test' | 'robinhood' })}>
-          <option value="robinhood">Robinhood Chain's own (TSLA, AMZN): the asset chain</option>
-          <option value="test">notes.markets test tokens (tTSLA, tNVDA…): any network</option>
+        <label htmlFor="pd-chain">Network</label>
+        <select id="pd-chain" value={chain} onChange={e => setChain(e.target.value as NoteChain)}>
+          {NOTE_CHAINS.map(c => <option key={c} value={c}>{NOTE_CHAIN_LABELS[c]}{c === HOME_CHAIN ? '' : ' (asset chain)'}</option>)}
         </select>
-        <span className="hint">{robinhood
-          ? <>What a physically settled note delivers and stock collateral pledges: the real testnet TSLA and AMZN, which live on Robinhood Chain. Cross-chain vaults that keep them there while the note runs on Arbitrum are coming next; until then such a note issues on Robinhood Chain. Get the tokens from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a>. Other stocks use test tokens.</>
-          : 'Our own test tokens, available from the faucet on every network here.'}</span>
+        <span className="hint">{onHome
+          ? 'Physical delivery and collateral in WETH on Arbitrum; stocks and BTC settle in cash here.'
+          : <>Robinhood Chain's own stock tokens (TSLA, AMZN, AMD, PLTR) and WETH: from <a href={STOCK_TOKEN_FAUCETS['robinhood-testnet']} target="_blank" rel="noreferrer">Robinhood's faucet</a>.</>}</span>
       </div>
-      <div className="field wide">
-        <label htmlFor="pd-colchain">Collateral held on</label>
-        <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
-          const v = e.target.value as 'note' | 'robinhood';
-          // Robinhood Chain holds USDG, TSLA and AMZN: keep only collateral that can be locked there.
-          set({ collateralChain: v, ...(v === 'robinhood' ? { collateral: (p.collateral ?? []).filter(c => !!REMOTE_COLLATERAL.robinhood[c.symbol]) } : {}) });
-        }}>
-          <option value="note">The note's own chain (pledged into the note)</option>
-          <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>
-        </select>
-        <span className="hint">{p.collateralChain === 'robinhood'
-          ? 'The note runs on Arbitrum Sepolia; you lock USDG, TSLA or AMZN in the vault on Robinhood Chain and pledge the receipts Chainlink CCIP credits to you (about 15–25 minutes per message). The tokens never leave Robinhood Chain; on a default holders redeem their share there.'
-          : 'Pledged straight into the note on the network you issue on.'}</span>
-      </div>
+      {onHome && (
+        <div className="field wide">
+          <label htmlFor="pd-colchain">Collateral held on</label>
+          <select id="pd-colchain" value={p.collateralChain ?? 'note'} onChange={e => {
+            const v = e.target.value as 'note' | 'robinhood';
+            set({ collateralChain: v, collateral: keepCol({ ...p, collateralChain: v }) });
+          }}>
+            <option value="note">Arbitrum: pledged into the note</option>
+            <option value="robinhood">Robinhood Chain: locked in place, via Chainlink CCIP</option>
+          </select>
+          <span className="hint">{p.collateralChain === 'robinhood'
+            ? 'You lock USDG, TSLA or AMZN in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes per message). The tokens never leave Robinhood Chain; on a default holders redeem their share there.'
+            : 'USDG or WETH, pledged straight into the note.'}</span>
+        </div>
+      )}
       {use.protection && <NumField id="pd-prot" label="Protection %" value={p.protectionPct} onChange={v => set({ protectionPct: v })} />}
       {use.protection && <NumField id="pd-part" label="Participation %" value={p.participationPct} onChange={v => set({ participationPct: v })} />}
       <div className="field wide">
         <span className="lbl">Collateral the issuer pledges</span>
         <div className="row" role="group" aria-label="Collateral">
-          {COLLATERAL_SYMBOLS.map(c => (
+          {COLLATERAL_SYMBOLS.filter(c => !!colToken(c)).map(c => (
             <button key={c} type="button" className={`chip ${colSyms.includes(c) ? 'on' : ''}`} aria-pressed={colSyms.includes(c)} onClick={() => toggleCol(c)}
-              disabled={!colSyms.includes(c) && (colSyms.length >= MAX_COLLATERAL || !colToken(c))}
-              title={colToken(c) ? undefined : `${c} is only available as Robinhood Chain's own token`}>
-              {colToken(c) ?? c}
+              disabled={!colSyms.includes(c) && colSyms.length >= MAX_COLLATERAL}>
+              {colToken(c)}
             </button>
           ))}
+          {!onHome && UNPRICED_STOCKS.map(k => <button key={k} type="button" className="chip" disabled title={`${k}: held on Robinhood Chain, no Chainlink price yet`}>{k}</button>)}
         </div>
         <span className="hint">Locked in the note's escrow until the final payment; on a default the holders are paid from it (see the default rule). Tokens count at {eco.collateral.filter(c => c.symbol !== 'USD').map(c => `${c.haircutPct}% (${colToken(c.symbol) ?? c.symbol})`).join(', ') || 'their Chainlink price after a haircut'} of their Chainlink value.</span>
       </div>
@@ -149,8 +161,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
 }
 
 export default function ProductDialog({ initial, onClose, onCreate }: { initial: ProductParams | null; onClose: () => void; onCreate: (p: ProductParams) => void }) {
-  // New notes default to Robinhood Chain's own stock tokens (the asset chain) for any stock collateral or delivery.
-  const [p, setP] = useState<ProductParams>(initial ?? { ...EXAMPLE_PRODUCTS.phoenix, stockTokens: 'robinhood' });
+  const [p, setP] = useState<ProductParams>(initial ?? EXAMPLE_PRODUCTS.phoenix);
   useEffect(() => { if (initial) setP(initial); }, [initial]);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

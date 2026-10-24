@@ -5,12 +5,14 @@
  *   CHAIN=arbitrum-sepolia NOTE=crypto STRIKE_IN=900 OBS_EVERY=300 npx tsx scripts/seed-note.ts
  *   CHAIN=robinhood-testnet NOTE=equity npx tsx scripts/seed-note.ts
  *
- * NOTE=crypto: a worst-of phoenix on ETH and BTC; NOTE=equity: on TSLA and NVDA (Chainlink feeds on Arbitrum One,
- * NYSE hours: outside them the observations see the last close).
- * The deployer key (.keys/deployer.json) is issuer and paying agent and mints the test tUSD (it owns the test
- * tokens): it pledges tUSD collateral covering 100% of the notional into the note's escrow at Approve Terms.
- * Two demo investors (.keys/investor1.json, investor2.json, created if missing) get a little ETH for gas from
- * the deployer, claim tUSD from the faucet and subscribe 600 and 400 units; UNSOLD units stay open for visitors.
+ * NOTE=crypto: a worst-of phoenix on ETH and BTC; NOTE=equity: on TSLA and NVDA (Chainlink feeds on Robinhood Chain
+ * mainnet, market hours: outside them the observations see the last close).
+ * Cash and collateral are Paxos's testnet USDG on both chains (notes.markets mints nothing): the deployer key
+ * (.keys/deployer.json), issuer and paying agent, must already hold enough of it (faucet.paxos.com). It pledges USDG
+ * collateral covering 100% of the notional into the note's escrow at Approve Terms. Two demo investors
+ * (.keys/investor1.json, investor2.json, created if missing) get a little ETH for gas and their USDG from the
+ * deployer, and subscribe 600 and 400 units; UNSOLD units stay open for visitors.
+ * CASH=tUSD: the retired test dollar instead (local forks of an old deployment only: the deployer mints it).
  * The issuer funds each payment as it falls due with scripts/issuer-bot.ts (run it alongside the keeper; with
  * MISS=pid:period a demo note shows a default). LAG and GRACE: seconds (default OBS_EVERY / 4 and / 3).
  * Keys are read from files and never printed. Writes deployments/notes/<chain>-<pid>.json.
@@ -35,9 +37,9 @@ const net = RPCS[chainKey];
 if (!net) throw new Error(`CHAIN: ${Object.keys(RPCS).join(' | ')}`);
 const DIR = process.env.DEPLOY_DIR ?? 'deployments';
 const dep = JSON.parse(readFileSync(`${DIR}/${chainKey}.json`, 'utf8')) as { engine: Address; lens: Address; faucet: Address; tokens: Record<string, Address> };
-/** CASH=USDG: Paxos testnet USDG is the cash leg and the collateral; the deployer must already hold it (faucet.paxos.com),
- * and funds the demo investors from its own balance. Default: our test tUSD, minted by the deployer. */
-const usdg = process.env.CASH === 'USDG';
+/** Paxos testnet USDG is the cash leg and the collateral (default); the deployer must already hold it (faucet.paxos.com),
+ * and funds the demo investors from its own balance. CASH=tUSD: the retired test dollar, minted by the deployer. */
+const usdg = process.env.CASH !== 'tUSD';
 const tusd = usdg ? CASH_TOKENS[chainKey] as Address : dep.tokens.tUSD;
 if (!tusd) throw new Error(`no ${usdg ? 'USDG' : 'tUSD'} on ${chainKey}`);
 const CASH = usdg ? 'USDG' : 'tUSD';

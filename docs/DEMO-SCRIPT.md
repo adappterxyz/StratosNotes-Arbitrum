@@ -6,7 +6,9 @@ For recording the demo video, and for a live pitch. URLs are live on Robinhood C
 
 - **Wallet:** a browser wallet on **Robinhood Chain testnet** (chain 46630) with a little test ETH
   (faucet.testnet.chain.robinhood.com). A second account to play the investor.
-- **Tokens:** in the app, use the faucet button to claim **tUSD**, both for collateral and to subscribe.
+- **Tokens:** **USDG** from Paxos (faucet.paxos.com) for collateral and to subscribe; Robinhood's TSLA, AMZN, AMD, PLTR
+  from its faucet for stock collateral or delivery; WETH by wrapping ETH (the issue step offers it). The app's top
+  bar, **Get testnet tokens**, links each one.
 - **Email:** an inbox you can read during the demo; the 6-digit code arrives there.
 - **Tabs, in order:**
   1. https://notes.markets

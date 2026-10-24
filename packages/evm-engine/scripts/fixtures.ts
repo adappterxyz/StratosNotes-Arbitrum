@@ -12,16 +12,21 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { encodeAbiParameters, toHex } from 'viem';
 import {
-  compile, compileTemplate, dec, DELIVERABLE, economicsOf, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, evmInput, FEEDS, instantiateProduct, parseBpmn,
+  collateralTokenOf, compile, compileTemplate, dec, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, evmInput, FEEDS, instantiateProduct, parseBpmn,
   SEED_TEMPLATES, simulateNote, SRC, type Compiled, type IssuerBehaviour, type ProductParams, type ProductType, type TemplateSource,
 } from '@sn/core';
 
 /** Block time the Foundry test starts each run at (fixed, so dates can be baked in). */
 export const T0 = 1_900_000_000;
 const LAG = 10, GRACE = 20, STEP = 100;
-const STRIKES: Record<string, number> = { ETH: 2000, BTC: 60000, SOL: 150 };
-const TOKEN_ID: Record<string, number> = { tUSD: 1, tETH: 2, tBTC: 3, tSOL: 4 };
-const DECIMALS: Record<number, number> = { 1: 6, 2: 9, 3: 8, 4: 9 };
+const STRIKES: Record<string, number> = { ETH: 2000, BTC: 60000, SOL: 150, AMZN: 200, TSLA: 250 };
+/** The mock tokens test/Products.t.sol deploys for the real ones the notes name (USDG, WETH, Robinhood's AMZN and
+ * TSLA), with the same decimals. */
+const TOKEN_ID: Record<string, number> = { USDG: 1, WETH: 2, AMZN: 3, TSLA: 4 };
+const DECIMALS: Record<number, number> = { 1: 6, 2: 18, 3: 18, 4: 18 };
+/** The mock token a delivered underlying or a collateral symbol uses on the note's chain. */
+const deliverId = (p: ProductParams, sym: string) => TOKEN_ID[deliverableToken(p, sym)!.token];
+const collateralId = (p: ProductParams, sym: string) => TOKEN_ID[collateralTokenOf(p, sym as 'USD')!.token];
 
 interface Run {
   type: ProductType; path: number[] | number[][]; investors: number[]; transfer?: number; params?: ProductParams;
@@ -39,7 +44,7 @@ interface Run {
 const seed = (part: string) => SEED_TEMPLATES.find(t => t.name.includes(part))!.source;
 const ETH_BTC: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, name: '12M Worst-of FCN on ETH, BTC', underlyings: [FEEDS.ETH, FEEDS.BTC] };
 const PHYS_ETH: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, name: '12M FCN on ETH, physical', settlement: 'physical' };
-const PHYS_BASKET: ProductParams = { ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Worst-of RC on ETH, BTC, SOL, physical', underlyings: [FEEDS.ETH, FEEDS.BTC, FEEDS.SOL], settlement: 'physical' };
+const PHYS_BASKET: ProductParams = { ...EXAMPLE_PRODUCTS['reverse-convertible'], name: '12M Worst-of RC on ETH, AMZN, TSLA, physical', underlyings: [FEEDS.ETH, FEEDS.AMZN, FEEDS.TSLA], settlement: 'physical', chain: 'robinhood-testnet' };
 const PHOENIX_NO_MEMORY: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix (no memory) on ETH', memory: false };
 const ETH_COLLATERAL: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix on ETH, ETH collateral', collateral: [{ symbol: 'ETH', haircutPct: 70 }], collateralRatioPct: 50 };
 const MIXED_COLLATERAL: ProductParams = { ...EXAMPLE_PRODUCTS.fcn, name: '12M FCN on ETH, USD + ETH collateral', collateral: [{ symbol: 'USD', haircutPct: 100 }, { symbol: 'ETH', haircutPct: 70 }], collateralRatioPct: 40 };
@@ -59,7 +64,7 @@ const RUNS: Run[] = [
   // Seed template (custom workflow). Step-down: 96% at Q3 calls (level 95%), where the stock phoenix would not.
   // Along this path it pays as a phoenix calling at 95%: 2.5% at 1, 2 and 3, then 1 at the call.
   { type: 'phoenix', source: seed('Step-down'), params: seed('Step-down').basis, refParams: { ...seed('Step-down').basis!, autocallLevelPct: 95 }, path: [80, 90, 96, 0], investors: [500, 500] },
-  // Physical delivery: knocked in, each holder receives units / strike of ETH (single) or of the worst performer (SOL here).
+  // Physical delivery: knocked in, each holder receives units / strike of ETH (single, as WETH) or of the worst performer (TSLA here, Robinhood's token on Robinhood Chain).
   { type: 'fcn', params: PHYS_ETH, path: [90, 95, 80, 50], investors: [700, 300] },
   { type: 'reverse-convertible', params: PHYS_BASKET, path: [[95, 90, 92], [90, 85, 80], [80, 99, 75], [90, 95, 55]], investors: [400, 600] },
   // Servicing fee: investors get the plain phoenix payoff; the paying agent collects 0.1% of 1,000 with each of the 2 coupons paid.
@@ -84,10 +89,16 @@ const RUNS: Run[] = [
 
 const paramsOf = (r: Run) => r.params ?? EXAMPLE_PRODUCTS[r.type];
 const rows = (r: Run) => (r.path as Array<number | number[]>).map(x => (Array.isArray(x) ? x : [x]));
-const ceilBase = (x: number, decimals: number) => BigInt(Math.ceil(x * 10 ** decimals - 1e-6));
+/** Base units of `x` tokens, rounded up; tokens with more than 10 decimals (WETH, stock tokens: 18) in whole engine
+ * fixed-point steps (10 decimals). */
+const ceilBase = (x: number, decimals: number) => (decimals <= 10
+  ? BigInt(Math.ceil(x * 10 ** decimals - 1e-6))
+  : BigInt(Math.ceil(x * 1e10 - 1e-6)) * 10n ** BigInt(decimals - 10));
 const fromBase = (b: bigint, decimals: number) => Number(b) / 10 ** decimals;
-/** Engine fixed point of a token amount held in base units. */
-const fixedOf = (b: bigint, decimals: number) => b * 10n ** BigInt(10 - decimals);
+/** The smallest amount the engine's 10-decimal ledger tells apart, in base units. */
+const step = (decimals: number) => (decimals <= 10 ? 1n : 10n ** BigInt(decimals - 10));
+/** Engine fixed point (10 decimals) of a token amount held in base units, as the engine floors it. */
+const fixedOf = (b: bigint, decimals: number) => (decimals <= 10 ? b * 10n ** BigInt(10 - decimals) : b / 10n ** BigInt(decimals - 10));
 
 const INPUT = { type: 'tuple[]', components: [{ name: 'tag', type: 'uint8' }, { name: 'data', type: 'bytes32' }] } as const;
 const FIXTURE = [{
@@ -139,7 +150,7 @@ function fixture(run: Run, idx: number) {
     return compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });
   })();
   const assets = run.source ? run.source.assets! : instantiateProduct(p).assets;
-  const tokenOf = c.def.assets.map((a, i) => (a.kind === 0 ? 0 : TOKEN_ID[assets[i]?.token ?? 'tUSD'] ?? TOKEN_ID.tUSD));
+  const tokenOf = c.def.assets.map((a, i) => (a.kind === 0 ? 0 : TOKEN_ID[assets[i]?.token ?? 'USDG'] ?? TOKEN_ID.USDG));
   const assetIdx = (id: string) => assets.findIndex(a => a.id === id);
   const unds = p.underlyings;
   const basket = unds.length > 1;
@@ -157,9 +168,9 @@ function fixture(run: Run, idx: number) {
   const colPx = (sym: string, k: number) => (sym === 'USD' ? 1 : STRIKES[sym] * (run.colPath?.[sym]?.[k] ?? 100) / 100);
   const required = ratio * sold * (run.pledgeCover ?? 1);
   const pledged = eco.collateral.map(cl => {
-    const token = cl.symbol === 'USD' ? 1 : TOKEN_ID[DELIVERABLE[cl.symbol].token];
+    const token = collateralId(p, cl.symbol);
     const amount = required / eco.collateral.length / (colPx(cl.symbol, 0) * cl.haircutPct / 100);
-    const base = ceilBase(amount, DECIMALS[token]) + 1n;
+    const base = ceilBase(amount, DECIMALS[token]) + step(DECIMALS[token]);
     return { symbol: cl.symbol, token, base, amount: fromBase(base, DECIMALS[token]), haircut: cl.haircutPct / 100 };
   });
 
@@ -170,7 +181,7 @@ function fixture(run: Run, idx: number) {
   const behaviour = run.behaviour ?? {};
   const topUps: Record<string, number> = {};
   for (const [sym, amt] of Object.entries(behaviour.marginCall?.topUp ?? {})) {
-    const token = sym === 'USD' ? 1 : TOKEN_ID[DELIVERABLE[sym].token];
+    const token = collateralId(p, sym);
     topUps[sym] = fromBase(ceilBase(amt, DECIMALS[token]), DECIMALS[token]);
   }
   const ref = simulateNote(run.refParams ?? p, {
@@ -230,8 +241,8 @@ function fixture(run: Run, idx: number) {
     if (call && call.outcome === 'paid') {
       fund(t - 5, k, call.total);
       if (call.deliver) {
-        const token = TOKEN_ID[DELIVERABLE[call.deliver.symbol].token];
-        const base = ceilBase(call.deliver.perUnit * sold, DECIMALS[token]) + 1n;
+        const token = deliverId(p, call.deliver.symbol);
+        const base = ceilBase(call.deliver.perUnit * sold, DECIMALS[token]) + step(DECIMALS[token]);
         actions.push(issuerStep(t - 4, `Task_FundDelivery_${call.deliver.symbol}`, token, base, fixedOf(base, DECIMALS[token])));
       }
     }
@@ -242,7 +253,7 @@ function fixture(run: Run, idx: number) {
     if (cov && !cov.met) {
       if (cov.cured) {
         for (const [sym, amt] of Object.entries(topUps)) {
-          const token = sym === 'USD' ? 1 : TOKEN_ID[DELIVERABLE[sym].token];
+          const token = collateralId(p, sym);
           const base = ceilBase(amt, DECIMALS[token]);
           actions.push(issuerStep(t + 3, `Task_TopUp_${sym}`, token, base, fixedOf(base, DECIMALS[token])));
         }

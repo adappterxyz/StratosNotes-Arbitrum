@@ -9,7 +9,7 @@
 import { parseBpmn } from './bpmn';
 import { compile, type Compiled } from './compile';
 import { instantiateProduct } from './products/instantiate';
-import { normalizeParams, PRODUCT_LABELS, underlyingLabel, type ProductParams } from './products/params';
+import { isRetiredTestToken, normalizeParams, PRODUCT_LABELS, underlyingLabel, validateProductParams, type ProductParams } from './products/params';
 import type { AssetDefinition } from './types';
 
 export interface TemplateSource {
@@ -49,6 +49,20 @@ export function summarize(t: TemplateEntry): TemplateSummary {
 }
 
 export const templateMessage = (definition: string) => `StratosNotes: publish template ${definition}`;
+
+/**
+ * Whether the library still offers a saved template: not when its workflow names one of notes.markets' retired test
+ * tokens (tETH, tAAPL…), nor when its term sheet no longer validates (e.g. physical delivery of a stock with no real
+ * token on any chain).
+ */
+export function templateOffered(t: TemplateSource): boolean {
+  if (t.assets?.some(a => !!a.token && isRetiredTestToken(a.token))) return false;
+  const p = t.product ?? t.basis;
+  if (p && t.product && !t.bpmnXml) {
+    try { return validateProductParams(normalizeParams(p)).length === 0; } catch { return false; }
+  }
+  return true;
+}
 
 /** The BPMN a template opens with. */
 export function templateBpmn(t: TemplateSource): { bpmnXml: string; assets: AssetDefinition[] } {

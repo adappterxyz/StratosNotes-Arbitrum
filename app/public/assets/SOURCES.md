@@ -11,8 +11,15 @@ Shown small, next to the ticker, to identify an asset (nominative use). Trademar
 | NVDA | NVIDIA | simple-icons 16.35.0 (`siNvidia`) | CC0-1.0 |
 | AAPL | Apple | simple-icons 16.35.0 (`siApple`) | CC0-1.0 |
 | NFLX | Netflix | simple-icons 16.35.0 (`siNetflix`) | CC0-1.0 |
+| AMD | AMD | simple-icons 16.35.0 (`siAmd`) | CC0-1.0 |
+| PLTR | Palantir | simple-icons 16.35.0 (`siPalantir`) | CC0-1.0 |
+| META | Meta | simple-icons 16.35.0 (`siMeta`) | CC0-1.0 |
+| GOOGL | Google | simple-icons 16.35.0 (`siGoogle`) | CC0-1.0 |
+| COIN | Coinbase | simple-icons 16.35.0 (`siCoinbase`) | CC0-1.0 |
+| WETH | Ethereum (the same mark as ETH) | simple-icons 16.35.0 (`siEthereum`) | CC0-1.0 |
 | AMZN | text badge "AMZN" | no openly licensed mark (simple-icons removed Amazon) | — |
 | SPY | text badge "S&P" | an index fund; no mark used | — |
+| MSFT | text badge "MSFT" | no openly licensed mark (simple-icons removed Microsoft) | — |
 | USDG | text badge "$G" | Paxos's brand page (https://paxos.com/brand) offers no public USDG logo download (checked 2026-10-24); no lookalike drawn | — |
 | Robinhood Chain tag (receipts `*.rh`) | `robinhood-feather.svg` | https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/feather-dark.svg (official Robinhood Chain docs; same file as landing/public/logos/robinhood-chain-dark.svg) | used unmodified, as attribution |
 

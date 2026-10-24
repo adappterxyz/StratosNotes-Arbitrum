@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { DOMParser, type Element } from '@xmldom/xmldom';
 import {
   compileTemplate, definitionId, defToBpmn, draftToIR, EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, instantiateProduct, irToBpmn, irToDraft, parseBpmn,
-  decodeDef, type ProductParams,
+  decodeDef, FEEDS, type ProductParams,
 } from '../src';
 import { SEED_TEMPLATES } from '../src/products/library';
 import { templateBpmn } from '../src/templates';
@@ -66,7 +66,7 @@ const PRODUCTS: Record<string, ProductParams> = {
   ...EXAMPLE_PRODUCTS,
   'worst-of': EXAMPLE_WORST_OF,
   'physical': { ...EXAMPLE_PRODUCTS['reverse-convertible'], settlement: 'physical' },
-  'worst-of physical': { ...EXAMPLE_WORST_OF, settlement: 'physical' },
+  'worst-of physical': { ...EXAMPLE_WORST_OF, chain: 'robinhood-testnet', underlyings: [FEEDS.ETH, FEEDS.AMZN, FEEDS.TSLA], settlement: 'physical' },
 };
 
 describe('diagram layout', () => {

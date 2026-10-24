@@ -12,7 +12,7 @@
  * since the phase depends on the time) and the app.
  */
 import {
-  economicsOf, MILESTONE_NAMES, MILESTONES, normalizeParams, PRODUCT_LABELS, SCALE, simulateNote, simulatePerf, totalPerUnit, underlyingLabel,
+  CASH_TOKENS, collateralSymbolOfAsset, economicsOf, MILESTONE_NAMES, MILESTONES, normalizeParams, PRODUCT_LABELS, SCALE, simulateNote, simulatePerf, totalPerUnit, underlyingLabel,
   type Milestone, type ProductParams, type WorkflowDef,
 } from '@sn/core';
 
@@ -34,9 +34,9 @@ export interface ChainInfo {
 /** Known chains. RPCs and engine addresses come from deployment config, not from here. */
 export const CHAINS: Record<string, ChainInfo> = {
   'arbitrum-sepolia': { key: 'arbitrum-sepolia', family: 'evm', name: 'Arbitrum Sepolia', chainId: 421614, testnet: true, explorer: 'https://sepolia.arbiscan.io', cre: true,
-    stablecoin: { symbol: 'tUSD', decimals: 6 } },
+    stablecoin: { symbol: 'USDG', address: CASH_TOKENS['arbitrum-sepolia'], decimals: 6 } },
   'robinhood-testnet': { key: 'robinhood-testnet', family: 'evm', name: 'Robinhood Chain testnet', chainId: 46630, testnet: true, explorer: 'https://explorer.testnet.chain.robinhood.com', cre: true,
-    stablecoin: { symbol: 'tUSD', decimals: 6 } },
+    stablecoin: { symbol: 'USDG', address: CASH_TOKENS['robinhood-testnet'], decimals: 6 } },
   // Config only (no deployment yet): mainnet settlement in real stablecoins.
   'arbitrum-one': { key: 'arbitrum-one', family: 'evm', name: 'Arbitrum One', chainId: 42161, testnet: false, explorer: 'https://arbiscan.io', cre: true,
     stablecoin: { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6 } },
@@ -295,11 +295,8 @@ export function noteView(def: WorkflowDef, s: NoteState, now = Date.now() / 1000
   };
 }
 
-/** "Collateral tETH" -> ETH; "Collateral USDG" / "Collateral tUSD" / "Collateral USDC" -> USD (the cash token). */
-const collateralSymbol = (assetName: string) => {
-  const m = /^Collateral t?([A-Z]+)$/.exec(assetName);
-  return m ? (m[1] === 'USDC' || m[1] === 'USDG' ? 'USD' : m[1]) : null;
-};
+/** "Collateral WETH" -> ETH, "Collateral TSLA.rh" -> TSLA, "Collateral USDG" / "Collateral tUSD" -> USD (older notes' "Collateral tETH" -> ETH). */
+const collateralSymbol = collateralSymbolOfAsset;
 /** The cash asset's name: USDG for new notes, USDC for notes issued before USDG. */
 const isCashName = (name: string) => name === 'USDG' || name === 'USDC';
 

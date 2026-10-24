@@ -248,7 +248,7 @@ export default function OfferingPage() {
                 {me ? (busy ? 'Confirm in your wallet…' : `Subscribe for ${fmtMoney(cost)} ${sym}`) : 'Connect a wallet to subscribe'}
               </button>
               {subStep && <Steps items={[{ label: `Approve ${sym} (one time)`, state: subStep.approve }, { label: 'Subscribe: pay and receive units in one transaction', state: subStep.swap }]} />}
-              <p className="xs muted">Need {sym}? Use <b>Get test tokens</b> in the top bar.</p>
+              <p className="xs muted">Need {sym}? Use <b>Get testnet tokens</b> in the top bar.</p>
               {emailGate.dialog}
             </section>
           )}

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Deploy StratosNotes to the testnets: FlowEngine (CRE MockKeystoneForwarder, fallback reporter OFF), NotesLens,
-# the test tokens (tUSD, tETH, tBTC, tSOL, tTSLA, tNVDA, tAAPL, tSPY) and their TokenFaucet. Writes
-# deployments/<chain>.json, then the CRE staging config and the server configs (scripts/server-config.ts).
+# Deploy StratosNotes to the testnets: FlowEngine (CRE MockKeystoneForwarder, fallback reporter OFF) and NotesLens.
+# Notes use real tokens only (USDG, WETH, Robinhood's stock tokens: packages/core CHAIN_TOKENS), so the retired test
+# tokens and their TokenFaucet are no longer deployed (TEST_TOKENS=1 brings them back, e.g. for a rehearsal that seeds
+# with CASH=tUSD; rehearsals default to it). Writes deployments/<chain>.json, then the CRE staging config and the
+# server configs (scripts/server-config.ts).
 #
 #   bash scripts/deploy-testnets.sh                          # both chains
 #   CHAINS=robinhood-testnet bash scripts/deploy-testnets.sh # one chain
 #   REHEARSAL=1 bash scripts/deploy-testnets.sh              # against local anvil forks; writes deployments/local/rehearsal/
 #   REHEARSAL=1 SEED=1 bash scripts/deploy-testnets.sh       # ... and issue a demo note per chain on them
-#   TEST_TOKENS=0 KEEP_TOKENS=deployments/archive/v3 bash scripts/deploy-testnets.sh  # new engine, same tokens
+#   KEEP_TOKENS=deployments/archive/v3 bash scripts/deploy-testnets.sh  # new engine; keep the old tUSD for its notes
 #
 # The deployer key is read from .keys/deployer.json (never printed) and is OWNER of the engine, tokens and faucet.
 # Re-running redeploys: move deployments/<chain>.json aside first if you mean to keep the old one.
@@ -53,7 +55,7 @@ for c in $CHAINS; do
   # never echoed.
   head="$(cast block-number --rpc-url "$rpc")" # the chain's own block (Solidity's block.number is L1's on Arbitrum)
   (cd packages/evm-engine && export DEPLOYER_KEY="$(python3 -c "import json;k=json.load(open('$ROOT/.keys/deployer.json'))[0]['private_key'];print(k if k.startswith('0x') else '0x'+k)")" && \
-    CHAIN="$c" FORWARDER_MODE=mock OWNER="$DEPLOYER" TEST_TOKENS="${TEST_TOKENS:-1}" OUT="$ROOT/$OUTDIR/$c.json" \
+    CHAIN="$c" FORWARDER_MODE=mock OWNER="$DEPLOYER" TEST_TOKENS="${TEST_TOKENS:-${REHEARSAL:-0}}" OUT="$ROOT/$OUTDIR/$c.json" \
     VERIFIER="$VERIFIER" REQUIRE_EMAIL="${REQUIRE_EMAIL:-1}" \
     forge script script/Deploy.s.sol --rpc-url "$rpc" --broadcast --slow > "$ROOT/$OUTDIR/deploy-$c.log" 2>&1) \
     || { echo "$c: deploy failed (see $OUTDIR/deploy-$c.log)"; exit 1; }
@@ -69,7 +71,7 @@ done
 if [ "${REHEARSAL:-0}" = "1" ] && [ "${SEED:-0}" = "1" ]; then
   for c in $CHAINS; do
     echo "== seed: $c"
-    CHAIN="$c" RPC="${RPC[$c]}" DEPLOY_DIR="$OUTDIR" NOTE="$([ "$c" = robinhood-testnet ] && echo equity || echo crypto)" npx tsx scripts/seed-note.ts
+    CHAIN="$c" RPC="${RPC[$c]}" DEPLOY_DIR="$OUTDIR" CASH="${CASH:-tUSD}" NOTE="$([ "$c" = robinhood-testnet ] && echo equity || echo crypto)" npx tsx scripts/seed-note.ts
   done
 fi
 
