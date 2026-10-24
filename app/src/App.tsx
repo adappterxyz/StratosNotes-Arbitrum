@@ -18,7 +18,7 @@ function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
-    try { localStorage.setItem('sn-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
+    try { localStorage.setItem('nm-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
     window.dispatchEvent(new Event('sn-theme'));
   }, [dark]);
   return (
