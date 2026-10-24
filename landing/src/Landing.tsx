@@ -7,8 +7,6 @@ import { DEFAULT_START, type ExplorerStart } from './explorer/start';
 import proofJson from './proof.json';
 
 const APP_URL = '/app/';
-const FLOW_URL = 'https://stratoslab.app';
-const SOLANA_BUILD = 'https://sp.stratoslab.app';
 const STRATOS_URL = 'https://stratoslab.xyz';
 const REPO_URL = 'https://github.com/adappterxyz/StratosNotes-Arbitrum';
 
@@ -208,8 +206,6 @@ export default function Landing() {
             <a href={APP_URL}>App</a>
             <a href={REPO_URL} target="_blank" rel="noopener">GitHub</a>
             <a href={STRATOS_URL} target="_blank" rel="noopener">stratoslab.xyz</a>
-            <a href={FLOW_URL} target="_blank" rel="noopener">stratoslab.app</a>
-            <a href={SOLANA_BUILD} target="_blank" rel="noopener">sp.stratoslab.app</a>
           </div>
           <small className="by"><img src="/logos/stratos-mark.png" alt="" width={16} height={16} />by Stratos Lab · Testnet only · Trademarks belong to their owners; no endorsement implied.</small>
         </div>
