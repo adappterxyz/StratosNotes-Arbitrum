@@ -223,7 +223,8 @@ function useMyLocks(leg: Leg, address: string | null, tick: number) {
     void read();
     const t = setInterval(read, 15_000);
     return () => { live = false; clearInterval(t); };
-  }, [leg.vault, leg.gateway, leg.asset.key, leg.home.key, address, tick, byKey]);
+  // A leg is static deployment config identified by its home/asset keys; engine and receipts come with it.
+  }, [leg.vault, leg.gateway, leg.asset.key, leg.home.key, address, tick, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return locks;
 }
 

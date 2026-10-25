@@ -19,7 +19,6 @@ const NOW = 1_700_000_100;
 const issuerAcct = privateKeyToAccount(generatePrivateKey());
 const aliceAcct = privateKeyToAccount(generatePrivateKey());
 const bobAcct = privateKeyToAccount(generatePrivateKey());
-const verifier = privateKeyToAccount(generatePrivateKey());
 const ISSUER = issuerAcct.address.toLowerCase(), ALICE = aliceAcct.address.toLowerCase(), BOB = bobAcct.address.toLowerCase();
 
 const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);

@@ -300,10 +300,10 @@ try {
   const colRow = page.locator(`[data-other-asset="${colName}"]`);
   await colRow.waitFor({ timeout: 60_000 });
   const usdc = chainNote.assetTokens[1] as Address;
-  let before = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
+  const before = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
   await colRow.getByRole('button').click();
   await page.getByText('Withdrawn to your wallet.').waitFor({ timeout: 120_000 });
-  let after = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
+  const after = await client.readContract({ address: usdc, abi: erc20Abi, functionName: 'balanceOf', args: [acct(3).address] });
   check(Math.abs(Number(after - before) / 1e6 - DEFAULTS[0].units * out2.perUnit.collateral.USD) < 0.01, `Investor A withdrew ${Number(after - before) / 1e6} USDC of collateral to the wallet`);
   await page.screenshot({ path: 'deployments/local/dev/e2e-default.png', fullPage: true });
 

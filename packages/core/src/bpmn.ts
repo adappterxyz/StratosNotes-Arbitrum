@@ -14,6 +14,7 @@ export const FLOW_NS = 'https://stratosnotes.dev/bpmn';
 
 const NODE_TYPES: NodeType[] = ['startEvent', 'endEvent', 'userTask', 'serviceTask', 'task', 'receiveTask', 'sendTask', 'exclusiveGateway', 'parallelGateway', 'intermediateCatchEvent'];
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- structural DOM shape shared by the browser DOMParser and @xmldom; child nodes are narrowed by nodeType below
 type El = { localName: string; getAttribute(n: string): string | null; childNodes: ArrayLike<any>; textContent: string | null };
 
 const local = (e: El) => e.localName || '';

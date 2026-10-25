@@ -12,7 +12,7 @@
  * since the phase depends on the time) and the app.
  */
 import {
-  CASH_TOKENS, collateralSymbolOfAsset, economicsOf, MILESTONE_NAMES, MILESTONES, normalizeParams, PRODUCT_LABELS, SCALE, simulateNote, simulatePerf, totalPerUnit, underlyingLabel,
+  CASH_TOKENS, collateralSymbolOfAsset, MILESTONE_NAMES, MILESTONES, normalizeParams, PRODUCT_LABELS, SCALE, simulateNote, simulatePerf, totalPerUnit, underlyingLabel,
   type Milestone, type ProductParams, type WorkflowDef,
 } from '@sn/core';
 
@@ -304,7 +304,7 @@ const isCashName = (name: string) => name === 'USDG' || name === 'USDC';
  * The note's economics from its state: collateral in escrow and its coverage, the payment schedule with each
  * period's status, and whether the note is in a margin call, a grace period, defaulted or released.
  */
-export function economicsView(def: WorkflowDef, s: NoteState, params: ProductParams, reference: boolean, perfs: number[], unds: UnderlyingState[], now: number): NoteEconomics | null {
+export function economicsView(def: WorkflowDef, s: NoteState, params: ProductParams, reference: boolean, perfs: number[], unds: UnderlyingState[], _now: number): NoteEconomics | null {
   const escrowRole = def.roleFlags?.findIndex(f => (f & 1) === 1) ?? -1;
   if (escrowRole < 0) return null;
   const escrow = s.roles[escrowRole]?.toLowerCase();

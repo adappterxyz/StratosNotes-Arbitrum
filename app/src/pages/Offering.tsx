@@ -13,7 +13,7 @@ import PayoffChart from '../components/PayoffChart';
 import { Addr, Steps, When, type StepState } from '../components/ui';
 import { plainTerms } from '../lib/plain';
 import { useAddress, useChains, useSigner, cashSymbol, entryFor, onRobinhoodChain, ROBINHOOD_LEGACY_LABEL } from '../lib/chains';
-import { agentLabel, errText, fmtDate, fmtMoney, fmtPct, fmtPrice, short } from '../lib/format';
+import { agentLabel, errText, fmtMoney, fmtPct, fmtPrice } from '../lib/format';
 import { useDefinition, useNote, useNow } from '../lib/live';
 import { CurrentState } from '../components/NoteState';
 import { AssetIcon, AssetStack } from '../components/AssetIcon';

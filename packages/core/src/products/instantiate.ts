@@ -34,7 +34,7 @@
  */
 import { buildWorkflow, chain, field, type BuildSpec, type BuiltWorkflow, type SpecFlow, type SpecMessage, type SpecNode } from '../bpmn';
 import { productNotifications } from '../notify';
-import type { AssetDefinition, AssetOperation, NodeProps, TemplateField } from '../types';
+import type { AssetDefinition, AssetOperation, TemplateField } from '../types';
 import {
   CASH_TOKEN, collateralTokenOf, deliverableToken, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
   validateTermSheet, type CollateralSymbol, type ProductParams, type Underlying,
@@ -221,7 +221,7 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
    * A payment: wait for payment date k, then pay holders from escrow if the issuer funded it (due per unit,
    * `deliver` tokens per unit for physical settlement), else grace, then pay or default. Returns the pay step.
    */
-  let firstSettle: Record<number, string> = {};
+  const firstSettle: Record<number, string> = {};
   const settle = (k: number, tag: string, dueExpr: string, opts: { final: boolean; deliver?: { sym: string; perUnit: string } }) => {
     const due = `S_Due${k}${tag}`, gw = `GW_Funded${k}${tag}`, missed = `Task_Missed${k}${tag}`, grace = `Recv_Grace${k}${tag}`, cured = `GW_Cured${k}${tag}`, pay = `Task_Pay${k}${tag}`;
     const funded = `balance(${ESCROW}, cash) >= dueTotal${opts.deliver ? ` and balance(${ESCROW}, ${deliverAsset(opts.deliver.sym)}) >= sold * ${opts.deliver.perUnit}` : ''}`;
