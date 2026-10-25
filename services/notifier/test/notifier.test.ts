@@ -143,6 +143,13 @@ describe('planning (pure)', () => {
     expect(plan(state(), view(), events).filter(p => p.template === 'payment-made')).toEqual([]);
   });
 
+  it('a funding call still goes out in the grace period (a short schedule can pass the payment date before indexing)', () => {
+    const inGrace = NOW + 3 * DAY + 60; // past the payment date, before the grace period ends
+    const out = plan(state({ tokens: [step('Task_Fund1')] }), view({ economics: econ('due') }), [], inGrace).filter(p => p.sendAfter <= inGrace);
+    expect(out.map(p => p.template)).toEqual(['payment-missed']);
+    expect(plan(state({ tokens: [step('Task_Fund1')] }), view({ economics: econ('due') }), [], NOW + 5 * DAY + 1)).toEqual([]);
+  });
+
   it('a definition\'s own declarations replace the defaults', () => {
     const own: WorkflowDef = { ...def, meta: JSON.stringify({ notify: { Task_Pay1: [{ on: 'done', audience: 'role:Paying Agent', category: 'payouts', subject: 'Paid {{period}}', body: 'On {{note}}' }] } }) };
     const events = [ev('0xt6', 'StepRun', { step: step('Task_Pay1'), kind: 3, actor: ZERO })];

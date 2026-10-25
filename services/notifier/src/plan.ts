@@ -241,7 +241,10 @@ export function planNote(p: PlanInput): Planned[] {
     } else if (st.until) {
       deadline = st.until.kind === 0 ? Number(st.until.at) : field(def.fields[st.until.field]?.name ?? '');
     }
-    if (deadline !== null && now >= deadline) continue; // too late to act on
+    // Too late to act on: for a payment, only once its grace period ends (the issuer can still fund in grace, and a
+    // short schedule can pass the payment date before the observation is even indexed).
+    const cutoff = /^Task_Fund\d+$/.test(st.id) && graceEnds !== null ? graceEnds : deadline;
+    if (cutoff !== null && now >= cutoff) continue;
     ds.forEach((d, di) => {
       const addrs = d.audience === 'issuer' ? [issuer] : d.audience === 'holders' ? currentHolders : d.audience === 'subscribers' ? subscribers
         : d.audience.startsWith('role:') ? [roleAddress(def, s, d.audience.slice(5))].filter((x): x is string => !!x) : [];
@@ -249,7 +252,10 @@ export function planNote(p: PlanInput): Planned[] {
       for (const a of addrs) {
         if (!a || a === ZERO) continue;
         const key = `${p.noteId}|${st.id}|waiting|${di}|${a}`;
-        push({ dedupe: key, address: a, category: d.category, template: d.template, subject: d.subject, body: d.body, vars, sendAfter: now, expiresAt: deadline });
+        const late = deadline !== null && now >= deadline && d.template === 'payment-due';
+        // Past the payment date but still in grace: the missed-payment wording ("you can still fund it until …").
+        if (late) push({ dedupe: `${key}|grace`, address: a, category: d.category, template: 'payment-missed', vars, sendAfter: now, expiresAt: cutoff });
+        else push({ dedupe: key, address: a, category: d.category, template: d.template, subject: d.subject, body: d.body, vars, sendAfter: now, expiresAt: deadline });
         for (const off of d.remind ?? []) {
           if (deadline === null) break;
           const at = deadline - off;
