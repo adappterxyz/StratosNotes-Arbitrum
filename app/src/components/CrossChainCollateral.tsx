@@ -19,7 +19,14 @@ const ccipLink = (id: string) => `https://ccip.chain.link/msg/${id}`;
 const receiptLabel = (sym: string) => sym.replace(/\.rh$/, '');
 
 /** `version`: set for an earlier engine's own gateway–vault pair (its notes' collateral is released through it). */
-type Leg = { home: ChainConfig; asset: ChainConfig; vault: `0x${string}`; gateway: `0x${string}`; receipts: Record<string, CrossChainReceipt>; version?: number };
+type Leg = {
+  home: ChainConfig;
+  asset: ChainConfig;
+  vault: `0x${string}`;
+  gateway: `0x${string}`;
+  receipts: Record<string, CrossChainReceipt>;
+  version?: number;
+};
 
 /** The home chain and its first asset chain, when this deployment has cross-chain collateral. */
 export function useCrossChain(): Leg | null {
@@ -29,9 +36,9 @@ export function useCrossChain(): Leg | null {
 }
 
 function currentLeg(config: ReturnType<typeof useChains>['config']): Leg | null {
-  const home = config.chains.find(c => c.crossChain?.role === 'home');
+  const home = config.chains.find((c) => c.crossChain?.role === 'home');
   const r = home?.crossChain?.remotes?.[0];
-  const asset = r && config.chains.find(c => c.key === r.chain);
+  const asset = r && config.chains.find((c) => c.key === r.chain);
   if (!home || !r || !asset || !home.crossChain?.gateway) return null;
   return { home, asset, vault: r.vault, gateway: home.crossChain.gateway, receipts: r.receipts };
 }
@@ -49,14 +56,21 @@ function legsOf(config: ReturnType<typeof useChains>['config']): Leg[] {
     for (const l of c.legacyEngines ?? []) {
       const xc = l.crossChain;
       const r = xc?.role === 'home' ? xc.remotes?.[0] : undefined;
-      const asset = r && config.chains.find(x => x.key === r.chain);
+      const asset = r && config.chains.find((x) => x.key === r.chain);
       if (!xc?.gateway || !r || !asset) continue;
-      out.push({ home: legacyConfig(c, l), asset, vault: r.vault, gateway: xc.gateway, receipts: r.receipts, version: l.version });
+      out.push({
+        home: legacyConfig(c, l),
+        asset,
+        vault: r.vault,
+        gateway: xc.gateway,
+        receipts: r.receipts,
+        version: l.version,
+      });
     }
     // The current engine's earlier pairs (a v1 gateway: receipts held in wallets redeem by hand).
     for (const xc of c.previousCrossChain ?? []) {
       const r = xc?.role === 'home' ? xc.remotes?.[0] : undefined;
-      const asset = r && config.chains.find(x => x.key === r.chain);
+      const asset = r && config.chains.find((x) => x.key === r.chain);
       if (!xc?.gateway || !r || !asset) continue;
       out.push({ home: c, asset, vault: r.vault, gateway: xc.gateway, receipts: r.receipts });
     }
@@ -78,13 +92,22 @@ function useReceiptBalances(leg: Leg | null, syms: string[], tick: number) {
       const out: Record<string, bigint> = {};
       for (const s of syms) {
         const r = leg.receipts[s];
-        if (r) out[s] = await client.readContract({ address: r.receipt, abi: erc20Abi, functionName: 'balanceOf', args: [address as `0x${string}`] });
+        if (r)
+          out[s] = await client.readContract({
+            address: r.receipt,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [address as `0x${string}`],
+          });
       }
       if (live) setBal(out);
     };
     read().catch(() => {});
     const t = setInterval(() => read().catch(() => {}), 20_000);
-    return () => { live = false; clearInterval(t); };
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
   }, [leg, address, key, tick, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return bal;
 }
@@ -98,8 +121,15 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
   const [tick, setTick] = useState(0);
   const [sym, setSym] = useState(needed[0]?.receipt ?? 'TSLA.rh');
   const [amount, setAmount] = useState(String(needed[0]?.amount ?? ''));
-  const [state, setState] = useState<{ busy: boolean; text: string; bad?: boolean; msg?: string }>({ busy: false, text: '' });
-  const bal = useReceiptBalances(leg, needed.map(n => n.receipt), tick);
+  const [state, setState] = useState<{ busy: boolean; text: string; bad?: boolean; msg?: string }>({
+    busy: false,
+    text: '',
+  });
+  const bal = useReceiptBalances(
+    leg,
+    needed.map((n) => n.receipt),
+    tick,
+  );
   if (!leg) return null;
   const r = leg.receipts[sym];
 
@@ -111,53 +141,133 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
       const client = byKey[leg.asset.key].client;
       const units = parseUnits(amount || '0', r.decimals);
       if (units <= 0n) throw new Error('Enter an amount to lock.');
-      const allowance = await client.readContract({ address: r.token, abi: erc20Abi, functionName: 'allowance', args: [address as `0x${string}`, leg.vault] });
+      const allowance = await client.readContract({
+        address: r.token,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [address as `0x${string}`, leg.vault],
+      });
       if (allowance < units) {
         setState({ busy: true, text: `Approve ${receiptLabel(sym)} for the vault…` });
-        const h = await w.writeContract({ address: r.token, abi: erc20Abi, functionName: 'approve', args: [leg.vault, units], account: w.account!, chain: w.chain });
+        const h = await w.writeContract({
+          address: r.token,
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [leg.vault, units],
+          account: w.account!,
+          chain: w.chain,
+        });
         await client.waitForTransactionReceipt({ hash: h });
       }
-      const fee = await client.readContract({ address: leg.vault, abi: remoteVaultAbi, functionName: 'quoteLock', args: [r.token, units, address as `0x${string}`] }) as bigint;
-      setState({ busy: true, text: `Lock ${amount} ${receiptLabel(sym)} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
-      const hash = await w.writeContract({ address: leg.vault, abi: remoteVaultAbi, functionName: 'lock', args: [r.token, units, address as `0x${string}`], value: fee, account: w.account!, chain: w.chain });
+      const fee = (await client.readContract({
+        address: leg.vault,
+        abi: remoteVaultAbi,
+        functionName: 'quoteLock',
+        args: [r.token, units, address as `0x${string}`],
+      })) as bigint;
+      setState({
+        busy: true,
+        text: `Lock ${amount} ${receiptLabel(sym)} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…`,
+      });
+      const hash = await w.writeContract({
+        address: leg.vault,
+        abi: remoteVaultAbi,
+        functionName: 'lock',
+        args: [r.token, units, address as `0x${string}`],
+        value: fee,
+        account: w.account!,
+        chain: w.chain,
+      });
       const rc = await client.waitForTransactionReceipt({ hash });
       const msg = messageIdOf(rc.logs);
-      setState({ busy: false, text: `Locked on ${leg.asset.name}. Chainlink CCIP is delivering it to ${leg.home.name}: usually 15–25 minutes, then it shows here, ready to pledge.`, msg });
-      setTick(t => t + 1);
-    } catch (e) { setState({ busy: false, text: errText(e), bad: true }); }
+      setState({
+        busy: false,
+        text: `Locked on ${leg.asset.name}. Chainlink CCIP is delivering it to ${leg.home.name}: usually 15–25 minutes, then it shows here, ready to pledge.`,
+        msg,
+      });
+      setTick((t) => t + 1);
+    } catch (e) {
+      setState({ busy: false, text: errText(e), bad: true });
+    }
   };
 
   return (
     <div className="xc-panel stack">
-      <div className="row" style={{ gap: 8 }}><Lock className="i" /><strong>Lock collateral on {leg.asset.name}</strong></div>
-      <p className="xs muted">This note's collateral stays on {leg.asset.name}: lock it in the vault there, and Chainlink CCIP credits receipts to you on {leg.home.name} to pledge at Approve Terms. The tokens never leave {leg.asset.name}. Delivery takes about 15–25 minutes, so lock well before the strike.</p>
+      <div className="row" style={{ gap: 8 }}>
+        <Lock className="i" />
+        <strong>Lock collateral on {leg.asset.name}</strong>
+      </div>
+      <p className="xs muted">
+        This note's collateral stays on {leg.asset.name}: lock it in the vault there, and Chainlink CCIP credits
+        receipts to you on {leg.home.name} to pledge at Approve Terms. The tokens never leave {leg.asset.name}. Delivery
+        takes about 15–25 minutes, so lock well before the strike.
+      </p>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <label className="field" htmlFor="xc-token"><span className="lbl">Token</span>
-          <select id="xc-token" value={sym} onChange={e => setSym(e.target.value)}>
-            {needed.map(n => <option key={n.receipt} value={n.receipt}>{receiptLabel(n.receipt)}</option>)}
+        <label className="field" htmlFor="xc-token">
+          <span className="lbl">Token</span>
+          <select id="xc-token" value={sym} onChange={(e) => setSym(e.target.value)}>
+            {needed.map((n) => (
+              <option key={n.receipt} value={n.receipt}>
+                {receiptLabel(n.receipt)}
+              </option>
+            ))}
           </select>
         </label>
-        <label className="field" htmlFor="xc-amount"><span className="lbl">Amount</span>
-          <input id="xc-amount" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} />
+        <label className="field" htmlFor="xc-amount">
+          <span className="lbl">Amount</span>
+          <input id="xc-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
-        <button className="btn primary" onClick={lock} disabled={state.busy || !address}>Lock on {leg.asset.name}</button>
+        <button className="btn primary" onClick={lock} disabled={state.busy || !address}>
+          Lock on {leg.asset.name}
+        </button>
       </div>
       <ul className="xs" style={{ margin: 0, paddingLeft: 18 }}>
-        {needed.map(n => (
-          <li key={n.receipt}>{receiptLabel(n.receipt)} locked on {leg.asset.name}, ready to pledge: <strong>{leg.receipts[n.receipt] ? formatUnits(bal[n.receipt] ?? 0n, leg.receipts[n.receipt].decimals) : '—'}</strong>{n.amount ? ` (this issuance needs ${n.amount})` : ''}</li>
+        {needed.map((n) => (
+          <li key={n.receipt}>
+            {receiptLabel(n.receipt)} locked on {leg.asset.name}, ready to pledge:{' '}
+            <strong>
+              {leg.receipts[n.receipt] ? formatUnits(bal[n.receipt] ?? 0n, leg.receipts[n.receipt].decimals) : '—'}
+            </strong>
+            {n.amount ? ` (this issuance needs ${n.amount})` : ''}
+          </li>
         ))}
       </ul>
-      {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
+      {state.text && (
+        <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>
+          {state.text}{' '}
+          {state.msg && (
+            <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">
+              Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+            </a>
+          )}
+        </div>
+      )}
       <LockTracker leg={leg} address={address} tick={tick} />
     </div>
   );
 }
 
-const lockedEvent = parseAbiItem('event Locked(bytes32 indexed lockId, address indexed from, address indexed beneficiary, address token, uint256 amount, bytes32 messageId, uint256 fee)');
-const creditedEvent = parseAbiItem('event LockCredited(bytes32 indexed lockId, uint64 indexed chainSelector, address indexed account, address receipt, uint256 amount, bytes32 messageId)');
-type TrackedLock = { lockId: `0x${string}`; token: string; amount: bigint; messageId: string; tx: string; at: number; credited: string | null;
-  creditedBlock?: bigint; receipt?: string; fate?: { kind: 'sent-back' | 'pledged'; tx: string } };
-const redeemSentEvent = parseAbiItem('event RedeemSent(bytes32 indexed redeemId, uint64 indexed chainSelector, address indexed from, address to, address receipt, uint256 amount, bytes32 messageId, uint256 fee)');
+const lockedEvent = parseAbiItem(
+  'event Locked(bytes32 indexed lockId, address indexed from, address indexed beneficiary, address token, uint256 amount, bytes32 messageId, uint256 fee)',
+);
+const creditedEvent = parseAbiItem(
+  'event LockCredited(bytes32 indexed lockId, uint64 indexed chainSelector, address indexed account, address receipt, uint256 amount, bytes32 messageId)',
+);
+type TrackedLock = {
+  lockId: `0x${string}`;
+  token: string;
+  amount: bigint;
+  messageId: string;
+  tx: string;
+  at: number;
+  credited: string | null;
+  creditedBlock?: bigint;
+  receipt?: string;
+  fate?: { kind: 'sent-back' | 'pledged'; tx: string };
+};
+const redeemSentEvent = parseAbiItem(
+  'event RedeemSent(bytes32 indexed redeemId, uint64 indexed chainSelector, address indexed from, address to, address receipt, uint256 amount, bytes32 messageId, uint256 fee)',
+);
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
 
 /**
@@ -170,7 +280,8 @@ function useMyLocks(leg: Leg, address: string | null, tick: number) {
   useEffect(() => {
     if (!address) return;
     let live = true;
-    const asset = byKey[leg.asset.key]?.client, home = byKey[leg.home.key]?.client;
+    const asset = byKey[leg.asset.key]?.client,
+      home = byKey[leg.home.key]?.client;
     if (!asset || !home) return;
     const read = async () => {
       try {
@@ -178,52 +289,125 @@ function useMyLocks(leg: Leg, address: string | null, tick: number) {
         const found: TrackedLock[] = [];
         // Recent history in a few ranges (the asset chain makes several blocks a second).
         for (let i = 0n; i < 4n && found.length < 3; i++) {
-          const to = head - i * 50_000n, from = to - 49_999n;
-          const logs = await asset.getLogs({ address: leg.vault, event: lockedEvent, args: { beneficiary: address as `0x${string}` }, fromBlock: from > 0n ? from : 0n, toBlock: to });
+          const to = head - i * 50_000n,
+            from = to - 49_999n;
+          const logs = await asset.getLogs({
+            address: leg.vault,
+            event: lockedEvent,
+            args: { beneficiary: address as `0x${string}` },
+            fromBlock: from > 0n ? from : 0n,
+            toBlock: to,
+          });
           for (const l of logs.reverse()) {
             const b = await asset.getBlock({ blockNumber: l.blockNumber! });
-            found.push({ lockId: l.args.lockId!, token: l.args.token!, amount: l.args.amount!, messageId: l.args.messageId!, tx: l.transactionHash!, at: Number(b.timestamp), credited: null });
+            found.push({
+              lockId: l.args.lockId!,
+              token: l.args.token!,
+              amount: l.args.amount!,
+              messageId: l.args.messageId!,
+              tx: l.transactionHash!,
+              at: Number(b.timestamp),
+              credited: null,
+            });
           }
         }
-        const recent = found.filter(x => Date.now() / 1000 - x.at < 86_400).slice(0, 3);
+        const recent = found.filter((x) => Date.now() / 1000 - x.at < 86_400).slice(0, 3);
         if (recent.length) {
           const hHead = await home.getBlockNumber();
           for (let i = 0n; i < 6n; i++) {
-            const to = hHead - i * 10_000n, from = to - 9_999n;
-            const logs = await home.getLogs({ address: leg.gateway, event: creditedEvent, args: { lockId: recent.map(x => x.lockId) }, fromBlock: from, toBlock: to });
-            for (const l of logs) { const x = recent.find(y => y.lockId === l.args.lockId); if (x) { x.credited = l.transactionHash!; x.creditedBlock = l.blockNumber!; x.receipt = l.args.receipt!; } }
-            if (recent.every(x => x.credited)) break;
+            const to = hHead - i * 10_000n,
+              from = to - 9_999n;
+            const logs = await home.getLogs({
+              address: leg.gateway,
+              event: creditedEvent,
+              args: { lockId: recent.map((x) => x.lockId) },
+              fromBlock: from,
+              toBlock: to,
+            });
+            for (const l of logs) {
+              const x = recent.find((y) => y.lockId === l.args.lockId);
+              if (x) {
+                x.credited = l.transactionHash!;
+                x.creditedBlock = l.blockNumber!;
+                x.receipt = l.args.receipt!;
+              }
+            }
+            if (recent.every((x) => x.credited)) break;
           }
           // What became of each credited lock: sent back (RedeemSent) or pledged into a note (receipt moved to the
           // engine), matched oldest first; otherwise it is still in the wallet, ready to pledge.
-          const credited = recent.filter(x => x.creditedBlock).sort((a, b) => Number(a.creditedBlock! - b.creditedBlock!));
+          const credited = recent
+            .filter((x) => x.creditedBlock)
+            .sort((a, b) => Number(a.creditedBlock! - b.creditedBlock!));
           if (credited.length) {
             const since = credited[0].creditedBlock!;
-            const outs: Array<{ kind: 'sent-back' | 'pledged'; receipt: string; amount: bigint; block: bigint; tx: string }> = [];
+            const outs: Array<{
+              kind: 'sent-back' | 'pledged';
+              receipt: string;
+              amount: bigint;
+              block: bigint;
+              tx: string;
+            }> = [];
             const engine = leg.home.engine as `0x${string}` | undefined;
             for (let from = since; from <= hHead; from += 10_000n) {
               const to = from + 9_999n > hHead ? hHead : from + 9_999n;
-              const sent = await home.getLogs({ address: leg.gateway, event: redeemSentEvent, args: { from: address as `0x${string}` }, fromBlock: from, toBlock: to });
-              for (const l of sent) outs.push({ kind: 'sent-back', receipt: l.args.receipt!.toLowerCase(), amount: l.args.amount!, block: l.blockNumber!, tx: l.transactionHash! });
+              const sent = await home.getLogs({
+                address: leg.gateway,
+                event: redeemSentEvent,
+                args: { from: address as `0x${string}` },
+                fromBlock: from,
+                toBlock: to,
+              });
+              for (const l of sent)
+                outs.push({
+                  kind: 'sent-back',
+                  receipt: l.args.receipt!.toLowerCase(),
+                  amount: l.args.amount!,
+                  block: l.blockNumber!,
+                  tx: l.transactionHash!,
+                });
               if (engine) {
-                const pl = await home.getLogs({ address: Object.values(leg.receipts).map(r => r.receipt), event: transferEvent, args: { from: address as `0x${string}`, to: engine }, fromBlock: from, toBlock: to });
-                for (const l of pl) outs.push({ kind: 'pledged', receipt: l.address.toLowerCase(), amount: l.args.value!, block: l.blockNumber!, tx: l.transactionHash! });
+                const pl = await home.getLogs({
+                  address: Object.values(leg.receipts).map((r) => r.receipt),
+                  event: transferEvent,
+                  args: { from: address as `0x${string}`, to: engine },
+                  fromBlock: from,
+                  toBlock: to,
+                });
+                for (const l of pl)
+                  outs.push({
+                    kind: 'pledged',
+                    receipt: l.address.toLowerCase(),
+                    amount: l.args.value!,
+                    block: l.blockNumber!,
+                    tx: l.transactionHash!,
+                  });
               }
             }
             outs.sort((a, b) => Number(a.block - b.block));
             for (const x of credited) {
-              const i = outs.findIndex(o => o.receipt === x.receipt!.toLowerCase() && o.block >= x.creditedBlock! && o.amount >= x.amount);
-              if (i >= 0) { x.fate = { kind: outs[i].kind, tx: outs[i].tx }; outs.splice(i, 1); }
+              const i = outs.findIndex(
+                (o) => o.receipt === x.receipt!.toLowerCase() && o.block >= x.creditedBlock! && o.amount >= x.amount,
+              );
+              if (i >= 0) {
+                x.fate = { kind: outs[i].kind, tx: outs[i].tx };
+                outs.splice(i, 1);
+              }
             }
           }
         }
         if (live) setLocks(recent);
-      } catch { /* a slow RPC: keep the last reading */ }
+      } catch {
+        /* a slow RPC: keep the last reading */
+      }
     };
     void read();
     const t = setInterval(read, 15_000);
-    return () => { live = false; clearInterval(t); };
-  // A leg is static deployment config identified by its home/asset keys; engine and receipts come with it.
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+    // A leg is static deployment config identified by its home/asset keys; engine and receipts come with it.
   }, [leg.vault, leg.gateway, leg.asset.key, leg.home.key, address, tick, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return locks;
 }
@@ -231,22 +415,97 @@ function useMyLocks(leg: Leg, address: string | null, tick: number) {
 function LockTracker({ leg, address, tick }: { leg: Leg; address: string | null; tick: number }) {
   const locks = useMyLocks(leg, address, tick);
   const [now, setNow] = useState(() => Date.now() / 1000);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 5_000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now() / 1000), 5_000);
+    return () => clearInterval(t);
+  }, []);
   if (!locks?.length) return null;
-  const symOf = (token: string) => receiptLabel(Object.entries(leg.receipts).find(([, r]) => r.token.toLowerCase() === token.toLowerCase())?.[0] ?? 'tokens');
-  const decOf = (token: string) => Object.values(leg.receipts).find(r => r.token.toLowerCase() === token.toLowerCase())?.decimals ?? 18;
+  const symOf = (token: string) =>
+    receiptLabel(
+      Object.entries(leg.receipts).find(([, r]) => r.token.toLowerCase() === token.toLowerCase())?.[0] ?? 'tokens',
+    );
+  const decOf = (token: string) =>
+    Object.values(leg.receipts).find((r) => r.token.toLowerCase() === token.toLowerCase())?.decimals ?? 18;
   const ex = (c: ChainConfig, tx: string) => (c.explorer ? `${c.explorer}/tx/${tx}` : undefined);
   const mins = (s: number) => `${Math.max(0, Math.floor(s / 60))} min`;
   return (
     <div className="xc-track stack" aria-label="Your recent locks">
-      {locks.map(l => {
+      {locks.map((l) => {
         const done = !!l.credited;
         return (
-          <ol key={l.lockId} className={`xc-steps${l.fate ? ' spent' : ''}`} data-lock-state={l.fate ? l.fate.kind : done ? 'credited' : 'in-flight'}>
-            <li className="done"><CheckCircle2 className="i" /><span><b>Locked on {leg.asset.name}</b> · {formatUnits(l.amount, decOf(l.token))} {symOf(l.token)} · {new Date(l.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{ex(leg.asset, l.tx) && <> · <a href={ex(leg.asset, l.tx)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
-            <li className={done ? 'done' : 'active'}>{done ? <CheckCircle2 className="i" /> : <Clock className="i" />}<span><b>{done ? 'Delivered by Chainlink CCIP' : 'Chainlink CCIP delivering'}</b>{done ? '' : ` · ${mins(now - l.at)} so far, usually 15–25`} · <a href={ccipLink(l.messageId)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a></span></li>
-            <li className={done ? 'done' : ''}>{done ? <CheckCircle2 className="i" /> : <ArrowRightLeft className="i" />}<span><b>{done ? (l.fate ? `Credited on ${leg.home.name}` : `Credited on ${leg.home.name}: ready to pledge`) : `Credited on ${leg.home.name}`}</b>{done && ex(leg.home, l.credited!) && <> · <a href={ex(leg.home, l.credited!)} target="_blank" rel="noreferrer">tx</a></>}</span></li>
-            {l.fate && <li className="done used"><CheckCircle2 className="i" /><span><b>{l.fate.kind === 'pledged' ? 'Pledged into a note' : `Sent back to ${leg.asset.name}: not available to pledge`}</b>{ex(leg.home, l.fate.tx) && <> · <a href={ex(leg.home, l.fate.tx)} target="_blank" rel="noreferrer">tx</a></>}</span></li>}
+          <ol
+            key={l.lockId}
+            className={`xc-steps${l.fate ? ' spent' : ''}`}
+            data-lock-state={l.fate ? l.fate.kind : done ? 'credited' : 'in-flight'}
+          >
+            <li className="done">
+              <CheckCircle2 className="i" />
+              <span>
+                <b>Locked on {leg.asset.name}</b> · {formatUnits(l.amount, decOf(l.token))} {symOf(l.token)} ·{' '}
+                {new Date(l.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {ex(leg.asset, l.tx) && (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <a href={ex(leg.asset, l.tx)} target="_blank" rel="noreferrer">
+                      tx
+                    </a>
+                  </>
+                )}
+              </span>
+            </li>
+            <li className={done ? 'done' : 'active'}>
+              {done ? <CheckCircle2 className="i" /> : <Clock className="i" />}
+              <span>
+                <b>{done ? 'Delivered by Chainlink CCIP' : 'Chainlink CCIP delivering'}</b>
+                {done ? '' : ` · ${mins(now - l.at)} so far, usually 15–25`} ·{' '}
+                <a href={ccipLink(l.messageId)} target="_blank" rel="noreferrer">
+                  Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+                </a>
+              </span>
+            </li>
+            <li className={done ? 'done' : ''}>
+              {done ? <CheckCircle2 className="i" /> : <ArrowRightLeft className="i" />}
+              <span>
+                <b>
+                  {done
+                    ? l.fate
+                      ? `Credited on ${leg.home.name}`
+                      : `Credited on ${leg.home.name}: ready to pledge`
+                    : `Credited on ${leg.home.name}`}
+                </b>
+                {done && ex(leg.home, l.credited!) && (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <a href={ex(leg.home, l.credited!)} target="_blank" rel="noreferrer">
+                      tx
+                    </a>
+                  </>
+                )}
+              </span>
+            </li>
+            {l.fate && (
+              <li className="done used">
+                <CheckCircle2 className="i" />
+                <span>
+                  <b>
+                    {l.fate.kind === 'pledged'
+                      ? 'Pledged into a note'
+                      : `Sent back to ${leg.asset.name}: not available to pledge`}
+                  </b>
+                  {ex(leg.home, l.fate.tx) && (
+                    <>
+                      {' '}
+                      ·{' '}
+                      <a href={ex(leg.home, l.fate.tx)} target="_blank" rel="noreferrer">
+                        tx
+                      </a>
+                    </>
+                  )}
+                </span>
+              </li>
+            )}
           </ol>
         );
       })}
@@ -264,11 +523,20 @@ export function useGatewayVersion(leg: Leg | null): number | null {
     let live = true;
     const key = `${leg.home.key}:${leg.gateway.toLowerCase()}`;
     if (!versionCache.has(key)) {
-      versionCache.set(key, byKey[leg.home.key].client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'VERSION' })
-        .then(x => Number(x)).catch(() => 1));
+      versionCache.set(
+        key,
+        byKey[leg.home.key].client
+          .readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'VERSION' })
+          .then((x) => Number(x))
+          .catch(() => 1),
+      );
     }
-    versionCache.get(key)!.then(x => { if (live) setV(x); });
-    return () => { live = false; };
+    versionCache.get(key)!.then((x) => {
+      if (live) setV(x);
+    });
+    return () => {
+      live = false;
+    };
   }, [leg, byKey]);
   return v;
 }
@@ -283,7 +551,7 @@ export function useAutoReleased(): (token: string | undefined) => { chain: strin
   return (token) => {
     if (!leg || v !== 2 || !token) return null;
     const t = token.toLowerCase();
-    return Object.values(leg.receipts).some(r => r.receipt.toLowerCase() === t) ? { chain: leg.asset.name } : null;
+    return Object.values(leg.receipts).some((r) => r.receipt.toLowerCase() === t) ? { chain: leg.asset.name } : null;
   };
 }
 
@@ -293,10 +561,26 @@ export function useAutoReleased(): (token: string | undefined) => { chain: strin
  */
 export function RedeemOnRobinhood() {
   const legs = useCrossChainLegs();
-  return <>{legs.map(l => <AutoReleases key={`a${l.gateway}`} leg={l} />)}{legs.map(l => <RedeemLeg key={l.gateway} leg={l} />)}</>;
+  return (
+    <>
+      {legs.map((l) => (
+        <AutoReleases key={`a${l.gateway}`} leg={l} />
+      ))}
+      {legs.map((l) => (
+        <RedeemLeg key={l.gateway} leg={l} />
+      ))}
+    </>
+  );
 }
 
-type ReleaseRow = { index: bigint; sym: string; decimals: number; amount: bigint; to: string; sent?: { messageId: string; tx: string } };
+type ReleaseRow = {
+  index: bigint;
+  sym: string;
+  decimals: number;
+  amount: bigint;
+  to: string;
+  sent?: { messageId: string; tx: string };
+};
 
 /** Releases queued for you at a v2 gateway (from its events), and their CCIP messages once sent. */
 function AutoReleases({ leg }: { leg: Leg }) {
@@ -306,24 +590,47 @@ function AutoReleases({ leg }: { leg: Leg }) {
   const version = useGatewayVersion(leg);
   const [rows, setRows] = useState<ReleaseRow[]>([]);
   const [tick, setTick] = useState(0);
-  const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({ busy: '', text: '' });
+  const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({
+    busy: '',
+    text: '',
+  });
   useEffect(() => {
     if (version !== 2 || !address) return;
     let live = true;
     const client = byKey[leg.home.key].client;
-    const bySym = new Map(Object.entries(leg.receipts).map(([sym, r]) => [r.receipt.toLowerCase(), { sym, decimals: r.decimals }]));
+    const bySym = new Map(
+      Object.entries(leg.receipts).map(([sym, r]) => [r.receipt.toLowerCase(), { sym, decimals: r.decimals }]),
+    );
     const read = async () => {
       // The gateway is deployed after the engine: the engine's first block bounds the scan.
       const fromBlock = BigInt(leg.home.fromBlock ?? 0);
-      const queued = await client.getContractEvents({ address: leg.gateway, abi: homeGatewayAbi, eventName: 'ReleaseQueued', args: { account: address as `0x${string}` }, fromBlock });
+      const queued = await client.getContractEvents({
+        address: leg.gateway,
+        abi: homeGatewayAbi,
+        eventName: 'ReleaseQueued',
+        args: { account: address as `0x${string}` },
+        fromBlock,
+      });
       const byIndex = new Map<bigint, ReleaseRow>();
       for (const l of queued) {
         const a = l.args as { index: bigint; receipt: string; to: string; amount: bigint };
         const r = bySym.get(a.receipt.toLowerCase());
-        byIndex.set(a.index, { index: a.index, sym: r?.sym ?? 'receipt', decimals: r?.decimals ?? 18, amount: a.amount, to: a.to }); // later events: the joined total
+        byIndex.set(a.index, {
+          index: a.index,
+          sym: r?.sym ?? 'receipt',
+          decimals: r?.decimals ?? 18,
+          amount: a.amount,
+          to: a.to,
+        }); // later events: the joined total
       }
       if (byIndex.size) {
-        const sent = await client.getContractEvents({ address: leg.gateway, abi: homeGatewayAbi, eventName: 'ReleaseSent', args: { index: [...byIndex.keys()] }, fromBlock });
+        const sent = await client.getContractEvents({
+          address: leg.gateway,
+          abi: homeGatewayAbi,
+          eventName: 'ReleaseSent',
+          args: { index: [...byIndex.keys()] },
+          fromBlock,
+        });
         for (const l of sent) {
           const a = l.args as { index: bigint; messageId: string };
           const row = byIndex.get(a.index);
@@ -334,7 +641,10 @@ function AutoReleases({ leg }: { leg: Leg }) {
     };
     read().catch(() => {});
     const t = setInterval(() => read().catch(() => {}), 30_000);
-    return () => { live = false; clearInterval(t); };
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
   }, [leg, address, version, tick, byKey]);
   if (version !== 2 || !address || !rows.length) return null;
 
@@ -345,29 +655,89 @@ function AutoReleases({ leg }: { leg: Leg }) {
       const w = await signer(leg.home.key);
       const client = byKey[leg.home.key].client;
       const r = leg.receipts[row.sym];
-      const fee = await client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'quoteRedeem', args: [r.receipt, row.amount, row.to as `0x${string}`] }) as bigint;
+      const fee = (await client.readContract({
+        address: leg.gateway,
+        abi: homeGatewayAbi,
+        functionName: 'quoteRedeem',
+        args: [r.receipt, row.amount, row.to as `0x${string}`],
+      })) as bigint;
       setState({ busy: String(row.index), text: `Send now (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
-      const hash = await w.writeContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'sendQueued', args: [row.index], value: fee, account: w.account!, chain: w.chain });
+      const hash = await w.writeContract({
+        address: leg.gateway,
+        abi: homeGatewayAbi,
+        functionName: 'sendQueued',
+        args: [row.index],
+        value: fee,
+        account: w.account!,
+        chain: w.chain,
+      });
       const rc = await client.waitForTransactionReceipt({ hash });
-      setState({ busy: '', text: `Sent. Chainlink CCIP pays your ${receiptLabel(row.sym)} on ${leg.asset.name} in about 15–25 minutes.`, msg: messageIdOf(rc.logs) });
-      setTick(t => t + 1);
-    } catch (e) { setState({ busy: '', text: errText(e), bad: true }); }
+      setState({
+        busy: '',
+        text: `Sent. Chainlink CCIP pays your ${receiptLabel(row.sym)} on ${leg.asset.name} in about 15–25 minutes.`,
+        msg: messageIdOf(rc.logs),
+      });
+      setTick((t) => t + 1);
+    } catch (e) {
+      setState({ busy: '', text: errText(e), bad: true });
+    }
   };
 
   return (
     <section className="card stack" data-auto-releases>
-      <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral released to {leg.asset.name}</h3></div>
-      <p className="xs muted">Collateral a note paid you (your share after a default, or an issuer's collateral back at maturity) stays on {leg.asset.name}: the receipts are burned on {leg.home.name} and the vault there pays the real token to your address, over Chainlink CCIP. Nothing to redeem.</p>
-      {rows.map(row => (
-        <div key={String(row.index)} className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <span>{formatUnits(row.amount, row.decimals)} {receiptLabel(row.sym)}{row.to.toLowerCase() !== address.toLowerCase() ? <span className="xs muted"> to {row.to.slice(0, 6)}…{row.to.slice(-4)}</span> : null}</span>
-          {row.sent
-            ? <span className="xs"><CheckCircle2 className="i" style={{ width: 12, height: 12 }} /> Released to your wallet on {leg.asset.name} <a href={ccipLink(row.sent.messageId)} target="_blank" rel="noreferrer">CCIP msg {row.sent.messageId.slice(0, 10)}… <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a></span>
-            : <span className="row xs" style={{ gap: 8 }}><Clock className="i" style={{ width: 12, height: 12 }} /> Queued: goes out with the next release run
-              <button className="btn sm" onClick={() => sendNow(row)} disabled={!!state.busy}>{state.busy === String(row.index) ? 'Sending…' : 'Send now'}</button></span>}
+      <div className="row" style={{ gap: 8 }}>
+        <ArrowRightLeft className="i" />
+        <h3 style={{ margin: 0 }}>Collateral released to {leg.asset.name}</h3>
+      </div>
+      <p className="xs muted">
+        Collateral a note paid you (your share after a default, or an issuer's collateral back at maturity) stays on{' '}
+        {leg.asset.name}: the receipts are burned on {leg.home.name} and the vault there pays the real token to your
+        address, over Chainlink CCIP. Nothing to redeem.
+      </p>
+      {rows.map((row) => (
+        <div
+          key={String(row.index)}
+          className="row"
+          style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}
+        >
+          <span>
+            {formatUnits(row.amount, row.decimals)} {receiptLabel(row.sym)}
+            {row.to.toLowerCase() !== address.toLowerCase() ? (
+              <span className="xs muted">
+                {' '}
+                to {row.to.slice(0, 6)}…{row.to.slice(-4)}
+              </span>
+            ) : null}
+          </span>
+          {row.sent ? (
+            <span className="xs">
+              <CheckCircle2 className="i" style={{ width: 12, height: 12 }} /> Released to your wallet on{' '}
+              {leg.asset.name}{' '}
+              <a href={ccipLink(row.sent.messageId)} target="_blank" rel="noreferrer">
+                CCIP msg {row.sent.messageId.slice(0, 10)}…{' '}
+                <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+              </a>
+            </span>
+          ) : (
+            <span className="row xs" style={{ gap: 8 }}>
+              <Clock className="i" style={{ width: 12, height: 12 }} /> Queued: goes out with the next release run
+              <button className="btn sm" onClick={() => sendNow(row)} disabled={!!state.busy}>
+                {state.busy === String(row.index) ? 'Sending…' : 'Send now'}
+              </button>
+            </span>
+          )}
         </div>
       ))}
-      {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
+      {state.text && (
+        <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>
+          {state.text}{' '}
+          {state.msg && (
+            <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">
+              Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+            </a>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -379,10 +749,13 @@ function RedeemLeg({ leg }: { leg: Leg }) {
   const [tick, setTick] = useState(0);
   const syms = leg ? Object.keys(leg.receipts) : [];
   const bal = useReceiptBalances(leg, syms, tick);
-  const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({ busy: '', text: '' });
+  const [state, setState] = useState<{ busy: string; text: string; bad?: boolean; msg?: string }>({
+    busy: '',
+    text: '',
+  });
   const [confirming, setConfirming] = useState<string | null>(null);
   if (!leg || !address) return null;
-  const held = syms.filter(s => (bal[s] ?? 0n) > 0n);
+  const held = syms.filter((s) => (bal[s] ?? 0n) > 0n);
   if (!held.length) return null;
 
   const redeem = async (s: string) => {
@@ -392,39 +765,102 @@ function RedeemLeg({ leg }: { leg: Leg }) {
       const w = await signer(leg.home.key);
       const client = byKey[leg.home.key].client;
       const amount = bal[s];
-      const fee = await client.readContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'quoteRedeem', args: [r.receipt, amount, address as `0x${string}`] }) as bigint;
-      setState({ busy: s, text: `Release ${formatUnits(amount, r.decimals)} ${receiptLabel(s)} on ${leg.asset.name} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…` });
-      const hash = await w.writeContract({ address: leg.gateway, abi: homeGatewayAbi, functionName: 'redeem', args: [r.receipt, amount, address as `0x${string}`], value: fee, account: w.account!, chain: w.chain });
+      const fee = (await client.readContract({
+        address: leg.gateway,
+        abi: homeGatewayAbi,
+        functionName: 'quoteRedeem',
+        args: [r.receipt, amount, address as `0x${string}`],
+      })) as bigint;
+      setState({
+        busy: s,
+        text: `Release ${formatUnits(amount, r.decimals)} ${receiptLabel(s)} on ${leg.asset.name} (CCIP fee ${formatUnits(fee, 18).slice(0, 10)} ETH)…`,
+      });
+      const hash = await w.writeContract({
+        address: leg.gateway,
+        abi: homeGatewayAbi,
+        functionName: 'redeem',
+        args: [r.receipt, amount, address as `0x${string}`],
+        value: fee,
+        account: w.account!,
+        chain: w.chain,
+      });
       const rc = await client.waitForTransactionReceipt({ hash });
-      setState({ busy: '', text: `Sent. Chainlink CCIP releases your ${receiptLabel(s)} on ${leg.asset.name} in about 15–25 minutes.`, msg: messageIdOf(rc.logs) });
-      setTick(t => t + 1);
-    } catch (e) { setState({ busy: '', text: errText(e), bad: true }); }
+      setState({
+        busy: '',
+        text: `Sent. Chainlink CCIP releases your ${receiptLabel(s)} on ${leg.asset.name} in about 15–25 minutes.`,
+        msg: messageIdOf(rc.logs),
+      });
+      setTick((t) => t + 1);
+    } catch (e) {
+      setState({ busy: '', text: errText(e), bad: true });
+    }
   };
 
   return (
     <section className="card stack">
-      <div className="row" style={{ gap: 8 }}><ArrowRightLeft className="i" /><h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3></div>
-      <p className="xs muted">Tokens you locked on {leg.asset.name}{leg.version ? ' for notes on the earlier engine' : ''} and have not pledged into a note{leg.version ? ', or a payout from an earlier note' : ''}. To use them as collateral, pledge them when you issue. Send them back only if you no longer want to issue with them.</p>
-      {held.map(s => (
+      <div className="row" style={{ gap: 8 }}>
+        <ArrowRightLeft className="i" />
+        <h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3>
+      </div>
+      <p className="xs muted">
+        Tokens you locked on {leg.asset.name}
+        {leg.version ? ' for notes on the earlier engine' : ''} and have not pledged into a note
+        {leg.version ? ', or a payout from an earlier note' : ''}. To use them as collateral, pledge them when you
+        issue. Send them back only if you no longer want to issue with them.
+      </p>
+      {held.map((s) => (
         <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
-          <span>{formatUnits(bal[s], leg.receipts[s].decimals)} {receiptLabel(s)} locked on {leg.asset.name}</span>
-          {confirming === s
-            ? <span className="row" style={{ gap: 6 }}>
-                <button className="btn" onClick={() => setConfirming(null)}>Keep locked</button>
-                <button className="btn danger" onClick={() => { setConfirming(null); void redeem(s); }} disabled={!!state.busy}>Yes, send back</button>
-              </span>
-            : <button className="btn" onClick={() => setConfirming(s)} disabled={!!state.busy}>{state.busy === s ? 'Sending back…' : `Send back to ${leg.asset.name}`}</button>}
+          <span>
+            {formatUnits(bal[s], leg.receipts[s].decimals)} {receiptLabel(s)} locked on {leg.asset.name}
+          </span>
+          {confirming === s ? (
+            <span className="row" style={{ gap: 6 }}>
+              <button className="btn" onClick={() => setConfirming(null)}>
+                Keep locked
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  setConfirming(null);
+                  void redeem(s);
+                }}
+                disabled={!!state.busy}
+              >
+                Yes, send back
+              </button>
+            </span>
+          ) : (
+            <button className="btn" onClick={() => setConfirming(s)} disabled={!!state.busy}>
+              {state.busy === s ? 'Sending back…' : `Send back to ${leg.asset.name}`}
+            </button>
+          )}
         </div>
       ))}
-      {confirming && <div className="notice warn xs" role="alert">This unlocks your {receiptLabel(confirming)} and sends it back to your wallet on {leg.asset.name} (about 15–25 minutes). You can't pledge it to a note afterwards without locking it again.</div>}
-      {state.text && <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>{state.text} {state.msg && <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} /></a>}</div>}
+      {confirming && (
+        <div className="notice warn xs" role="alert">
+          This unlocks your {receiptLabel(confirming)} and sends it back to your wallet on {leg.asset.name} (about 15–25
+          minutes). You can't pledge it to a note afterwards without locking it again.
+        </div>
+      )}
+      {state.text && (
+        <div role="status" className={`xs ${state.bad ? 'bad' : 'muted'}`}>
+          {state.text}{' '}
+          {state.msg && (
+            <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">
+              Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+            </a>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
 /** The CCIP message id in a vault Locked or gateway Redeemed event (bytes32 after the token/amount words). */
-function messageIdOf(logs: ReadonlyArray<{ topics: readonly string[]; data: string; address: string }>): string | undefined {
+function messageIdOf(
+  logs: ReadonlyArray<{ topics: readonly string[]; data: string; address: string }>,
+): string | undefined {
   // The router's onRamp emits CCIPMessageSent with the message id as its last topic; take it from there.
-  const sent = logs.find(l => l.topics.length === 4 && l.topics[0].startsWith('0x371bc2ff'));
+  const sent = logs.find((l) => l.topics.length === 4 && l.topics[0].startsWith('0x371bc2ff'));
   return sent ? sent.topics[3] : undefined;
 }

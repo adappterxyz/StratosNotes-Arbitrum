@@ -25,35 +25,64 @@ export type AiResult =
   | { kind: 'error'; error: string };
 
 const INTENTS: Record<Intent, string> = {
-  product: 'Design or issue a structured note from terms: fixed coupon note, autocallable, phoenix, snowball, reverse convertible or principal-protected note',
+  product:
+    'Design or issue a structured note from terms: fixed coupon note, autocallable, phoenix, snowball, reverse convertible or principal-protected note',
   edit: 'Change the note or workflow that is open: how or when it pays (bonuses, fees, coupons, redemption), its steps, fields, conditions, dates or rules, e.g. "when it autocalls pay an extra 1%", "add a fee", "observe monthly"',
   question: 'Ask how something works or for an explanation or advice; or just chat. Nothing should be built or changed',
 };
 const PRODUCTS: Record<ProductType, string> = {
-  'fcn': 'Fixed coupon note: a fixed coupon every period, may autocall, knock-in at maturity',
+  fcn: 'Fixed coupon note: a fixed coupon every period, may autocall, knock-in at maturity',
   'reverse-convertible': 'Reverse convertible: fixed coupon, no autocall, loss below a barrier at maturity',
-  'phoenix': 'Phoenix: coupon paid only when the underlying is above a coupon barrier, optional memory, autocall',
-  'snowball': 'Snowball: coupons accrue and are paid only when the note is called',
-  'ppn': 'Principal-protected note: capital protection plus participation in the rise, no coupons',
+  phoenix: 'Phoenix: coupon paid only when the underlying is above a coupon barrier, optional memory, autocall',
+  snowball: 'Snowball: coupons accrue and are paid only when the note is called',
+  ppn: 'Principal-protected note: capital protection plus participation in the rise, no coupons',
 };
 
 function termQuestions(t: ProductType): Array<[string, string, string]> {
   const use = productUses(t);
   const q: Array<[string, string, string]> = [
-    ['underlying', 'the underlying', 'Is a specific token, stock or index named in the request (e.g. "ETH", "Bitcoin", "SOL")?'],
-    ['tenor', 'the tenor or the observation schedule', 'Does the request state the tenor, maturity or how often it is observed (e.g. "12 months", "quarterly")?'],
+    [
+      'underlying',
+      'the underlying',
+      'Is a specific token, stock or index named in the request (e.g. "ETH", "Bitcoin", "SOL")?',
+    ],
+    [
+      'tenor',
+      'the tenor or the observation schedule',
+      'Does the request state the tenor, maturity or how often it is observed (e.g. "12 months", "quarterly")?',
+    ],
   ];
   if (use.coupon) q.push(['coupon', 'the coupon rate', 'Does the request state a coupon rate?']);
-  if (use.couponBarrier) q.push(['couponBarrier', 'the coupon barrier', 'Does the request state a coupon barrier level (a % of the initial level)?']);
-  if (use.autocall) q.push(['autocall', 'the autocall level', 'Does the request state an autocall or early-redemption level?']);
-  if (use.knockIn) q.push(['knockIn', 'the knock-in barrier', 'Does the request state a knock-in, protection or downside barrier level?']);
-  if (use.protection) q.push(['protection', 'the capital protection level', 'Does the request state how much capital is protected?'], ['participation', 'the participation rate', 'Does the request state a participation rate in the upside?']);
+  if (use.couponBarrier)
+    q.push([
+      'couponBarrier',
+      'the coupon barrier',
+      'Does the request state a coupon barrier level (a % of the initial level)?',
+    ]);
+  if (use.autocall)
+    q.push(['autocall', 'the autocall level', 'Does the request state an autocall or early-redemption level?']);
+  if (use.knockIn)
+    q.push([
+      'knockIn',
+      'the knock-in barrier',
+      'Does the request state a knock-in, protection or downside barrier level?',
+    ]);
+  if (use.protection)
+    q.push(
+      ['protection', 'the capital protection level', 'Does the request state how much capital is protected?'],
+      ['participation', 'the participation rate', 'Does the request state a participation rate in the upside?'],
+    );
   // The note is secured by collateral the issuer pledges: never assumed.
-  q.push(['collateral', 'the collateral (what the issuer pledges, e.g. USDG or ETH, and the share of the notional it must cover)', 'Does the request say what collateral the issuer pledges or what share of the notional the collateral must cover (e.g. "secured by USDG at 100%", "50% collateral in ETH")?']);
+  q.push([
+    'collateral',
+    'the collateral (what the issuer pledges, e.g. USDG or ETH, and the share of the notional it must cover)',
+    'Does the request say what collateral the issuer pledges or what share of the notional the collateral must cover (e.g. "secured by USDG at 100%", "50% collateral in ETH")?',
+  ]);
   return q;
 }
 
-const list = (xs: string[]) => xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+const list = (xs: string[]) =>
+  xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
 
 export const BRIEF = `You are the StratosNotes assistant. Answer briefly and concretely, only from these facts; if the answer is not covered, say so rather than guess.
 StratosNotes issues structured notes on Arbitrum Sepolia (EVM), where every note's lifecycle runs; Robinhood Chain testnet is a collateral chain only (no note is issued there). A note is a way for the issuer to raise funds against pledged collateral. It is a BPMN workflow with four pools:
@@ -91,22 +120,42 @@ const PATCH_SCHEMA = {
 };
 
 /** Steps that carry the note's economics: an edit may change them but never remove them. */
-export const ECONOMIC_MILESTONES = ['funding-deposited', 'collateral-pledged', 'collateral-released', 'defaulted', 'payment-made', 'payment-missed', 'margin-call', 'margin-cured'] as const;
+export const ECONOMIC_MILESTONES = [
+  'funding-deposited',
+  'collateral-pledged',
+  'collateral-released',
+  'defaulted',
+  'payment-made',
+  'payment-missed',
+  'margin-call',
+  'margin-cured',
+] as const;
 
 /** Problems with a patch that the validator would not name directly: economic steps it drops. */
 export function economicLosses(base: WorkflowDraft, next: WorkflowDraft): string[] {
-  const kept = new Set(next.steps.map(s => s.id));
-  const lost = base.steps.filter(s => s.milestone && (ECONOMIC_MILESTONES as readonly string[]).includes(s.milestone) && !kept.has(s.id));
-  const out = lost.map(s => `Step ${s.id} ('${s.name}', ${s.milestone}) was removed: keep it; the note's funding, default and release steps must stay.`);
+  const kept = new Set(next.steps.map((s) => s.id));
+  const lost = base.steps.filter(
+    (s) => s.milestone && (ECONOMIC_MILESTONES as readonly string[]).includes(s.milestone) && !kept.has(s.id),
+  );
+  const out = lost.map(
+    (s) =>
+      `Step ${s.id} ('${s.name}', ${s.milestone}) was removed: keep it; the note's funding, default and release steps must stay.`,
+  );
   for (const s of base.steps) {
-    const n = next.steps.find(x => x.id === s.id);
-    if (n && s.milestone && n.milestone !== s.milestone) out.push(`Step ${s.id} lost its milestone '${s.milestone}': keep it.`);
+    const n = next.steps.find((x) => x.id === s.id);
+    if (n && s.milestone && n.milestone !== s.milestone)
+      out.push(`Step ${s.id} lost its milestone '${s.milestone}': keep it.`);
   }
-  if ((base.escrow ?? []).some(e => !next.parties.includes(e))) out.push('The Escrow party was removed: keep it.');
+  if ((base.escrow ?? []).some((e) => !next.parties.includes(e))) out.push('The Escrow party was removed: keep it.');
   return out;
 }
 
-export async function editWorkflow(ai: AiRunner, prompt: string, base: WorkflowDraft, maxRepairs = 3): Promise<AiResult> {
+export async function editWorkflow(
+  ai: AiRunner,
+  prompt: string,
+  base: WorkflowDraft,
+  maxRepairs = 3,
+): Promise<AiResult> {
   const messages: ChatMessage[] = [
     { role: 'system', content: EDIT_RULES },
     { role: 'user', content: `Current workflow:\n${JSON.stringify(base)}\n\nChange requested:\n${prompt}` },
@@ -114,46 +163,106 @@ export async function editWorkflow(ai: AiRunner, prompt: string, base: WorkflowD
   let errors: string[] = [];
   for (let attempt = 0; attempt <= maxRepairs; attempt++) {
     const patch = await ai.json<DraftPatch>(messages, PATCH_SCHEMA, 'workflow_patch').catch(() => null);
-    if (!patch || (!Array.isArray(patch.upsert) && !Array.isArray(patch.remove))) { errors = ['The reply was not a patch.']; continue; }
+    if (!patch || (!Array.isArray(patch.upsert) && !Array.isArray(patch.remove))) {
+      errors = ['The reply was not a patch.'];
+      continue;
+    }
     messages.push({ role: 'assistant', content: JSON.stringify(patch) });
     const draft = applyPatch(base, patch);
     let ir;
-    try { ir = draftToIR(draft); } catch (e) { errors = [e instanceof Error ? e.message : String(e)]; }
+    try {
+      ir = draftToIR(draft);
+    } catch (e) {
+      errors = [e instanceof Error ? e.message : String(e)];
+    }
     if (ir) {
       const r = check(ir);
-      errors = [...economicLosses(base, draft), ...r.errors.map(e => `${e.nodeId ? `[${e.nodeId}] ` : ''}${e.message}`)];
+      errors = [
+        ...economicLosses(base, draft),
+        ...r.errors.map((e) => `${e.nodeId ? `[${e.nodeId}] ` : ''}${e.message}`),
+      ];
       if (!errors.length) {
-        const changed = [...(patch.upsert ?? []).map(s => s.id), ...(patch.remove ?? [])];
-        return { kind: 'workflow', bpmnXml: irToBpmn(ir).bpmnXml, draft, warnings: r.warnings.map(w => w.message), changed };
+        const changed = [...(patch.upsert ?? []).map((s) => s.id), ...(patch.remove ?? [])];
+        return {
+          kind: 'workflow',
+          bpmnXml: irToBpmn(ir).bpmnXml,
+          draft,
+          warnings: r.warnings.map((w) => w.message),
+          changed,
+        };
       }
     }
-    messages.push({ role: 'user', content: `The compiler rejects that:\n- ${errors.join('\n- ')}\nFix these with another patch against the ORIGINAL workflow (repeat your earlier changes, corrected).` });
+    messages.push({
+      role: 'user',
+      content: `The compiler rejects that:\n- ${errors.join('\n- ')}\nFix these with another patch against the ORIGINAL workflow (repeat your earlier changes, corrected).`,
+    });
   }
-  return { kind: 'error', error: `I couldn't produce a valid change. Remaining problems: ${errors.slice(0, 5).join('; ')}` };
+  return {
+    kind: 'error',
+    error: `I couldn't produce a valid change. Remaining problems: ${errors.slice(0, 5).join('; ')}`,
+  };
 }
 
-export async function runAi(ai: AiRunner, input: { prompt: string; today: string; draft?: WorkflowDraft }): Promise<AiResult> {
+export async function runAi(
+  ai: AiRunner,
+  input: { prompt: string; today: string; draft?: WorkflowDraft },
+): Promise<AiResult> {
   const hasWorkflow = !!input.draft?.steps?.length;
-  const criteria = Object.fromEntries((Object.keys(INTENTS) as Intent[]).filter(i => hasWorkflow || i !== 'edit').map(i => [i, INTENTS[i]]));
-  const first = await ai.decide(input.prompt, { intent: { type: 'choice', instructions: 'What does the user want StratosNotes to do?', criteria } }, { precise: true });
+  const criteria = Object.fromEntries(
+    (Object.keys(INTENTS) as Intent[]).filter((i) => hasWorkflow || i !== 'edit').map((i) => [i, INTENTS[i]]),
+  );
+  const first = await ai.decide(
+    input.prompt,
+    { intent: { type: 'choice', instructions: 'What does the user want StratosNotes to do?', criteria } },
+    { precise: true },
+  );
   const intent = (first.intent?.choice as Intent) || 'question';
   if ((first.intent?.confidence ?? 0) < CONFIDENCE_FLOOR) {
-    return { kind: 'clarify', missing: ['intent'], reply: hasWorkflow ? 'Do you want me to change the open workflow, set up a new note from terms, or answer a question?' : 'Do you want me to set up a note from terms, or answer a question?' };
+    return {
+      kind: 'clarify',
+      missing: ['intent'],
+      reply: hasWorkflow
+        ? 'Do you want me to change the open workflow, set up a new note from terms, or answer a question?'
+        : 'Do you want me to set up a note from terms, or answer a question?',
+    };
   }
   if (intent === 'question') {
-    const reply = await ai.text([{ role: 'system', content: BRIEF + (hasWorkflow ? `\n\nThe open workflow, as JSON:\n${JSON.stringify(input.draft)}` : '') }, { role: 'user', content: input.prompt }]);
+    const reply = await ai.text([
+      {
+        role: 'system',
+        content: BRIEF + (hasWorkflow ? `\n\nThe open workflow, as JSON:\n${JSON.stringify(input.draft)}` : ''),
+      },
+      { role: 'user', content: input.prompt },
+    ]);
     return { kind: 'reply', reply };
   }
   if (intent === 'edit' && input.draft) return editWorkflow(ai, input.prompt, input.draft);
 
-  const productQ: Record<string, DecisionQuestion> = { product: { type: 'choice', instructions: 'Which structured note is requested?', criteria: PRODUCTS } };
+  const productQ: Record<string, DecisionQuestion> = {
+    product: { type: 'choice', instructions: 'Which structured note is requested?', criteria: PRODUCTS },
+  };
   const p = await ai.decide(input.prompt, productQ, { precise: true });
   const product = p.product?.choice as ProductType | undefined;
-  if (!product || !PRODUCT_LABELS[product]) return { kind: 'clarify', missing: ['product'], reply: 'Which note do you want: a fixed coupon note, reverse convertible, phoenix, snowball or principal-protected note?' };
+  if (!product || !PRODUCT_LABELS[product])
+    return {
+      kind: 'clarify',
+      missing: ['product'],
+      reply:
+        'Which note do you want: a fixed coupon note, reverse convertible, phoenix, snowball or principal-protected note?',
+    };
   const terms = termQuestions(product);
-  const answers = await ai.decide(input.prompt, Object.fromEntries(terms.map(([k, , ins]) => [k, { type: 'noul', instructions: ins } as DecisionQuestion])), { precise: true });
+  const answers = await ai.decide(
+    input.prompt,
+    Object.fromEntries(terms.map(([k, , ins]) => [k, { type: 'noul', instructions: ins } as DecisionQuestion])),
+    { precise: true },
+  );
   const missing = terms.filter(([k]) => (answers[k]?.noul ?? 0) < 0.5).map(([, label]) => label);
-  if (missing.length) return { kind: 'clarify', missing, reply: `To set up the ${PRODUCT_LABELS[product].toLowerCase()} I still need ${list(missing)}. What are they?` };
+  if (missing.length)
+    return {
+      kind: 'clarify',
+      missing,
+      reply: `To set up the ${PRODUCT_LABELS[product].toLowerCase()} I still need ${list(missing)}. What are they?`,
+    };
   const r = await extractProduct(ai, input.prompt, product, input.today);
   if ('errors' in r) return { kind: 'clarify', missing: r.errors, reply: r.errors.join(' ') };
   return { kind: 'product', params: r.params, schedule: r.schedule, notes: r.notes };

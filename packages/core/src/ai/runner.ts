@@ -30,11 +30,18 @@ export interface DecisionAnswer {
 }
 export type DecisionAnswers = Record<string, DecisionAnswer>;
 export type Reasoning = 'none' | 'low' | 'medium' | 'high';
-export interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
 
 export interface AiRunner {
   /** Typed decisions over `state`. `precise` uses the larger decision model. */
-  decide(state: string, questions: Record<string, DecisionQuestion>, opts?: { precise?: boolean }): Promise<DecisionAnswers>;
+  decide(
+    state: string,
+    questions: Record<string, DecisionQuestion>,
+    opts?: { precise?: boolean },
+  ): Promise<DecisionAnswers>;
   /** Structured generation: a JSON value conforming (best effort) to `schema`. */
   json<T>(messages: ChatMessage[], schema: object, name: string, opts?: { reasoning?: Reasoning }): Promise<T>;
   /** Free-text answer. */
@@ -42,7 +49,9 @@ export interface AiRunner {
 }
 
 /** Workers AI binding shape used here (kept minimal so tests need no types). */
-interface AiBinding { run(model: string, input: unknown): Promise<unknown> }
+interface AiBinding {
+  run(model: string, input: unknown): Promise<unknown>;
+}
 
 function contentOf(r: unknown): string {
   const x = r as { choices?: Array<{ message?: { content?: string } }>; response?: string };
@@ -51,9 +60,17 @@ function contentOf(r: unknown): string {
 
 /** Parse a model's JSON reply, tolerating code fences or a prose wrapper. */
 export function parseModelJson<T>(raw: string): T {
-  const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-  try { return JSON.parse(s) as T; } catch { /* fall through */ }
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  const s = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '');
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    /* fall through */
+  }
+  const a = s.indexOf('{'),
+    b = s.lastIndexOf('}');
   if (a >= 0 && b > a) return JSON.parse(s.slice(a, b + 1)) as T;
   throw new Error('Model did not return JSON');
 }
@@ -62,9 +79,9 @@ export function parseModelJson<T>(raw: string): T {
 export function unwrap<T>(v: unknown, schema: object, name: string): T {
   const keys = Object.keys((schema as { properties?: object }).properties ?? {});
   const o = v as Record<string, unknown>;
-  if (o && typeof o === 'object' && !Array.isArray(o) && !keys.some(k => k in o)) {
+  if (o && typeof o === 'object' && !Array.isArray(o) && !keys.some((k) => k in o)) {
     const inner = Object.keys(o).length === 1 ? Object.values(o)[0] : o[name];
-    if (inner && typeof inner === 'object' && keys.some(k => k in (inner as object))) return inner as T;
+    if (inner && typeof inner === 'object' && keys.some((k) => k in (inner as object))) return inner as T;
   }
   return v as T;
 }
@@ -72,7 +89,9 @@ export function unwrap<T>(v: unknown, schema: object, name: string): T {
 export function workersAiRunner(ai: AiBinding): AiRunner {
   return {
     async decide(state, questions, opts) {
-      const r = await ai.run(opts?.precise ? MODELS.decide : MODELS.decideFast, { state, questions }) as { answers?: DecisionAnswers };
+      const r = (await ai.run(opts?.precise ? MODELS.decide : MODELS.decideFast, { state, questions })) as {
+        answers?: DecisionAnswers;
+      };
       if (!r?.answers) throw new Error('Decision model returned no answers');
       return r.answers;
     },
@@ -81,9 +100,22 @@ export function workersAiRunner(ai: AiBinding): AiRunner {
       // slower (~70 s vs ~18 s per workflow draft) and degenerated: broken decisions, junk strings.
       const reasoning = opts?.reasoning ?? 'none';
       const [first, ...rest] = messages;
-      const withSchema: ChatMessage[] = first?.role === 'system'
-        ? [{ role: 'system', content: `${first.content}\n\nReply with the JSON object itself (not wrapped in another key), following this JSON Schema:\n${JSON.stringify(schema)}` }, ...rest]
-        : [{ role: 'system', content: `Reply with the JSON object itself (not wrapped in another key), following this JSON Schema:\n${JSON.stringify(schema)}` }, ...messages];
+      const withSchema: ChatMessage[] =
+        first?.role === 'system'
+          ? [
+              {
+                role: 'system',
+                content: `${first.content}\n\nReply with the JSON object itself (not wrapped in another key), following this JSON Schema:\n${JSON.stringify(schema)}`,
+              },
+              ...rest,
+            ]
+          : [
+              {
+                role: 'system',
+                content: `Reply with the JSON object itself (not wrapped in another key), following this JSON Schema:\n${JSON.stringify(schema)}`,
+              },
+              ...messages,
+            ];
       const r = await ai.run(MODELS.generate, {
         messages: withSchema,
         response_format: { type: 'json_object' },
@@ -98,4 +130,3 @@ export function workersAiRunner(ai: AiBinding): AiRunner {
     },
   };
 }
-

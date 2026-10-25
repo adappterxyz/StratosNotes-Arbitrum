@@ -15,7 +15,9 @@ export default function ExplorerPanel({ start, onClose }: { start: ExplorerStart
     closeRef.current?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
@@ -31,10 +33,14 @@ export default function ExplorerPanel({ start, onClose }: { start: ExplorerStart
           <span className="eyebrow">Note explorer</span>
           <h2 id="xp-title">Try a note.</h2>
         </div>
-        <button ref={closeRef} type="button" className="xp-close" onClick={onClose} aria-label="Close the explorer">Close ✕</button>
+        <button ref={closeRef} type="button" className="xp-close" onClick={onClose} aria-label="Close the explorer">
+          Close ✕
+        </button>
       </div>
       <div className="xp-body">
-        <p className="xp-intro">Drag the price path. Same payoff maths as the on-chain engine; example terms, not live prices.</p>
+        <p className="xp-intro">
+          Drag the price path. Same payoff maths as the on-chain engine; example terms, not live prices.
+        </p>
         <Suspense fallback={<div className="xp-loading">Loading the explorer…</div>}>
           <Explorer start={start} />
         </Suspense>

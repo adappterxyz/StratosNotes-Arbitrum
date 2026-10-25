@@ -30,33 +30,63 @@ export interface ChainSource {
 }
 
 export function evmSource(rpc: string, engine: `0x${string}`, client?: PublicClient): ChainSource {
-  const c = client ?? (createPublicClient({ transport: http(rpc, { retryCount: 3, timeout: 20_000 }) }) as PublicClient);
+  const c =
+    client ?? (createPublicClient({ transport: http(rpc, { retryCount: 3, timeout: 20_000 }) }) as PublicClient);
   return {
     head: () => c.getBlockNumber({ cacheTime: 0 }),
     async finalized() {
-      try { return (await c.getBlock({ blockTag: 'finalized' })).number; } catch { return null; }
+      try {
+        return (await c.getBlock({ blockTag: 'finalized' })).number;
+      } catch {
+        return null;
+      }
     },
     async block(n) {
       try {
         const b = await c.getBlock({ blockNumber: n });
         return { hash: b.hash!.toLowerCase(), ts: Number(b.timestamp) };
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     },
     async logs(from, to) {
-      const raw = await c.request({
+      const raw = (await c.request({
         method: 'eth_getLogs',
         params: [{ address: engine, fromBlock: numberToHex(from), toBlock: numberToHex(to) }],
-      } as never) as Array<{ blockNumber: Hex; blockHash: Hex; logIndex: Hex; transactionHash: Hex; data: Hex; topics: Hex[]; removed?: boolean }>;
-      return raw.filter(l => !l.removed).map(l => ({
-        block: BigInt(l.blockNumber), blockHash: l.blockHash.toLowerCase(), logIndex: Number(l.logIndex),
-        tx: l.transactionHash.toLowerCase(), data: l.data, topics: l.topics,
-      })).sort((a, b) => (a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1));
+      } as never)) as Array<{
+        blockNumber: Hex;
+        blockHash: Hex;
+        logIndex: Hex;
+        transactionHash: Hex;
+        data: Hex;
+        topics: Hex[];
+        removed?: boolean;
+      }>;
+      return raw
+        .filter((l) => !l.removed)
+        .map((l) => ({
+          block: BigInt(l.blockNumber),
+          blockHash: l.blockHash.toLowerCase(),
+          logIndex: Number(l.logIndex),
+          tx: l.transactionHash.toLowerCase(),
+          data: l.data,
+          topics: l.topics,
+        }))
+        .sort((a, b) => (a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1));
     },
-    definitionCore: id => c.readContract({ address: engine, abi: flowEngineAbi, functionName: 'definitionCore', args: [id as Hex] }),
+    definitionCore: (id) =>
+      c.readContract({ address: engine, abi: flowEngineAbi, functionName: 'definitionCore', args: [id as Hex] }),
     async fallbackReporterAt(block) {
       if (block < 0n) return '0x0000000000000000000000000000000000000000';
       try {
-        return (await c.readContract({ address: engine, abi: flowEngineAbi, functionName: 'fallbackReporter', blockNumber: block })).toLowerCase();
+        return (
+          await c.readContract({
+            address: engine,
+            abi: flowEngineAbi,
+            functionName: 'fallbackReporter',
+            blockNumber: block,
+          })
+        ).toLowerCase();
       } catch {
         return '0x0000000000000000000000000000000000000000'; // before the engine existed
       }

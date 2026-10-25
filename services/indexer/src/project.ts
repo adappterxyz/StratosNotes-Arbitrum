@@ -12,7 +12,10 @@ export async function loadDef(q: Queryable, chain: string, id: string): Promise<
   const key = `${chain}:${id}`;
   const hit = defCache.get(key);
   if (hit) return hit;
-  const rows = await q.query<{ bytes: Uint8Array | Buffer }>('SELECT bytes FROM definitions WHERE chain = $1 AND id = $2', [chain, id]);
+  const rows = await q.query<{ bytes: Uint8Array | Buffer }>(
+    'SELECT bytes FROM definitions WHERE chain = $1 AND id = $2',
+    [chain, id],
+  );
   if (!rows.length) return null;
   const def = decodeEvmDef(new Uint8Array(rows[0].bytes));
   defCache.set(key, def);
@@ -32,15 +35,33 @@ export async function saveNote(q: Queryable, s: NoteState, lastSeq: number) {
        name = EXCLUDED.name, label = EXCLUDED.label, issuer = EXCLUDED.issuer, updated_at = EXCLUDED.updated_at,
        last_seq = EXCLUDED.last_seq`,
     [
-      s.id, s.chain, s.engine, s.pid, s.definition, JSON.stringify(s), s.status, def ? windowOpen(def, s) : false,
-      view?.strikeDate || null, terms?.hasTerms ? terms.params.productType : null,
-      terms?.hasTerms ? terms.params.underlyings.map(u => u.symbol) : [],
-      view?.name ?? 'Unknown workflow', view?.label ?? 'Workflow', view?.issuer ?? s.creator, s.createdAt, s.updatedAt, lastSeq,
+      s.id,
+      s.chain,
+      s.engine,
+      s.pid,
+      s.definition,
+      JSON.stringify(s),
+      s.status,
+      def ? windowOpen(def, s) : false,
+      view?.strikeDate || null,
+      terms?.hasTerms ? terms.params.productType : null,
+      terms?.hasTerms ? terms.params.underlyings.map((u) => u.symbol) : [],
+      view?.name ?? 'Unknown workflow',
+      view?.label ?? 'Workflow',
+      view?.issuer ?? s.creator,
+      s.createdAt,
+      s.updatedAt,
+      lastSeq,
     ],
   );
   await q.query('DELETE FROM holdings WHERE note_id = $1', [s.id]);
   for (const h of s.holdings) {
-    await q.query('INSERT INTO holdings (note_id, asset, owner, balance) VALUES ($1, $2, $3, $4)', [s.id, h.asset, h.owner, h.balance]);
+    await q.query('INSERT INTO holdings (note_id, asset, owner, balance) VALUES ($1, $2, $3, $4)', [
+      s.id,
+      h.asset,
+      h.owner,
+      h.balance,
+    ]);
   }
 }
 
@@ -48,10 +69,15 @@ export async function loadNote(q: Queryable, id: string): Promise<NoteState | nu
   const rows = await q.query<{ state: NoteState | string }>('SELECT state FROM notes WHERE id = $1', [id]);
   if (!rows.length) return null;
   const st = rows[0].state;
-  return typeof st === 'string' ? JSON.parse(st) as NoteState : st;
+  return typeof st === 'string' ? (JSON.parse(st) as NoteState) : st;
 }
 
-export interface StoredEvent { seq: number; noteId: string | null; ts: number; data: NoteEvent }
+export interface StoredEvent {
+  seq: number;
+  noteId: string | null;
+  ts: number;
+  data: NoteEvent;
+}
 
 /** Apply newly stored events (chain order) to their notes. Returns the notes changed. */
 export async function applyNew(q: Queryable, chain: string, engine: string, events: StoredEvent[]): Promise<string[]> {
@@ -70,8 +96,11 @@ export async function rebuildNote(q: Queryable, chain: string, engine: string, i
   await q.query('DELETE FROM holdings WHERE note_id = $1', [id]);
   await q.query('DELETE FROM notes WHERE id = $1', [id]);
   const rows = await q.query<{ seq: string; ts: string; data: NoteEvent | string }>(
-    'SELECT seq, ts, data FROM events WHERE note_id = $1 ORDER BY block, log_index', [id]);
+    'SELECT seq, ts, data FROM events WHERE note_id = $1 ORDER BY block, log_index',
+    [id],
+  );
   let s: NoteState | null = null;
-  for (const r of rows) s = applyEvent(s, typeof r.data === 'string' ? JSON.parse(r.data) : r.data, { chain, engine, at: Number(r.ts) });
+  for (const r of rows)
+    s = applyEvent(s, typeof r.data === 'string' ? JSON.parse(r.data) : r.data, { chain, engine, at: Number(r.ts) });
   if (s) await saveNote(q, s, Number(rows[rows.length - 1].seq));
 }

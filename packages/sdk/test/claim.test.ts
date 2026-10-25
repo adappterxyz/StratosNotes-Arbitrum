@@ -3,8 +3,25 @@
  * only what is left that is not a payout; and the issuer bot's push policy is off unless a note opts in.
  */
 import { describe, expect, it } from 'vitest';
-import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, toFunctionSelector, type PublicClient, type WalletClient } from 'viem';
-import { CHAINS, claimPayoutsRequest, EvmAdapter, flowEngineAbi, noteId, payoutMethod, pushesNote, pushPolicyFromEnv } from '../src';
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionData,
+  toFunctionSelector,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
+import {
+  CHAINS,
+  claimPayoutsRequest,
+  EvmAdapter,
+  flowEngineAbi,
+  noteId,
+  payoutMethod,
+  pushesNote,
+  pushPolicyFromEnv,
+} from '../src';
 import { compileTemplate, EXAMPLE_PRODUCTS, type WorkflowDef } from '@sn/core';
 
 const V4 = '0x7d36da43724b09bb03ed98a4574685070073020b';
@@ -15,12 +32,28 @@ const OTHER = '0x3333333333333333333333333333333333333333';
 const PAYOUT_ID = `0x${'ab'.repeat(32)}` as const;
 
 function payoutPaidLog(holder: string, amount: bigint) {
-  const topics = encodeEventTopics({ abi: flowEngineAbi, eventName: 'PayoutPaid', args: { pid: 5n, asset: 1, holder: holder as `0x${string}` } } as never);
-  const ev = flowEngineAbi.find(x => x.type === 'event' && x.name === 'PayoutPaid') as unknown as { inputs: ReadonlyArray<{ name: string; type: string; indexed?: boolean }> };
-  const plain = ev.inputs.filter(i => !i.indexed);
+  const topics = encodeEventTopics({
+    abi: flowEngineAbi,
+    eventName: 'PayoutPaid',
+    args: { pid: 5n, asset: 1, holder: holder as `0x${string}` },
+  } as never);
+  const ev = flowEngineAbi.find((x) => x.type === 'event' && x.name === 'PayoutPaid') as unknown as {
+    inputs: ReadonlyArray<{ name: string; type: string; indexed?: boolean }>;
+  };
+  const plain = ev.inputs.filter((i) => !i.indexed);
   const values: Record<string, unknown> = { period: 2n, amount, payoutId: PAYOUT_ID, pid: 5n, asset: 1, holder };
-  const data = encodeAbiParameters(plain as never, plain.map(i => values[i.name]) as never);
-  return { address: V4, topics, data, blockNumber: 1n, logIndex: 0, transactionHash: '0xabc', blockHash: '0x1', transactionIndex: 0, removed: false };
+  const data = encodeAbiParameters(plain as never, plain.map((i) => values[i.name]) as never);
+  return {
+    address: V4,
+    topics,
+    data,
+    blockNumber: 1n,
+    logIndex: 0,
+    transactionHash: '0xabc',
+    blockHash: '0x1',
+    transactionIndex: 0,
+    removed: false,
+  };
 }
 
 /** A client whose balanceOf answers from a queue (before the claim, after it), and a wallet that records writes. */
@@ -47,8 +80,14 @@ function fakes(balances: bigint[], logs: unknown[] = []) {
   } as unknown as WalletClient;
   return { client, wallet, writes, reads };
 }
-const encodeCall = (r: { abi: never; functionName: string; args: unknown[] }) => encodeFunctionData({ abi: r.abi, functionName: r.functionName, args: r.args } as never);
-const withCash = (a: EvmAdapter) => { (a as unknown as { getDefinition: () => Promise<unknown> }).getDefinition = async () => ({ assets: [{ decimals: 6 }, { decimals: 6 }] }); return a; };
+const encodeCall = (r: { abi: never; functionName: string; args: unknown[] }) =>
+  encodeFunctionData({ abi: r.abi, functionName: r.functionName, args: r.args } as never);
+const withCash = (a: EvmAdapter) => {
+  (a as unknown as { getDefinition: () => Promise<unknown> }).getDefinition = async () => ({
+    assets: [{ decimals: 6 }, { decimals: 6 }],
+  });
+  return a;
+};
 
 describe('a holder claims its payouts with pushTo for itself', () => {
   const id = noteId('arbitrum-sepolia', V4, 5n);
@@ -59,7 +98,10 @@ describe('a holder claims its payouts with pushTo for itself', () => {
   });
 
   it('claims with one pushTo for the connected wallet and returns the receipt', async () => {
-    const { client, wallet, writes } = fakes([12_500_000_000n, 0n], [payoutPaidLog(ME, 1_250_000n), payoutPaidLog(OTHER, 9n)]);
+    const { client, wallet, writes } = fakes(
+      [12_500_000_000n, 0n],
+      [payoutPaidLog(ME, 1_250_000n), payoutPaidLog(OTHER, 9n)],
+    );
     const a = withCash(new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V4, lens: LENS }));
     const r = await a.claimPayouts(wallet, id, 1);
     expect(writes).toHaveLength(1);
@@ -74,18 +116,26 @@ describe('a holder claims its payouts with pushTo for itself', () => {
 
   it('then withdraws other cash left on the account (not a payout), and ignores sub-base-unit dust', async () => {
     const { client, wallet, writes } = fakes([30_000_000_000n, 20_000_000_000n, 20_000_000_000n]);
-    const r = await withCash(new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V4, lens: LENS })).claimPayouts(wallet, id, 1);
-    expect(writes.map(w => w.functionName)).toEqual(['pushTo', 'withdraw']);
+    const r = await withCash(
+      new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V4, lens: LENS }),
+    ).claimPayouts(wallet, id, 1);
+    expect(writes.map((w) => w.functionName)).toEqual(['pushTo', 'withdraw']);
     expect(decodeFunctionData({ abi: flowEngineAbi, data: writes[1].data }).args).toEqual([5n, 1, 2_000_000n]);
     expect(r.withdrawn).toBe(2_000_000n);
     const dust = fakes([12_500_000_000n, 9_999n]);
-    await withCash(new EvmAdapter(CHAINS['arbitrum-sepolia'], dust.client, { engine: V4, lens: LENS })).claimPayouts(dust.wallet, id, 1);
-    expect(dust.writes.map(w => w.functionName)).toEqual(['pushTo']);
+    await withCash(new EvmAdapter(CHAINS['arbitrum-sepolia'], dust.client, { engine: V4, lens: LENS })).claimPayouts(
+      dust.wallet,
+      id,
+      1,
+    );
+    expect(dust.writes.map((w) => w.functionName)).toEqual(['pushTo']);
   });
 
   it('refuses when nothing is owed, without sending anything', async () => {
     const { client, wallet, writes } = fakes([0n]);
-    await expect(new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V4, lens: LENS }).claimPayouts(wallet, id, 1)).rejects.toThrow(/Nothing to claim/);
+    await expect(
+      new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V4, lens: LENS }).claimPayouts(wallet, id, 1),
+    ).rejects.toThrow(/Nothing to claim/);
     expect(writes).toHaveLength(0);
   });
 
@@ -93,7 +143,10 @@ describe('a holder claims its payouts with pushTo for itself', () => {
     const { client, wallet } = fakes([1n]);
     const a = new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V3, lens: LENS, version: 3 });
     const called: number[] = [];
-    a.withdraw = async (_w, _id, asset) => { called.push(asset); return { tx: ['0xw'] }; };
+    a.withdraw = async (_w, _id, asset) => {
+      called.push(asset);
+      return { tx: ['0xw'] };
+    };
     const r = await a.claimPayouts(wallet, noteId('arbitrum-sepolia', V3, 2n), 1);
     expect(called).toEqual([1]);
     expect(r).toEqual({ tx: ['0xw'], paid: 0n, payoutIds: [], withdrawn: 0n, deferred: false });
@@ -120,7 +173,7 @@ describe('the issuer bot pushes nothing by default', () => {
     expect(pushesNote(off, optedIn)).toBe(false);
   });
 
-  it('PUSH_MIN is read in the asset\'s units (engine fixed point), PUSH_ASSETS and PUSH_BATCH as before', () => {
+  it("PUSH_MIN is read in the asset's units (engine fixed point), PUSH_ASSETS and PUSH_BATCH as before", () => {
     const p = pushPolicyFromEnv({ PUSH: '1', PUSH_MIN: '0.5', PUSH_ASSETS: '1', PUSH_BATCH: '50' });
     expect(p.min).toBe(5_000_000_000n);
     expect([...p.assets!]).toEqual(['1']);

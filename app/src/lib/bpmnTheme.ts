@@ -14,5 +14,7 @@ export function tagTypes(viewer: any) {
       const type: string = e.businessObject?.$type ?? '';
       for (const [re, cls] of TAGS) if (re.test(type)) canvas.addMarker(e.id, cls);
     }
-  } catch { /* viewer destroyed */ }
+  } catch {
+    /* viewer destroyed */
+  }
 }

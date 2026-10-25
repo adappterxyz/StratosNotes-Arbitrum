@@ -14,7 +14,7 @@ export function restAiRunner(accountId: string, token: string, opts: { timeoutMs
         body: JSON.stringify(input),
         signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
       });
-      const j = await r.json().catch(() => null) as { success?: boolean; result?: unknown; errors?: unknown } | null;
+      const j = (await r.json().catch(() => null)) as { success?: boolean; result?: unknown; errors?: unknown } | null;
       if (!j?.success) throw new Error(`Workers AI ${model}: ${r.status} ${JSON.stringify(j?.errors ?? null)}`);
       return j.result;
     },

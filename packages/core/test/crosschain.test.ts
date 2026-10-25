@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
-  collateralShortfalls, describeFlush, encodeFlushReport, isReceiptInfo, keeperGateways, overdueReleases, planFallbackFlush, planFlush, planReceiptPush,
-  planReceiptWithdrawals, receiptPushGas, releaseQueueReading, withdrawableBase, type VaultWatch,
+  collateralShortfalls,
+  describeFlush,
+  encodeFlushReport,
+  isReceiptInfo,
+  keeperGateways,
+  overdueReleases,
+  planFallbackFlush,
+  planFlush,
+  planReceiptPush,
+  planReceiptWithdrawals,
+  receiptPushGas,
+  releaseQueueReading,
+  withdrawableBase,
+  type VaultWatch,
 } from '../src/crosschain';
 
-const watch: VaultWatch = { homeChain: 'ethereum-testnet-sepolia-arbitrum-1', receipt: '0xr', assetChain: 'robinhood-testnet', vault: '0xv', token: '0xt', label: 'TSLA on Robinhood' };
-const reading = (o: Partial<{ locked: bigint; unclaimedTotal: bigint; vaultBalance: bigint; receiptsOutstanding: bigint }>) =>
-  ({ watch, locked: 100n, unclaimedTotal: 0n, vaultBalance: 100n, receiptsOutstanding: 100n, ...o });
+const watch: VaultWatch = {
+  homeChain: 'ethereum-testnet-sepolia-arbitrum-1',
+  receipt: '0xr',
+  assetChain: 'robinhood-testnet',
+  vault: '0xv',
+  token: '0xt',
+  label: 'TSLA on Robinhood',
+};
+const reading = (
+  o: Partial<{ locked: bigint; unclaimedTotal: bigint; vaultBalance: bigint; receiptsOutstanding: bigint }>,
+) => ({ watch, locked: 100n, unclaimedTotal: 0n, vaultBalance: 100n, receiptsOutstanding: 100n, ...o });
 
 describe('cross-chain collateral checks', () => {
   it('a fully backed vault has no shortfall', () => {
@@ -17,24 +37,42 @@ describe('cross-chain collateral checks', () => {
     expect(collateralShortfalls([reading({ receiptsOutstanding: 60n })])).toEqual([]);
   });
   it('unclaimed releases are owed but no longer locked', () => {
-    expect(collateralShortfalls([reading({ locked: 60n, unclaimedTotal: 40n, vaultBalance: 100n, receiptsOutstanding: 60n })])).toEqual([]);
+    expect(
+      collateralShortfalls([
+        reading({ locked: 60n, unclaimedTotal: 40n, vaultBalance: 100n, receiptsOutstanding: 60n }),
+      ]),
+    ).toEqual([]);
   });
   it('the token taking tokens back from the vault is a shortfall', () => {
-    expect(collateralShortfalls([reading({ vaultBalance: 70n })])).toEqual([{ watch, kind: 'vault-backing', missing: 30n }]);
+    expect(collateralShortfalls([reading({ vaultBalance: 70n })])).toEqual([
+      { watch, kind: 'vault-backing', missing: 30n },
+    ]);
   });
   it('receipts the vault does not account for are a shortfall', () => {
-    expect(collateralShortfalls([reading({ receiptsOutstanding: 120n })])).toEqual([{ watch, kind: 'receipts-exceed-locked', missing: 20n }]);
+    expect(collateralShortfalls([reading({ receiptsOutstanding: 120n })])).toEqual([
+      { watch, kind: 'receipts-exceed-locked', missing: 20n },
+    ]);
   });
 });
 
 describe('auto-release queue (HomeGateway v2)', () => {
-  const q = (o: Partial<{ pending: bigint; head: bigint; queued: bigint; pool: bigint; nextFee: bigint }>) =>
-    ({ pending: 0n, head: 1n, queued: 0n, pool: 10n ** 16n, nextFee: 5n * 10n ** 13n, ...o });
+  const q = (o: Partial<{ pending: bigint; head: bigint; queued: bigint; pool: bigint; nextFee: bigint }>) => ({
+    pending: 0n,
+    head: 1n,
+    queued: 0n,
+    pool: 10n ** 16n,
+    nextFee: 5n * 10n ** 13n,
+    ...o,
+  });
   it('nothing queued: no report', () => {
     expect(planFlush(q({}))).toMatchObject({ flush: false, reason: 'empty' });
   });
   it('flushes what is pending, within the cap and what the pool pays for', () => {
-    expect(planFlush(q({ pending: 3n, queued: 3n }))).toEqual({ flush: true, maxItems: 3, gasLimit: 150_000n + 3n * 300_000n });
+    expect(planFlush(q({ pending: 3n, queued: 3n }))).toEqual({
+      flush: true,
+      maxItems: 3,
+      gasLimit: 150_000n + 3n * 300_000n,
+    });
     expect(planFlush(q({ pending: 40n }), { maxItems: 50 }).maxItems).toBe(25);
     expect(planFlush(q({ pending: 40n, pool: 2n * 5n * 10n ** 13n })).maxItems).toBe(2);
   });
@@ -47,11 +85,19 @@ describe('auto-release queue (HomeGateway v2)', () => {
     expect(() => encodeFlushReport(0)).toThrow();
   });
   it('reads releaseQueue() outputs in order', () => {
-    expect(releaseQueueReading([2n, 5n, 6n, 10n ** 15n, 4n])).toEqual({ pending: 2n, head: 5n, queued: 6n, pool: 10n ** 15n, nextFee: 4n });
+    expect(releaseQueueReading([2n, 5n, 6n, 10n ** 15n, 4n])).toEqual({
+      pending: 2n,
+      head: 5n,
+      queued: 6n,
+      pool: 10n ** 15n,
+      nextFee: 4n,
+    });
   });
   it('logs one line per gateway, with why no report was written', () => {
     const flushing = q({ pending: 2n, queued: 2n });
-    expect(describeFlush('arb', flushing, planFlush(flushing))).toMatch(/^arb gateway flush: 2 release\(s\) waiting .* -> flush up to 2 \(gas 750000\)$/);
+    expect(describeFlush('arb', flushing, planFlush(flushing))).toMatch(
+      /^arb gateway flush: 2 release\(s\) waiting .* -> flush up to 2 \(gas 750000\)$/,
+    );
     expect(describeFlush('arb', q({}), planFlush(q({})))).toMatch(/no report \(nothing to send\)$/);
     const short = q({ pending: 1n, pool: 1n });
     expect(describeFlush('arb', short, planFlush(short))).toMatch(/no report \(pool-short/);
@@ -61,9 +107,16 @@ describe('auto-release queue (HomeGateway v2)', () => {
   it('the keeper config gets the gateway only for an auto-release (v2) gateway', () => {
     const names = { 'arbitrum-sepolia': 'ethereum-testnet-sepolia-arbitrum-1' };
     const home = { chain: 'arbitrum-sepolia', gateway: '0x4C393Ed28Cc1825CfBA5A4d6F2223589249C3a89' };
-    expect(keeperGateways({ home: { ...home, version: 2 } }, names, { stateBlock: 'latest' })).toEqual([{
-      chainSelectorName: 'ethereum-testnet-sepolia-arbitrum-1', gateway: home.gateway, maxItems: 10, baseGas: '250000', gasPerItem: '300000', stateBlock: 'latest',
-    }]);
+    expect(keeperGateways({ home: { ...home, version: 2 } }, names, { stateBlock: 'latest' })).toEqual([
+      {
+        chainSelectorName: 'ethereum-testnet-sepolia-arbitrum-1',
+        gateway: home.gateway,
+        maxItems: 10,
+        baseGas: '250000',
+        gasPerItem: '300000',
+        stateBlock: 'latest',
+      },
+    ]);
     expect(keeperGateways({ home }, names)).toEqual([]);
     expect(keeperGateways({ home: { ...home, version: 1 } }, names)).toEqual([]);
     expect(() => keeperGateways({ home: { ...home, chain: 'mars', version: 2 } }, names)).toThrow();
@@ -71,7 +124,8 @@ describe('auto-release queue (HomeGateway v2)', () => {
 });
 
 describe('auto-release automation (issuer bot)', () => {
-  const TSLA_RH = '0x3667d1534FA175c1A388fC8E2C8F8d7ebBBcD9d6', USDG = '0x7E955252E15c84f5768B83c41a71F9eba181802F';
+  const TSLA_RH = '0x3667d1534FA175c1A388fC8E2C8F8d7ebBBcD9d6',
+    USDG = '0x7E955252E15c84f5768B83c41a71F9eba181802F';
   const receipts = new Set([TSLA_RH.toLowerCase()]);
   const isReceipt = (t: string) => receipts.has(t.toLowerCase());
 
@@ -86,7 +140,11 @@ describe('auto-release automation (issuer bot)', () => {
     expect(withdrawableBase(9_999n, 6)).toBe(0n);
     expect(withdrawableBase(-5n, 18)).toBe(0n);
     // Round trip as Units.fromBase / toBase: base * 1e10 / 10^d, then back.
-    for (const [bal, d] of [[123_456_789_012n, 18], [123_456_789_012n, 6], [7n, 10]] as const) {
+    for (const [bal, d] of [
+      [123_456_789_012n, 18],
+      [123_456_789_012n, 6],
+      [7n, 10],
+    ] as const) {
       const base = withdrawableBase(bal, d);
       const fixed = (base * 10n ** 10n) / 10n ** BigInt(d);
       expect((fixed * 10n ** BigInt(d)) / 10n ** 10n).toBe(base);
@@ -98,20 +156,29 @@ describe('auto-release automation (issuer bot)', () => {
       { asset: 1, token: USDG, decimals: 6, balance: 40n * 10n ** 10n },
       { asset: 2, token: TSLA_RH, decimals: 18, balance: 3n * 10n ** 10n },
     ];
-    expect(planReceiptWithdrawals(false, assets, isReceipt)).toEqual([{ asset: 2, token: TSLA_RH, base: 3n * 10n ** 18n }]);
+    expect(planReceiptWithdrawals(false, assets, isReceipt)).toEqual([
+      { asset: 2, token: TSLA_RH, base: 3n * 10n ** 18n },
+    ]);
   });
 
   it('nothing while the note runs, and nothing below one base unit', () => {
     const assets = [{ asset: 2, token: TSLA_RH, decimals: 18, balance: 3n * 10n ** 10n }];
     expect(planReceiptWithdrawals(true, assets, isReceipt)).toEqual([]);
-    expect(planReceiptWithdrawals(false, [{ asset: 2, token: TSLA_RH, decimals: 6, balance: 9_999n }], isReceipt)).toEqual([]);
-    expect(planReceiptWithdrawals(false, [{ asset: 2, token: TSLA_RH, decimals: 18, balance: 0n }], isReceipt)).toEqual([]);
+    expect(
+      planReceiptWithdrawals(false, [{ asset: 2, token: TSLA_RH, decimals: 6, balance: 9_999n }], isReceipt),
+    ).toEqual([]);
+    expect(planReceiptWithdrawals(false, [{ asset: 2, token: TSLA_RH, decimals: 18, balance: 0n }], isReceipt)).toEqual(
+      [],
+    );
   });
 
   it('a default: pushes every holder owed a whole base unit of the receipt, in batches', () => {
     const who = ['0xa', '0xb', '0xc', '0xd', '0xe'];
     const owed = [10n ** 10n, 0n, 5n, 2n * 10n ** 10n, 3n * 10n ** 10n];
-    expect(planReceiptPush(who, owed, 18, 2)).toEqual([['0xa', '0xc'], ['0xd', '0xe']]);
+    expect(planReceiptPush(who, owed, 18, 2)).toEqual([
+      ['0xa', '0xc'],
+      ['0xd', '0xe'],
+    ]);
     // 6 decimals: 5 (fixed point) is under one base unit (1e4) and stays claimable.
     expect(planReceiptPush(who, owed, 6, 25)).toEqual([['0xa', '0xd', '0xe']]);
     expect(planReceiptPush([], [], 18, 25)).toEqual([]);
@@ -126,9 +193,19 @@ describe('auto-release automation (issuer bot)', () => {
   });
 
   describe('CRE is the primary flusher; the bot flushes only what waited longer than FLUSH_AFTER', () => {
-    const q = (o: Partial<{ pending: bigint; head: bigint; queued: bigint; pool: bigint; nextFee: bigint }>) =>
-      ({ pending: 3n, head: 4n, queued: 6n, pool: 10n ** 16n, nextFee: 5n * 10n ** 13n, ...o });
-    const at = new Map<bigint, number>([[4n, 1_000], [5n, 1_100], [6n, 1_190]]);
+    const q = (o: Partial<{ pending: bigint; head: bigint; queued: bigint; pool: bigint; nextFee: bigint }>) => ({
+      pending: 3n,
+      head: 4n,
+      queued: 6n,
+      pool: 10n ** 16n,
+      nextFee: 5n * 10n ** 13n,
+      ...o,
+    });
+    const at = new Map<bigint, number>([
+      [4n, 1_000],
+      [5n, 1_100],
+      [6n, 1_190],
+    ]);
 
     it('counts the releases older than FLUSH_AFTER, oldest first', () => {
       expect(overdueReleases(q({}), at, new Set(), 1_150, 180)).toBe(0); // the oldest waited 150 s: CRE's turn

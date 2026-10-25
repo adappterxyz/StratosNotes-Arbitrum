@@ -5,7 +5,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bytesToHex as hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { compile, compileTemplate, dec, definitionId, EXAMPLE_PRODUCTS, evmCoreLength, instantiateProduct, parseBpmn, templateMessage } from '@sn/core';
+import {
+  compile,
+  compileTemplate,
+  dec,
+  definitionId,
+  EXAMPLE_PRODUCTS,
+  evmCoreLength,
+  instantiateProduct,
+  parseBpmn,
+  templateMessage,
+} from '@sn/core';
 import { bytesToHex } from '@sn/sdk';
 import { FakeChain, type FakeEvent } from '../../indexer/test/fake-chain';
 import { createEdgeApp } from '../src/api';
@@ -27,20 +37,36 @@ const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
 const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });
 const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
-const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
+const field = (n: string) => c.def.fields.findIndex((f) => f.name === n);
 const word = (v: bigint) => `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}`;
 const NOW = 1_700_000_100;
-const ascii = (s: string) => `0x${Array.from(new TextEncoder().encode(s), b => b.toString(16).padStart(2, '0')).join('').padEnd(64, '0')}`;
+const ascii = (s: string) =>
+  `0x${Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .padEnd(64, '0')}`;
 
 function note(pid: bigint, strikeAt: number, status = 0): FakeEvent[] {
   return [
-    { eventName: 'ProcessStarted', args: { pid, definition: defId, creator: ISSUER, ref: pid, roles: [ISSUER, ISSUER, ZERO], assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'] } },
+    {
+      eventName: 'ProcessStarted',
+      args: {
+        pid,
+        definition: defId,
+        creator: ISSUER,
+        ref: pid,
+        roles: [ISSUER, ISSUER, ZERO],
+        assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'],
+      },
+    },
     { eventName: 'FieldSet', args: { pid, field: field('notional'), tag: 1, value: word(dec(1000)) } },
     { eventName: 'FieldSet', args: { pid, field: field('strikeDate'), tag: 1, value: word(BigInt(strikeAt)) } },
     { eventName: 'FieldSet', args: { pid, field: field('isin'), tag: 2, value: ascii(`XSTEST${pid}`) } },
     { eventName: 'HoldingChanged', args: { pid, asset: 0, owner: ISSUER, balance: dec(400) } },
     { eventName: 'HoldingChanged', args: { pid, asset: 0, owner: ALICE, balance: dec(600) } },
-    { eventName: 'TokensUpdated', args: { pid, status, stepsRun: 3, tokens: status ? [] : [c.stepIndex.Task_Subscribe] } },
+    {
+      eventName: 'TokensUpdated',
+      args: { pid, status, stepsRun: 3, tokens: status ? [] : [c.stepIndex.Task_Subscribe] },
+    },
   ];
 }
 
@@ -49,27 +75,51 @@ let chain: FakeChain;
 let ing: D1Ingestor;
 const config = ApiConfig.parse({
   allowedOrigins: [ORIGIN],
-  chains: [{ key: 'local', rpc: 'http://127.0.0.1:1', engine: ENGINE, lens: ENGINE, stablecoin: { symbol: 'USDC', address: '0x00000000000000000000000000000000000000c1', decimals: 6 } }],
+  chains: [
+    {
+      key: 'local',
+      rpc: 'http://127.0.0.1:1',
+      engine: ENGINE,
+      lens: ENGINE,
+      stablecoin: { symbol: 'USDC', address: '0x00000000000000000000000000000000000000c1', decimals: 6 },
+    },
+  ],
   limits: { templatesPerHour: 5 },
 });
 let app: ReturnType<typeof createEdgeApp>;
 const get = (path: string, headers: Record<string, string> = {}) => app.request(path, { headers });
-const post = (path: string, body: unknown, origin = ORIGIN) => app.request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body) });
+const post = (path: string, body: unknown, origin = ORIGIN) =>
+  app.request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify(body),
+  });
 
 beforeAll(async () => {
   d1 = await localD1();
   chain = new FakeChain(NOW - 1000);
   chain.cores.set(defId, hex(c.bytes.subarray(0, coreLen)));
-  ing = new D1Ingestor(new Store(d1.db), { key: 'local', family: 'evm', chainId: 998, rpc: '', engine: ENGINE, startBlock: 1 }, chain);
+  ing = new D1Ingestor(
+    new Store(d1.db),
+    { key: 'local', family: 'evm', chainId: 998, rpc: '', engine: ENGINE, startBlock: 1 },
+    chain,
+  );
   await ing.init();
-  chain.mine([{ eventName: 'DefinitionRegistered', args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) } }]);
-  chain.mine(note(1n, NOW + 3600));       // book open
-  chain.mine(note(2n, NOW - 3600));       // book closed: live
-  chain.mine(note(3n, NOW - 7200, 1));    // redeemed
+  chain.mine([
+    {
+      eventName: 'DefinitionRegistered',
+      args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) },
+    },
+  ]);
+  chain.mine(note(1n, NOW + 3600)); // book open
+  chain.mine(note(2n, NOW - 3600)); // book closed: live
+  chain.mine(note(3n, NOW - 7200, 1)); // redeemed
   await ing.catchUp();
   app = createEdgeApp({ store: () => new Store(d1.db), config, ai: false, now: () => NOW * 1000 });
 }, 60_000);
-afterAll(async () => { await d1.dispose(); });
+afterAll(async () => {
+  await d1.dispose();
+});
 
 const id = (pid: number) => `local:${ENGINE}:${pid}`;
 
@@ -80,8 +130,12 @@ describe('notes', () => {
     const book = await (await get('/api/notes?status=book')).json();
     expect(book.notes.map((n: { id: string }) => n.id)).toEqual([id(1)]);
     expect(book.notes[0].view.phase).toBe('book');
-    expect((await (await get('/api/notes?status=live')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(2)]);
-    expect((await (await get('/api/notes?status=redeemed')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(3)]);
+    expect((await (await get('/api/notes?status=live')).json()).notes.map((n: { id: string }) => n.id)).toEqual([
+      id(2),
+    ]);
+    expect((await (await get('/api/notes?status=redeemed')).json()).notes.map((n: { id: string }) => n.id)).toEqual([
+      id(3),
+    ]);
     expect((await (await get('/api/notes?underlying=eth&product=phoenix&status=active')).json()).notes).toHaveLength(2);
     expect((await (await get('/api/notes?underlying=BTC')).json()).notes).toHaveLength(0);
     expect((await (await get('/api/notes?q=XSTEST2')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(2)]);
@@ -152,7 +206,9 @@ describe('templates', () => {
     const r = await post('/api/templates', { entry: { ...entry, definition: def, product: rh }, signature });
     expect(r.status).toBe(400);
     expect((await r.json()).error).toMatch(/issued on Arbitrum Sepolia only/);
-    expect((await (await get('/api/templates')).json()).map((t: { definition: string }) => t.definition)).not.toContain(def);
+    expect((await (await get('/api/templates')).json()).map((t: { definition: string }) => t.definition)).not.toContain(
+      def,
+    );
   });
 
   it('refuses a wrong signature, a mismatched workflow, a foreign origin, and too many saves (D1 counter)', async () => {
@@ -189,23 +245,63 @@ describe('cron', () => {
     const alerts = alertsStore(store);
     // A verified email for Alice (payouts on), and three queued messages: Alice's payout (sent), the same key
     // again (ignored) and one for an address without an email (skipped).
-    await alerts.startVerification({ address: ALICE, email: 'alice@example.com', categories: ['payouts'], codeHash: 'h', codeExpires: NOW + 600, linkTokenHash: 'l', unsubscribeToken: 'tok-a', now: NOW });
+    await alerts.startVerification({
+      address: ALICE,
+      email: 'alice@example.com',
+      categories: ['payouts'],
+      codeHash: 'h',
+      codeExpires: NOW + 600,
+      linkTokenHash: 'l',
+      unsubscribeToken: 'tok-a',
+      now: NOW,
+    });
     await alerts.completeVerification(ALICE, '0x01', '0x02', NOW);
-    const item = (dedupe: string, address: string, category: string) => ({ dedupe, address, noteId: id(1), category, payload: { subject: 'Paid', body: 'You were paid.', vars: {} }, sendAfter: NOW, expiresAt: null });
+    const item = (dedupe: string, address: string, category: string) => ({
+      dedupe,
+      address,
+      noteId: id(1),
+      category,
+      payload: { subject: 'Paid', body: 'You were paid.', vars: {} },
+      sendAfter: NOW,
+      expiresAt: null,
+    });
     expect(await alerts.enqueue([item('n1:pay:1:alice', ALICE, 'payouts')], NOW)).toBe(1);
     expect(await alerts.enqueue([item('n1:pay:1:alice', ALICE, 'payouts')], NOW)).toBe(0);
     await alerts.enqueue([item('n1:pay:1:issuer', ISSUER, 'due')], NOW);
     const sent: string[] = [];
-    const sender: EmailSender = { send: async m => { sent.push(`${m.to}:${m.subject}`); return { messageId: `m${sent.length}` }; } };
+    const sender: EmailSender = {
+      send: async (m) => {
+        sent.push(`${m.to}:${m.subject}`);
+        return { messageId: `m${sent.length}` };
+      },
+    };
     chain.mine([{ eventName: 'HoldingChanged', args: { pid: 2n, asset: 0, owner: ALICE, balance: dec(650) } }]);
-    const cfg = parseEdgeConfig({ api: config, indexer: { chains: [{ key: 'local', family: 'evm', chainId: 998, rpc: 'http://127.0.0.1:1', engine: ENGINE, startBlock: 1 }] } });
-    const r = await runCron({ store: new Store(d1.db), config: cfg, source: () => chain, sender, now: () => NOW * 1000 });
+    const cfg = parseEdgeConfig({
+      api: config,
+      indexer: {
+        chains: [
+          { key: 'local', family: 'evm', chainId: 998, rpc: 'http://127.0.0.1:1', engine: ENGINE, startBlock: 1 },
+        ],
+      },
+    });
+    const r = await runCron({
+      store: new Store(d1.db),
+      config: cfg,
+      source: () => chain,
+      sender,
+      now: () => NOW * 1000,
+    });
     expect(r.chains[0].error).toBeUndefined();
-    expect(r.chains[0].steps.some(s => s.notes.includes(id(2)))).toBe(true);
+    expect(r.chains[0].steps.some((s) => s.notes.includes(id(2)))).toBe(true);
     expect(r.queries).toBeLessThan(800);
     expect(sent).toEqual(['alice@example.com:Paid']);
-    const rows = await store.all<{ dedupe: string; status: string }>('SELECT dedupe, status FROM email_outbox ORDER BY dedupe');
-    expect(rows).toEqual([{ dedupe: 'n1:pay:1:alice', status: 'sent' }, { dedupe: 'n1:pay:1:issuer', status: 'skipped' }]);
+    const rows = await store.all<{ dedupe: string; status: string }>(
+      'SELECT dedupe, status FROM email_outbox ORDER BY dedupe',
+    );
+    expect(rows).toEqual([
+      { dedupe: 'n1:pay:1:alice', status: 'sent' },
+      { dedupe: 'n1:pay:1:issuer', status: 'skipped' },
+    ]);
     // A second run sends nothing again.
     await runCron({ store: new Store(d1.db), config: cfg, source: () => chain, sender, now: () => NOW * 1000 });
     expect(sent).toHaveLength(1);
@@ -213,9 +309,24 @@ describe('cron', () => {
 
   it('without a sender (Email Sending off) leaves the outbox pending', async () => {
     const store = new Store(d1.db);
-    await alertsStore(store).enqueue([{ dedupe: 'held', address: ALICE, noteId: null, category: 'payouts', payload: { subject: 'S', body: 'B', vars: {} }, sendAfter: NOW, expiresAt: null }], NOW);
+    await alertsStore(store).enqueue(
+      [
+        {
+          dedupe: 'held',
+          address: ALICE,
+          noteId: null,
+          category: 'payouts',
+          payload: { subject: 'S', body: 'B', vars: {} },
+          sendAfter: NOW,
+          expiresAt: null,
+        },
+      ],
+      NOW,
+    );
     const cfg = parseEdgeConfig({ api: config, indexer: { chains: [] } });
     await runCron({ store, config: cfg, sender: null, now: () => NOW * 1000 });
-    expect((await store.first<{ status: string }>("SELECT status FROM email_outbox WHERE dedupe = 'held'"))!.status).toBe('pending');
+    expect(
+      (await store.first<{ status: string }>("SELECT status FROM email_outbox WHERE dedupe = 'held'"))!.status,
+    ).toBe('pending');
   });
 });

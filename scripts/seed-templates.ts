@@ -20,13 +20,17 @@ const keyFile = process.env.KEY_FILE ?? '.keys/deployer.json';
 const pk = (JSON.parse(readFileSync(keyFile, 'utf8')) as Array<{ private_key: string }>)[0].private_key;
 const account = privateKeyToAccount((pk.startsWith('0x') ? pk : `0x${pk}`) as Hex);
 
-for (const t of SEED_TEMPLATES.filter(x => !process.env.ONLY || x.name.includes(process.env.ONLY))) {
+for (const t of SEED_TEMPLATES.filter((x) => !process.env.ONLY || x.name.includes(process.env.ONLY))) {
   const definition = definitionId(compileTemplate(t.source));
   const entry = { definition, name: t.name, description: t.description, author: account.address, ...t.source };
   const signature = await account.signMessage({ message: templateMessage(definition) });
   const r = await fetch(`${API}/api/templates`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN }, body: JSON.stringify({ entry, signature }),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+    body: JSON.stringify({ entry, signature }),
   });
-  const j = await r.json().catch(() => ({})) as { error?: string };
-  console.log(`${r.status === 201 ? 'published' : r.status === 409 ? 'already there' : `failed ${r.status}`}  ${definition.slice(0, 12)}…  ${t.name}${j.error && r.status !== 409 ? `: ${j.error}` : ''}`);
+  const j = (await r.json().catch(() => ({}))) as { error?: string };
+  console.log(
+    `${r.status === 201 ? 'published' : r.status === 409 ? 'already there' : `failed ${r.status}`}  ${definition.slice(0, 12)}…  ${t.name}${j.error && r.status !== 409 ? `: ${j.error}` : ''}`,
+  );
 }

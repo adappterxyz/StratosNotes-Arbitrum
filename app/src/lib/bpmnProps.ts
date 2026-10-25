@@ -10,11 +10,15 @@ export const flowModdle = {
   uri: FLOW_NS,
   prefix: 'flow',
   xml: { tagAlias: 'lowerCase' },
-  types: [{
-    name: 'Properties',
-    superClass: ['Element'],
-    properties: ['templateFields', 'assetOperation', 'assetOperations', 'timer', 'until', 'receiveGuard'].map(name => ({ name, isAttr: true, type: 'String' })),
-  }],
+  types: [
+    {
+      name: 'Properties',
+      superClass: ['Element'],
+      properties: ['templateFields', 'assetOperation', 'assetOperations', 'timer', 'until', 'receiveGuard'].map(
+        (name) => ({ name, isAttr: true, type: 'String' }),
+      ),
+    },
+  ],
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -25,13 +29,24 @@ const extOf = (bo: Bo) => (bo?.extensionElements?.values ?? []).find((v: Bo) => 
 export function readProps(bo: Bo): NodeProps {
   const p = extOf(bo);
   if (!p) return {};
-  const j = (k: string) => { try { return p[k] ? JSON.parse(p[k]) : undefined; } catch { return undefined; } };
+  const j = (k: string) => {
+    try {
+      return p[k] ? JSON.parse(p[k]) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   const out: NodeProps = {};
-  const tf = j('templateFields'); if (tf?.length) out.templateFields = tf;
-  const ao = j('assetOperation'); if (ao) out.assetOperation = ao;
-  const aos = j('assetOperations'); if (aos?.length) out.assetOperations = aos;
-  const timer = j('timer'); if (timer) out.timer = timer;
-  const until = j('until'); if (until) out.until = until;
+  const tf = j('templateFields');
+  if (tf?.length) out.templateFields = tf;
+  const ao = j('assetOperation');
+  if (ao) out.assetOperation = ao;
+  const aos = j('assetOperations');
+  if (aos?.length) out.assetOperations = aos;
+  const timer = j('timer');
+  if (timer) out.timer = timer;
+  const until = j('until');
+  if (until) out.until = until;
   if (p.receiveGuard) out.receiveGuard = p.receiveGuard;
   return out;
 }
@@ -58,7 +73,9 @@ export function writeProps(modeler: any, element: any, props: NodeProps) {
 export function writeCondition(modeler: any, flow: any, condition: string) {
   const moddle = modeler.get('moddle');
   modeler.get('modeling').updateProperties(flow, {
-    conditionExpression: condition.trim() ? moddle.create('bpmn:FormalExpression', { body: condition.trim() }) : undefined,
+    conditionExpression: condition.trim()
+      ? moddle.create('bpmn:FormalExpression', { body: condition.trim() })
+      : undefined,
   });
 }
 

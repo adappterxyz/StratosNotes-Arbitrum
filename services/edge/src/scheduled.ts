@@ -32,13 +32,28 @@ const STEP_QUERY_MAX = 12 + DEFAULT_LIMITS.maxNotes * 8 + Math.ceil(DEFAULT_LIMI
 export class CountedSource implements ChainSource {
   calls = 0;
   constructor(private readonly src: ChainSource) {}
-  private n<T>(p: Promise<T>) { this.calls++; return p; }
-  head() { return this.n(this.src.head()); }
-  finalized() { return this.n(this.src.finalized()); }
-  block(n: bigint) { return this.n(this.src.block(n)); }
-  logs(from: bigint, to: bigint) { return this.n(this.src.logs(from, to)); }
-  definitionCore(id: string) { return this.n(this.src.definitionCore(id)); }
-  fallbackReporterAt(block: bigint) { return this.n(this.src.fallbackReporterAt(block)); }
+  private n<T>(p: Promise<T>) {
+    this.calls++;
+    return p;
+  }
+  head() {
+    return this.n(this.src.head());
+  }
+  finalized() {
+    return this.n(this.src.finalized());
+  }
+  block(n: bigint) {
+    return this.n(this.src.block(n));
+  }
+  logs(from: bigint, to: bigint) {
+    return this.n(this.src.logs(from, to));
+  }
+  definitionCore(id: string) {
+    return this.n(this.src.definitionCore(id));
+  }
+  fallbackReporterAt(block: bigint) {
+    return this.n(this.src.fallbackReporterAt(block));
+  }
 }
 
 /** A JSON-RPC source for the Worker: one retry, a short timeout (the cron retries next minute anyway). */
@@ -75,15 +90,26 @@ export async function runCron(opts: {
   const report: CronReport = { chains: [], queries: 0, sent: 0, notify: null, ms: 0 };
   let rpc = 0;
   // Share the budget fairly: every chain gets a turn each round, so one busy chain cannot starve the others.
-  const ingestors = chains.map(c => ({ c, src: new CountedSource((opts.source ?? workerSource)(c)), steps: [] as StepResult[], done: false, error: undefined as string | undefined }));
+  const ingestors = chains.map((c) => ({
+    c,
+    src: new CountedSource((opts.source ?? workerSource)(c)),
+    steps: [] as StepResult[],
+    done: false,
+    error: undefined as string | undefined,
+  }));
   for (const x of ingestors) {
-    try { await new D1Ingestor(opts.store, x.c, x.src).init(); } catch (e) { x.error = e instanceof Error ? e.message : String(e); x.done = true; }
+    try {
+      await new D1Ingestor(opts.store, x.c, x.src).init();
+    } catch (e) {
+      x.error = e instanceof Error ? e.message : String(e);
+      x.done = true;
+    }
   }
   const left = () =>
-    Date.now() - t0 < budget.wallMs
-    && opts.store.queries + STEP_QUERY_MAX < budget.queries
-    && rpc + STEP_RPC_MAX < budget.rpcCalls;
-  while (ingestors.some(x => !x.done) && left()) {
+    Date.now() - t0 < budget.wallMs &&
+    opts.store.queries + STEP_QUERY_MAX < budget.queries &&
+    rpc + STEP_RPC_MAX < budget.rpcCalls;
+  while (ingestors.some((x) => !x.done) && left()) {
     for (const x of ingestors) {
       if (x.done || !left()) continue;
       const before = x.src.calls;
@@ -98,7 +124,14 @@ export async function runCron(opts: {
       rpc += x.src.calls - before;
     }
   }
-  for (const x of ingestors) report.chains.push({ chain: x.c.indexKey ?? x.c.key, engine: x.c.engine.toLowerCase(), steps: x.steps, error: x.error, rpcCalls: x.src.calls });
+  for (const x of ingestors)
+    report.chains.push({
+      chain: x.c.indexKey ?? x.c.key,
+      engine: x.c.engine.toLowerCase(),
+      steps: x.steps,
+      error: x.error,
+      rpcCalls: x.src.calls,
+    });
 
   // Housekeeping: live-update rows older than a day, expired rate-limit windows.
   const now = Math.floor((opts.now?.() ?? Date.now()) / 1000);
@@ -111,7 +144,10 @@ export async function runCron(opts: {
   if (opts.store.queries + 250 < budget.queries) {
     try {
       report.notify = await notifierTick(opts.store, {
-        sender: opts.sender ?? null, siteUrl: opts.siteUrl ?? 'https://notes.markets', now, chainLabel: opts.chainLabel ?? (k => k),
+        sender: opts.sender ?? null,
+        siteUrl: opts.siteUrl ?? 'https://notes.markets',
+        now,
+        chainLabel: opts.chainLabel ?? ((k) => k),
       });
       report.sent = report.notify.sent ?? 0;
     } catch (e) {

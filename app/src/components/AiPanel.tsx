@@ -9,7 +9,12 @@ import { Sparkles, X } from 'lucide-react';
 import type { ProductParams, WorkflowDraft } from '@sn/core';
 
 export type AiResult =
-  | { kind: 'product'; params: ProductParams; schedule?: { every: number; unit: 'months' | 'days' | 'minutes'; count: number; size?: number }; notes?: string[] }
+  | {
+      kind: 'product';
+      params: ProductParams;
+      schedule?: { every: number; unit: 'months' | 'days' | 'minutes'; count: number; size?: number };
+      notes?: string[];
+    }
   | { kind: 'workflow'; bpmnXml: string; changed: string[]; warnings?: string[] }
   | { kind: 'clarify' | 'reply' | 'error'; reply?: string; error?: string };
 
@@ -21,54 +26,108 @@ const EXAMPLES = [
   'Pay the paying agent a 0.1% servicing fee after each coupon',
 ];
 
-export default function AiPanel({ draft, onResult, onClose }: { draft: () => Promise<WorkflowDraft | undefined>; onResult: (r: AiResult) => Promise<string>; onClose: () => void }) {
+export default function AiPanel({
+  draft,
+  onResult,
+  onClose,
+}: {
+  draft: () => Promise<WorkflowDraft | undefined>;
+  onResult: (r: AiResult) => Promise<string>;
+  onClose: () => void;
+}) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [msgs, busy]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' });
+  }, [msgs, busy]);
 
   const ask = async (text = prompt.trim()) => {
     if (!text || busy) return;
-    setMsgs(m => [...m, { who: 'you', text }]); setPrompt(''); setBusy(true);
+    setMsgs((m) => [...m, { who: 'you', text }]);
+    setPrompt('');
+    setBusy(true);
     try {
-      const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text, draft: await draft() }) });
-      const j = await r.json() as AiResult & { error?: string };
+      const r = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: text, draft: await draft() }),
+      });
+      const j = (await r.json()) as AiResult & { error?: string };
       if (!r.ok && j.error) throw new Error(j.error);
       const said = await onResult(j);
       const notes = j.kind === 'product' ? j.notes : j.kind === 'workflow' ? j.warnings : undefined;
-      setMsgs(m => [...m, { who: 'ai', text: said, notes }]);
+      setMsgs((m) => [...m, { who: 'ai', text: said, notes }]);
     } catch (e) {
-      setMsgs(m => [...m, { who: 'ai', text: e instanceof Error ? e.message : String(e) }]);
-    } finally { setBusy(false); }
+      setMsgs((m) => [...m, { who: 'ai', text: e instanceof Error ? e.message : String(e) }]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <aside className="ws-ai" aria-label="AI assistant">
       <div className="ws-bar" style={{ justifyContent: 'space-between' }}>
-        <span className="row small" style={{ fontWeight: 600 }}><Sparkles className="i" style={{ color: 'hsl(var(--accent-text))' }} />AI assistant</span>
-        <button className="btn" onClick={onClose} aria-label="Hide the AI assistant"><X className="i" /></button>
+        <span className="row small" style={{ fontWeight: 600 }}>
+          <Sparkles className="i" style={{ color: 'hsl(var(--accent-text))' }} />
+          AI assistant
+        </span>
+        <button className="btn" onClick={onClose} aria-label="Hide the AI assistant">
+          <X className="i" />
+        </button>
       </div>
       <div className="chat">
         {msgs.length === 0 && (
           <div className="stack" style={{ gap: 8 }}>
-            <p className="xs muted">Describe a note, paste a term sheet, or ask for a change to the open workflow. The answer is checked by the validator and compiler before it reaches the canvas.</p>
-            {EXAMPLES.map(x => <button key={x} className="msg ai" style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }} onClick={() => ask(x)}>{x}</button>)}
+            <p className="xs muted">
+              Describe a note, paste a term sheet, or ask for a change to the open workflow. The answer is checked by
+              the validator and compiler before it reaches the canvas.
+            </p>
+            {EXAMPLES.map((x) => (
+              <button
+                key={x}
+                className="msg ai"
+                style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}
+                onClick={() => ask(x)}
+              >
+                {x}
+              </button>
+            ))}
           </div>
         )}
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.who}`}>
             {m.text}
-            {m.notes?.length ? <ul>{m.notes.map(n => <li key={n}>{n}</li>)}</ul> : null}
+            {m.notes?.length ? (
+              <ul>
+                {m.notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ))}
         {busy && <div className="msg ai muted">Thinking…</div>}
         <div ref={end} />
       </div>
       <div className="chat-in">
-        <textarea aria-label="Ask the AI" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="e.g. a worst-of phoenix on ETH and SOL…"
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }} />
-        <button className="btn primary" disabled={busy || !prompt.trim()} onClick={() => ask()}><Sparkles className="i" />{busy ? 'Thinking…' : 'Send'}</button>
+        <textarea
+          aria-label="Ask the AI"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="e.g. a worst-of phoenix on ETH and SOL…"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              ask();
+            }
+          }}
+        />
+        <button className="btn primary" disabled={busy || !prompt.trim()} onClick={() => ask()}>
+          <Sparkles className="i" />
+          {busy ? 'Thinking…' : 'Send'}
+        </button>
       </div>
     </aside>
   );

@@ -11,13 +11,24 @@
 import { payoutMethodOf, type ProductParams } from '@sn/core';
 
 export const ASSET_NAME: Record<string, string> = {
-  ETH: 'Ethereum', BTC: 'Bitcoin', SOL: 'Solana', TSLA: 'Tesla', NVDA: 'NVIDIA', AAPL: 'Apple', AMZN: 'Amazon', NFLX: 'Netflix', SPY: 'S&P 500',
+  ETH: 'Ethereum',
+  BTC: 'Bitcoin',
+  SOL: 'Solana',
+  TSLA: 'Tesla',
+  NVDA: 'NVIDIA',
+  AAPL: 'Apple',
+  AMZN: 'Amazon',
+  NFLX: 'Netflix',
+  SPY: 'S&P 500',
 };
 const STOCKS = new Set(['TSLA', 'NVDA', 'AAPL', 'AMZN', 'NFLX', 'SPY']);
 const YEAR = 365.25 * 86400;
 const MONTH = YEAR / 12;
 
-export interface Schedule { strikeDate?: number; obsDates?: number[] }
+export interface Schedule {
+  strikeDate?: number;
+  obsDates?: number[];
+}
 
 export interface Yield {
   /** e.g. "10%", "Up to 10%" (with rateLabel), or "90% protected + 100% of the upside". */
@@ -54,11 +65,13 @@ export interface Listing {
 export const PAYOUT_TEXT = {
   claim: {
     text: 'Claim any time from your portfolio',
-    detail: 'Your coupons and redemption build up until you claim them from your portfolio. One claim at maturity collects everything, with a receipt per claim.',
+    detail:
+      'Your coupons and redemption build up until you claim them from your portfolio. One claim at maturity collects everything, with a receipt per claim.',
   },
   push: {
     text: 'Paid to your wallet automatically (issuer covers gas)',
-    detail: 'The issuer sends each coupon and the redemption to your wallet and pays the gas, with a receipt per payment. You can also claim yourself from your portfolio at any time.',
+    detail:
+      'The issuer sends each coupon and the redemption to your wallet and pays the gas, with a receipt per payment. You can also claim yourself from your portfolio at any time.',
   },
 } as const;
 
@@ -66,14 +79,20 @@ const round = (x: number) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10)
 const pct = (x: number) => `${round(x)}%`;
 
 export function assetsPhrase(syms: string[]): string {
-  const names = syms.map(s => ASSET_NAME[s] ?? s);
+  const names = syms.map((s) => ASSET_NAME[s] ?? s);
   if (names.length <= 1) return names[0] ?? 'the underlying';
-  const list = names.length === 2 ? `${names[0]} & ${names[1]}` : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+  const list =
+    names.length === 2 ? `${names[0]} & ${names[1]}` : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
   return `${list}: the ${names.length === 2 ? 'weaker one' : 'weakest'} counts`;
 }
 
 /** Who the condition is about: "Tesla", or "the weaker one" for a basket. */
-const subject = (syms: string[]) => (syms.length > 1 ? (syms.length === 2 ? 'the weaker one' : 'the weakest') : ASSET_NAME[syms[0]] ?? syms[0] ?? 'the underlying');
+const subject = (syms: string[]) =>
+  syms.length > 1
+    ? syms.length === 2
+      ? 'the weaker one'
+      : 'the weakest'
+    : (ASSET_NAME[syms[0]] ?? syms[0] ?? 'the underlying');
 
 /** The designed term in months, from a product name like "12M Phoenix…" (12 by default). */
 function designMonths(p: ProductParams) {
@@ -88,12 +107,21 @@ export function periods(p: ProductParams, s: Schedule = {}) {
   const termSec = s.strikeDate && end ? end - s.strikeDate : null;
   if (termSec && termSec >= MONTH) return { n, periodSec: termSec / n, termSec, demo: false };
   const months = designMonths(p);
-  return { n, periodSec: (months * MONTH) / n, termSec: months * MONTH, demo: !!termSec, actualTermSec: termSec ?? undefined };
+  return {
+    n,
+    periodSec: (months * MONTH) / n,
+    termSec: months * MONTH,
+    demo: !!termSec,
+    actualTermSec: termSec ?? undefined,
+  };
 }
 
 const everyPhrase = (sec: number) => {
   const months = sec / MONTH;
-  if (months >= 0.9) { const m = Math.round(months); return m === 1 ? 'every month' : m === 12 ? 'every year' : `every ${m} months`; }
+  if (months >= 0.9) {
+    const m = Math.round(months);
+    return m === 1 ? 'every month' : m === 12 ? 'every year' : `every ${m} months`;
+  }
   const days = Math.round(sec / 86400);
   return days <= 1 ? 'every day' : `every ${days} days`;
 };
@@ -107,7 +135,7 @@ const termPhrase = (sec: number) => {
 };
 
 export function listingOf(p: ProductParams, s: Schedule = {}, cash = 'USDG'): Listing {
-  const syms = p.underlyings.map(u => u.symbol);
+  const syms = p.underlyings.map((u) => u.symbol);
   const who = subject(syms);
   const per = periods(p, s);
   const perYear = YEAR / per.periodSec;
@@ -116,24 +144,57 @@ export function listingOf(p: ProductParams, s: Schedule = {}, cash = 'USDG'): Li
   const every = everyPhrase(per.periodSec);
   let y: Yield;
   if (p.productType === 'ppn') {
-    y = { headline: `${p.protectionPct ?? 100}% protected + ${p.participationPct ?? 0}% of the upside`, sub: `in ${cash} at the end`, qualifier: null, apr: null, guaranteed: (p.protectionPct ?? 0) >= 100 };
+    y = {
+      headline: `${p.protectionPct ?? 100}% protected + ${p.participationPct ?? 0}% of the upside`,
+      sub: `in ${cash} at the end`,
+      qualifier: null,
+      apr: null,
+      guaranteed: (p.protectionPct ?? 0) >= 100,
+    };
   } else if (p.productType === 'phoenix') {
-    y = { headline: `Up to ${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid ${every}`, qualifier: `if ${who} stays above ${p.couponBarrierPct ?? 0}%`, apr, guaranteed: false };
+    y = {
+      headline: `Up to ${pct(apr)}`,
+      rateLabel: 'est. annualized return',
+      sub: `in ${cash}, paid ${every}`,
+      qualifier: `if ${who} stays above ${p.couponBarrierPct ?? 0}%`,
+      apr,
+      guaranteed: false,
+    };
   } else if (p.productType === 'snowball') {
-    y = { headline: `Up to ${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid at redemption`, qualifier: `only if it ends early or ${who} is above ${p.autocallLevelPct ?? 100}% at the end`, apr, guaranteed: false };
+    y = {
+      headline: `Up to ${pct(apr)}`,
+      rateLabel: 'est. annualized return',
+      sub: `in ${cash}, paid at redemption`,
+      qualifier: `only if it ends early or ${who} is above ${p.autocallLevelPct ?? 100}% at the end`,
+      apr,
+      guaranteed: false,
+    };
   } else {
-    y = { headline: `${pct(apr)}`, rateLabel: 'est. annualized return', sub: `in ${cash}, paid ${every}`, qualifier: null, apr, guaranteed: true };
+    y = {
+      headline: `${pct(apr)}`,
+      rateLabel: 'est. annualized return',
+      sub: `in ${cash}, paid ${every}`,
+      qualifier: null,
+      apr,
+      guaranteed: true,
+    };
   }
   let protection: string | null = null;
   if (p.productType === 'ppn') protection = `At least ${p.protectionPct ?? 100}% of your money back at the end`;
-  else if (p.knockInBarrierPct) protection = `Your money back if ${who} stays above ${p.knockInBarrierPct}%${p.settlement === 'physical' ? '; below it, you get the stock' : ''}`;
+  else if (p.knockInBarrierPct)
+    protection = `Your money back if ${who} stays above ${p.knockInBarrierPct}%${p.settlement === 'physical' ? '; below it, you get the stock' : ''}`;
   let early: string | null = null;
   if (p.autocallLevelPct && (p.productType === 'fcn' || p.productType === 'phoenix' || p.productType === 'snowball')) {
     const from = Math.max(1, p.autocallFromPeriod ?? 1);
-    const at = per.demo ? `from date ${from}` : (() => { const m = Math.round((from * per.periodSec) / MONTH); return m >= 1 ? `from month ${m}` : `from date ${from}`; })();
+    const at = per.demo
+      ? `from date ${from}`
+      : (() => {
+          const m = Math.round((from * per.periodSec) / MONTH);
+          return m >= 1 ? `from month ${m}` : `from date ${from}`;
+        })();
     early = `Can end early ${at} if above ${p.autocallLevelPct}%`;
   }
-  const stocks = syms.filter(x => STOCKS.has(x)).length;
+  const stocks = syms.filter((x) => STOCKS.has(x)).length;
   return {
     yield: y,
     assets: assetsPhrase(syms),
@@ -148,7 +209,12 @@ export function listingOf(p: ProductParams, s: Schedule = {}, cash = 'USDG'): Li
 }
 
 export type SimpleStatus = 'open' | 'running' | 'paid' | 'defaulted';
-export const SIMPLE_STATUS_LABEL: Record<SimpleStatus, string> = { open: 'Open', running: 'Running', paid: 'Paid in full', defaulted: 'Defaulted' };
+export const SIMPLE_STATUS_LABEL: Record<SimpleStatus, string> = {
+  open: 'Open',
+  running: 'Running',
+  paid: 'Paid in full',
+  defaulted: 'Defaulted',
+};
 export function simpleStatus(phase: string): SimpleStatus {
   if (phase === 'book') return 'open';
   if (phase === 'redeemed') return 'paid';
@@ -160,8 +226,14 @@ export function simpleStatus(phase: string): SimpleStatus {
 export function inTime(at: number, now: number) {
   const s = at - now;
   if (s <= 0) return 'now';
-  if (s >= 86400) { const d = Math.round(s / 86400); return `in ${d} day${d === 1 ? '' : 's'}`; }
-  if (s >= 3600) { const h = Math.round(s / 3600); return `in ${h} hour${h === 1 ? '' : 's'}`; }
+  if (s >= 86400) {
+    const d = Math.round(s / 86400);
+    return `in ${d} day${d === 1 ? '' : 's'}`;
+  }
+  if (s >= 3600) {
+    const h = Math.round(s / 3600);
+    return `in ${h} hour${h === 1 ? '' : 's'}`;
+  }
   const m = Math.max(1, Math.round(s / 60));
   return `in ${m} minute${m === 1 ? '' : 's'}`;
 }

@@ -15,7 +15,13 @@ import type { Account, Address, Chain, PublicClient, Transport, WalletClient } f
 
 export interface FallbackConfig {
   /** The chain the engine is on. */
-  chain: { name: string; client: PublicClient; wallet: WalletClient<Transport, Chain, Account>; engine: Address; lens: Address };
+  chain: {
+    name: string;
+    client: PublicClient;
+    wallet: WalletClient<Transport, Chain, Account>;
+    engine: Address;
+    lens: Address;
+  };
   /** Clients for the chains feeds live on, by CRE chain-selector name (e.g. ethereum-mainnet). */
   feedClients: Record<string, PublicClient>;
   /** Per feed chain: read at a block tag or `lagBlocks` below the head instead of blockTag's rule. */
@@ -32,38 +38,73 @@ export async function readFeed(cfg: FallbackConfig, f: FeedRef, nowSec: number):
   const client = cfg.feedClients[f.feedChain];
   if (!client) throw new Error(`no RPC for feed chain ${f.feedChain}`);
   const at = cfg.feedReadAt?.[f.feedChain];
-  const block = at?.lagBlocks !== undefined
-    ? { blockNumber: (await client.getBlockNumber()) - BigInt(at.lagBlocks) }
-    : { blockTag: at?.blockTag ?? (cfg.blockTag === 'latest' ? 'latest' as const : 'finalized' as const) };
-  const [roundId, answer, , updatedAt, answeredInRound] = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'latestRoundData', ...block });
-  const decimals = await client.readContract({ address: f.feed as Address, abi: feedAbi, functionName: 'decimals', ...block });
-  return checkRound({ roundId, answer, updatedAt, answeredInRound }, decimals, nowSec, f.staleness, cfg.finalityAllowanceSec);
+  const block =
+    at?.lagBlocks !== undefined
+      ? { blockNumber: (await client.getBlockNumber()) - BigInt(at.lagBlocks) }
+      : { blockTag: at?.blockTag ?? (cfg.blockTag === 'latest' ? ('latest' as const) : ('finalized' as const)) };
+  const [roundId, answer, , updatedAt, answeredInRound] = await client.readContract({
+    address: f.feed as Address,
+    abi: feedAbi,
+    functionName: 'latestRoundData',
+    ...block,
+  });
+  const decimals = await client.readContract({
+    address: f.feed as Address,
+    abi: feedAbi,
+    functionName: 'decimals',
+    ...block,
+  });
+  return checkRound(
+    { roundId, answer, updatedAt, answeredInRound },
+    decimals,
+    nowSec,
+    f.staleness,
+    cfg.finalityAllowanceSec,
+  );
 }
 
-export interface RunResult { due: number; written: string[]; failed: string[] }
+export interface RunResult {
+  due: number;
+  written: string[];
+  failed: string[];
+}
 
 /** One pass: what is due on the chain, observed and submitted. */
 export async function runOnce(cfg: FallbackConfig, nowSec = Math.floor(Date.now() / 1000)): Promise<RunResult> {
   const c = cfg.chain;
   const reporter = await c.client.readContract({ address: c.engine, abi: engineAbi, functionName: 'fallbackReporter' });
   if (reporter.toLowerCase() !== c.wallet.account.address.toLowerCase()) {
-    throw new Error(`${c.name}: this key (${c.wallet.account.address}) is not the engine's fallback reporter (${reporter})`);
+    throw new Error(
+      `${c.name}: this key (${c.wallet.account.address}) is not the engine's fallback reporter (${reporter})`,
+    );
   }
-  const { due, running, unpublished } = await readDue({ client: c.client, lens: c.lens, blockTag: cfg.blockTag }, nowSec);
-  cfg.log(`${c.name}: ${running} running, ${due.length} report(s) due${unpublished.length ? `, ${unpublished.length} definition(s) not on the lens` : ''}`);
+  const { due, running, unpublished } = await readDue(
+    { client: c.client, lens: c.lens, blockTag: cfg.blockTag },
+    nowSec,
+  );
+  cfg.log(
+    `${c.name}: ${running} running, ${due.length} report(s) due${unpublished.length ? `, ${unpublished.length} definition(s) not on the lens` : ''}`,
+  );
   const prices = new Map<string, bigint>();
   const price = async (f: FeedRef) => {
     const k = `${f.feedChain}:${f.feed.toLowerCase()}:${f.staleness}`;
     if (!prices.has(k)) prices.set(k, await readFeed(cfg, f, nowSec));
     return prices.get(k)!;
   };
-  const written: string[] = [], failed: string[] = [];
+  const written: string[] = [],
+    failed: string[] = [];
   for (const d of due.slice(0, cfg.maxReportsPerRun) as DueReport[]) {
     const tag = `${c.name} pid ${d.process} ${d.stepId}`;
     try {
       const values: bigint[] = [];
       for (const f of d.feeds) values.push(await price(routeFeed(f, cfg.feedRoutes)));
-      const hash = await c.wallet.writeContract({ address: c.engine, abi: engineAbi, functionName: 'fallbackReport', args: [reportHex(d, values)], gas: cfg.gasLimit });
+      const hash = await c.wallet.writeContract({
+        address: c.engine,
+        abi: engineAbi,
+        functionName: 'fallbackReport',
+        args: [reportHex(d, values)],
+        gas: cfg.gasLimit,
+      });
       const receipt = await c.client.waitForTransactionReceipt({ hash });
       if (receipt.status !== 'success') throw new Error(`reverted (${hash})`);
       cfg.log(`${tag} [${values.join(',')}] -> written ${hash} (gas ${receipt.gasUsed})`);

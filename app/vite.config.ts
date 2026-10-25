@@ -6,7 +6,21 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
-  server: { proxy: { '/api': { target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787', changeOrigin: (process.env.VITE_API_PROXY ?? '').startsWith('https:') } } },
-  preview: { proxy: { '/api': { target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787', changeOrigin: (process.env.VITE_API_PROXY ?? '').startsWith('https:') } } },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787',
+        changeOrigin: (process.env.VITE_API_PROXY ?? '').startsWith('https:'),
+      },
+    },
+  },
+  preview: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8787',
+        changeOrigin: (process.env.VITE_API_PROXY ?? '').startsWith('https:'),
+      },
+    },
+  },
   build: { target: 'es2022', chunkSizeWarningLimit: 4000 },
 });

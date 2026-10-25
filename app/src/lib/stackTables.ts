@@ -5,7 +5,7 @@
  */
 export function labelTables(root: ParentNode = document) {
   for (const table of root.querySelectorAll<HTMLTableElement>('table.t')) {
-    const heads = [...table.querySelectorAll('thead tr:last-child th')].map(th => th.textContent?.trim() ?? '');
+    const heads = [...table.querySelectorAll('thead tr:last-child th')].map((th) => th.textContent?.trim() ?? '');
     if (!heads.length) continue;
     table.classList.add('stackable');
     for (const row of table.querySelectorAll('tbody tr')) {
@@ -19,9 +19,15 @@ export function labelTables(root: ParentNode = document) {
 
 export function watchTables(): () => void {
   let raf = 0;
-  const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => labelTables()); };
+  const run = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => labelTables());
+  };
   run();
   const mo = new MutationObserver(run);
   mo.observe(document.body, { childList: true, subtree: true });
-  return () => { mo.disconnect(); cancelAnimationFrame(raf); };
+  return () => {
+    mo.disconnect();
+    cancelAnimationFrame(raf);
+  };
 }

@@ -7,15 +7,30 @@ import { flowEngineAbi } from '@sn/sdk';
 import type { ChainSource, RawLog } from '../src/source';
 
 type EventName = Extract<(typeof flowEngineAbi)[number], { type: 'event' }>['name'];
-export interface FakeEvent { eventName: EventName; args: Record<string, unknown> }
-interface Block { number: bigint; hash: string; ts: number; events: FakeEvent[]; salt: string }
+export interface FakeEvent {
+  eventName: EventName;
+  args: Record<string, unknown>;
+}
+interface Block {
+  number: bigint;
+  hash: string;
+  ts: number;
+  events: FakeEvent[];
+  salt: string;
+}
 
 export function encodeLog(e: FakeEvent): { data: Hex; topics: Hex[] } {
-  const ev = flowEngineAbi.find(x => x.type === 'event' && x.name === e.eventName) as Extract<(typeof flowEngineAbi)[number], { type: 'event' }>;
+  const ev = flowEngineAbi.find((x) => x.type === 'event' && x.name === e.eventName) as Extract<
+    (typeof flowEngineAbi)[number],
+    { type: 'event' }
+  >;
   // Topics by hand: viem's encodeEventTopics treats a zero argument as "any" (null).
-  const topics = [toEventSelector(ev as never), ...ev.inputs.filter(i => i.indexed).map(i => encodeAbiParameters([i] as never, [e.args[i.name!]] as never))];
-  const data = ev.inputs.filter(i => !i.indexed);
-  return { topics, data: encodeAbiParameters(data as never, data.map(i => e.args[i.name!]) as never) };
+  const topics = [
+    toEventSelector(ev as never),
+    ...ev.inputs.filter((i) => i.indexed).map((i) => encodeAbiParameters([i] as never, [e.args[i.name!]] as never)),
+  ];
+  const data = ev.inputs.filter((i) => !i.indexed);
+  return { topics, data: encodeAbiParameters(data as never, data.map((i) => e.args[i.name!]) as never) };
 }
 
 export class FakeChain implements ChainSource {
@@ -28,12 +43,20 @@ export class FakeChain implements ChainSource {
   }
 
   private hashOf(n: bigint, salt: string, events: FakeEvent[]) {
-    return keccak256(toHex(`${n}:${salt}:${JSON.stringify(events, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`)).toLowerCase();
+    return keccak256(
+      toHex(`${n}:${salt}:${JSON.stringify(events, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`),
+    ).toLowerCase();
   }
 
   mine(events: FakeEvent[], salt = 'a'): bigint {
     const number = BigInt(this.blocks.length);
-    this.blocks.push({ number, hash: this.hashOf(number, salt, events), ts: this.genesisTs + Number(number) * 2, events, salt });
+    this.blocks.push({
+      number,
+      hash: this.hashOf(number, salt, events),
+      ts: this.genesisTs + Number(number) * 2,
+      events,
+      salt,
+    });
     return number;
   }
 
@@ -43,8 +66,12 @@ export class FakeChain implements ChainSource {
     for (const evs of replacement) this.mine(evs, salt);
   }
 
-  async head() { return BigInt(this.blocks.length - 1); }
-  async finalized() { return null; }
+  async head() {
+    return BigInt(this.blocks.length - 1);
+  }
+  async finalized() {
+    return null;
+  }
   async block(n: bigint) {
     const b = this.blocks[Number(n)];
     return b ? { hash: b.hash, ts: b.ts } : null;
@@ -54,7 +81,14 @@ export class FakeChain implements ChainSource {
     for (const b of this.blocks.slice(Number(from), Number(to) + 1)) {
       b.events.forEach((e, i) => {
         const { data, topics } = encodeLog(e);
-        out.push({ block: b.number, blockHash: b.hash, logIndex: i, tx: keccak256(toHex(`${b.hash}:tx`)), data, topics }); // one transaction per block: a step's events share it
+        out.push({
+          block: b.number,
+          blockHash: b.hash,
+          logIndex: i,
+          tx: keccak256(toHex(`${b.hash}:tx`)),
+          data,
+          topics,
+        }); // one transaction per block: a step's events share it
       });
     }
     return out;
@@ -64,5 +98,7 @@ export class FakeChain implements ChainSource {
     if (!c) throw new Error(`no definition ${id}`);
     return c;
   }
-  async fallbackReporterAt() { return '0x0000000000000000000000000000000000000000'; }
+  async fallbackReporterAt() {
+    return '0x0000000000000000000000000000000000000000';
+  }
 }

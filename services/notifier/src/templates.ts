@@ -6,8 +6,15 @@
  */
 
 export type Vars = Record<string, string | undefined>;
-export interface Rendered { subject: string; html: string; text: string }
-export interface TemplateText { subject: string; body: string }
+export interface Rendered {
+  subject: string;
+  html: string;
+  text: string;
+}
+export interface TemplateText {
+  subject: string;
+  body: string;
+}
 
 /** Built-in templates (core NOTIFY_TEMPLATE_NAMES), plus the transactional ones. */
 export const TEMPLATES: Record<string, TemplateText> = {
@@ -58,20 +65,24 @@ export const TEMPLATES: Record<string, TemplateText> = {
 };
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ESC[c]);
+export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ESC[c]);
 
 /** Fill {{placeholders}} (unknown ones become empty). `html`: values are HTML-escaped and URLs become links. */
 export function fill(text: string, vars: Vars, html = false): string {
   if (!html) return text.replace(/\{\{\s*([A-Za-z]+)\s*\}\}/g, (_, k: string) => vars[k] ?? '');
   // Escape the template text and every value separately, then turn http(s) values into links.
   const parts = text.split(/(\{\{\s*[A-Za-z]+\s*\}\})/);
-  return parts.map(p => {
-    const m = /^\{\{\s*([A-Za-z]+)\s*\}\}$/.exec(p);
-    if (!m) return escapeHtml(p);
-    const v = vars[m[1]] ?? '';
-    if (/^https?:\/\/[^\s"<>]+$/.test(v)) return `<a href="${escapeHtml(v)}" style="color:#0B7A52">${escapeHtml(v)}</a>`;
-    return escapeHtml(v);
-  }).join('').replace(/\n/g, '<br>');
+  return parts
+    .map((p) => {
+      const m = /^\{\{\s*([A-Za-z]+)\s*\}\}$/.exec(p);
+      if (!m) return escapeHtml(p);
+      const v = vars[m[1]] ?? '';
+      if (/^https?:\/\/[^\s"<>]+$/.test(v))
+        return `<a href="${escapeHtml(v)}" style="color:#0B7A52">${escapeHtml(v)}</a>`;
+      return escapeHtml(v);
+    })
+    .join('')
+    .replace(/\n/g, '<br>');
 }
 
 /**
@@ -97,7 +108,8 @@ function frame(bodyHtml: string, footerHtml: string): string {
  */
 export function render(t: TemplateText, vars: Vars, unsubscribe?: string): Rendered {
   const subject = fill(t.subject, vars).replace(/\s+/g, ' ').trim().slice(0, 200);
-  const text = fill(t.body, vars) + (unsubscribe ? `\n\n--\nStop these emails: ${unsubscribe}` : '') + '\n\nnotes.markets';
+  const text =
+    fill(t.body, vars) + (unsubscribe ? `\n\n--\nStop these emails: ${unsubscribe}` : '') + '\n\nnotes.markets';
   const footer = unsubscribe
     ? `You get this because you turned on email alerts for your wallet on notes.markets. <a href="${escapeHtml(unsubscribe)}" style="color:#0B7A52">Stop these emails</a>.`
     : 'You get this because someone asked to verify this address on notes.markets.';
@@ -125,8 +137,19 @@ export const isEmail = (e: string) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}
  * What a wallet signs (EIP-191) to bind an email to it, change its alert preferences, or read its salt. The app
  * builds the same text; `issuedAt` (unix seconds) must be within ten minutes of the server's clock.
  */
-export function alertsMessage(a: { action: 'verify' | 'preferences' | 'salt' | 'emails'; address: string; email?: string; categories?: string[]; issuedAt: number }): string {
-  const what = { verify: 'Verify my email for notes.markets', preferences: 'Change my notes.markets email alerts', salt: 'Show my notes.markets email salt', emails: 'Show the emails notes.markets sent me' }[a.action];
+export function alertsMessage(a: {
+  action: 'verify' | 'preferences' | 'salt' | 'emails';
+  address: string;
+  email?: string;
+  categories?: string[];
+  issuedAt: number;
+}): string {
+  const what = {
+    verify: 'Verify my email for notes.markets',
+    preferences: 'Change my notes.markets email alerts',
+    salt: 'Show my notes.markets email salt',
+    emails: 'Show the emails notes.markets sent me',
+  }[a.action];
   return [
     what,
     '',

@@ -66,19 +66,45 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /** The email relay for the Node API (local dev). Exported for tests. */
-export async function relayEmail(req: Request, env: Pick<Env, 'EMAIL' | 'EMAIL_RELAY_SECRET' | 'EMAIL_FROM'>): Promise<Response> {
+export async function relayEmail(
+  req: Request,
+  env: Pick<Env, 'EMAIL' | 'EMAIL_RELAY_SECRET' | 'EMAIL_FROM'>,
+): Promise<Response> {
   const given = req.headers.get('X-Email-Relay-Secret') ?? '';
-  if (!env.EMAIL_RELAY_SECRET || !given || !sameSecret(given, env.EMAIL_RELAY_SECRET)) return json({ error: 'Not allowed.' }, 401);
-  const b = await req.json().catch(() => null) as { to?: unknown; subject?: unknown; html?: unknown; text?: unknown } | null;
+  if (!env.EMAIL_RELAY_SECRET || !given || !sameSecret(given, env.EMAIL_RELAY_SECRET))
+    return json({ error: 'Not allowed.' }, 401);
+  const b = (await req.json().catch(() => null)) as {
+    to?: unknown;
+    subject?: unknown;
+    html?: unknown;
+    text?: unknown;
+  } | null;
   const ok = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max;
-  if (!b || !ok(b.to, 254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.to)) || !ok(b.subject, 300) || !ok(b.html, 200_000) || !ok(b.text, 100_000)) {
+  if (
+    !b ||
+    !ok(b.to, 254) ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.to)) ||
+    !ok(b.subject, 300) ||
+    !ok(b.html, 200_000) ||
+    !ok(b.text, 100_000)
+  ) {
     return json({ error: 'Send {to, subject, html, text}.' }, 400);
   }
-  if (!env.EMAIL) return json({ error: 'Email Sending is not configured on this Worker (no EMAIL binding); onboard notes.markets in Email Service.' }, 503);
+  if (!env.EMAIL)
+    return json(
+      {
+        error:
+          'Email Sending is not configured on this Worker (no EMAIL binding); onboard notes.markets in Email Service.',
+      },
+      503,
+    );
   try {
     const r = await env.EMAIL.send({
-      to: String(b.to), from: { email: env.EMAIL_FROM ?? 'alerts@notes.markets', name: 'notes.markets' },
-      subject: String(b.subject), html: String(b.html), text: String(b.text),
+      to: String(b.to),
+      from: { email: env.EMAIL_FROM ?? 'alerts@notes.markets', name: 'notes.markets' },
+      subject: String(b.subject),
+      html: String(b.html),
+      text: String(b.text),
     });
     return json({ messageId: (r && 'messageId' in r && r.messageId) || '' });
   } catch (e) {
@@ -91,14 +117,23 @@ export async function relayEmail(req: Request, env: Pick<Env, 'EMAIL' | 'EMAIL_R
 /** The dev mailbox survives across requests in one isolate (local e2e reads codes from it). */
 let devMailbox: MockSender | null = null;
 const siteOf = (env: Env) => env.SITE_URL ?? 'https://notes.markets';
-const verifierOf = (env: Env) => (env.VERIFIER_KEY ? (env.VERIFIER_KEY.startsWith('0x') ? env.VERIFIER_KEY : `0x${env.VERIFIER_KEY}`) as `0x${string}` : null);
+const verifierOf = (env: Env) =>
+  env.VERIFIER_KEY
+    ? ((env.VERIFIER_KEY.startsWith('0x') ? env.VERIFIER_KEY : `0x${env.VERIFIER_KEY}`) as `0x${string}`)
+    : null;
 /** The email sender: the dev mailbox, or Email Service when EMAIL_SENDING = "on"; null otherwise. */
 function senderOf(env: Env) {
   if (env.EMAIL_SENDER === 'mock') return (devMailbox ??= mockSender());
-  return env.EMAIL && env.EMAIL_SENDING === 'on' ? bindingSender(env.EMAIL, env.EMAIL_FROM ?? 'alerts@notes.markets') : null;
+  return env.EMAIL && env.EMAIL_SENDING === 'on'
+    ? bindingSender(env.EMAIL, env.EMAIL_FROM ?? 'alerts@notes.markets')
+    : null;
 }
 /** For the API: a sender that reports "not configured" instead of null, so /api/alerts/start answers 503. */
-const unconfigured = { async send(): Promise<{ messageId: string }> { throw new Error('Email sending is not enabled on this deployment.'); } };
+const unconfigured = {
+  async send(): Promise<{ messageId: string }> {
+    throw new Error('Email sending is not enabled on this deployment.');
+  },
+};
 const chainLabel = (key: string) => CHAINS[key]?.name ?? key;
 
 let configCache: { raw: string | undefined; cfg: EdgeConfig } | null = null;
@@ -113,11 +148,16 @@ let appCache: { env: Env; app: ReturnType<typeof createEdgeApp> } | null = null;
 function edgeApp(env: Env) {
   if (appCache?.env === env) return appCache.app;
   const app = createEdgeApp({
-    store: () => new Store(env.DB!), config: edgeConfig(env).api, ai: !!env.AI,
-    readLimit: env.READ_LIMIT, faucetKey: env.FAUCET_KEY as `0x${string}` | undefined,
+    store: () => new Store(env.DB!),
+    config: edgeConfig(env).api,
+    ai: !!env.AI,
+    readLimit: env.READ_LIMIT,
+    faucetKey: env.FAUCET_KEY as `0x${string}` | undefined,
     alerts: {
-      sender: senderOf(env) ?? unconfigured, verifierKey: verifierOf(env), siteUrl: siteOf(env),
-      devMailbox: env.EMAIL_SENDER === 'mock' ? senderOf(env) as MockSender : undefined,
+      sender: senderOf(env) ?? unconfigured,
+      verifierKey: verifierOf(env),
+      siteUrl: siteOf(env),
+      devMailbox: env.EMAIL_SENDER === 'mock' ? (senderOf(env) as MockSender) : undefined,
     },
   });
   appCache = { env, app };
@@ -130,13 +170,21 @@ async function ai(req: Request, env: Env): Promise<Response> {
   const origin = req.headers.get('Origin');
   if (origin && origin !== new URL(req.url).origin) return json({ error: 'Not allowed from this origin.' }, 403);
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
-  if (env.AI_LIMIT && !(await env.AI_LIMIT.limit({ key: ip })).success) return json({ error: 'Too many AI requests; wait a minute and try again.' }, 429);
-  const body = await req.json().catch(() => null) as { prompt?: string; draft?: WorkflowDraft } | null;
+  if (env.AI_LIMIT && !(await env.AI_LIMIT.limit({ key: ip })).success)
+    return json({ error: 'Too many AI requests; wait a minute and try again.' }, 429);
+  const body = (await req.json().catch(() => null)) as { prompt?: string; draft?: WorkflowDraft } | null;
   const prompt = (body?.prompt ?? '').trim();
-  if (!prompt) return json({ error: 'Say what you want: a note from terms, a change to the workflow, or a question.' }, 400);
+  if (!prompt)
+    return json({ error: 'Say what you want: a note from terms, a change to the workflow, or a question.' }, 400);
   if (prompt.length > 4000) return json({ error: 'Keep the request under 4,000 characters.' }, 400);
   try {
-    return json(await runAi(workersAiRunner(env.AI!), { prompt, today: new Date().toISOString().slice(0, 10), draft: body?.draft }));
+    return json(
+      await runAi(workersAiRunner(env.AI!), {
+        prompt,
+        today: new Date().toISOString().slice(0, 10),
+        draft: body?.draft,
+      }),
+    );
   } catch (e) {
     return json({ kind: 'error', error: e instanceof Error ? e.message : String(e) }, 502);
   }
@@ -150,7 +198,12 @@ async function proxy(req: Request, env: Env, url: URL): Promise<Response> {
   if (env.SN_PROXY_SECRET) headers.set('X-SN-Proxy', env.SN_PROXY_SECRET);
   headers.delete('Host');
   try {
-    return await fetch(target, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : req.body, redirect: 'manual' });
+    return await fetch(target, {
+      method: req.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : req.body,
+      redirect: 'manual',
+    });
   } catch {
     return json({ error: 'The notes.markets API is unreachable right now; try again shortly.' }, 502);
   }
@@ -189,12 +242,36 @@ export default {
   /** Every minute: index both chains into D1, then plan, queue and send due notifications. */
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     if (!env.DB) return;
-    const work = runCron({ store: new Store(env.DB), config: edgeConfig(env), sender: senderOf(env), siteUrl: siteOf(env), chainLabel }).then(r => {
-      console.log(JSON.stringify({
-        cron: 'indexer', ms: r.ms, queries: r.queries, sent: r.sent,
-        notify: r.notify && { notes: r.notify.notes, queued: r.notify.queued, held: r.notify.held, failed: r.notify.failed, notConfigured: r.notify.notConfigured },
-        chains: r.chains.map(ch => ({ chain: ch.chain, rpc: ch.rpcCalls, steps: ch.steps.length, events: ch.steps.reduce((a, x) => a + x.events, 0), to: ch.steps.at(-1)?.to, error: ch.error })),
-      }));
+    const work = runCron({
+      store: new Store(env.DB),
+      config: edgeConfig(env),
+      sender: senderOf(env),
+      siteUrl: siteOf(env),
+      chainLabel,
+    }).then((r) => {
+      console.log(
+        JSON.stringify({
+          cron: 'indexer',
+          ms: r.ms,
+          queries: r.queries,
+          sent: r.sent,
+          notify: r.notify && {
+            notes: r.notify.notes,
+            queued: r.notify.queued,
+            held: r.notify.held,
+            failed: r.notify.failed,
+            notConfigured: r.notify.notConfigured,
+          },
+          chains: r.chains.map((ch) => ({
+            chain: ch.chain,
+            rpc: ch.rpcCalls,
+            steps: ch.steps.length,
+            events: ch.steps.reduce((a, x) => a + x.events, 0),
+            to: ch.steps.at(-1)?.to,
+            error: ch.error,
+          })),
+        }),
+      );
     });
     ctx.waitUntil(work);
     await work;

@@ -24,16 +24,22 @@ function addressOf(file: string): Address | null {
 
 const args = process.argv.slice(2);
 for (const a of args) if (!/^0x[0-9a-fA-F]{40}$/.test(a)) throw new Error(`Not an address: ${a}`);
-const own = (args.length ? ['deployer'] as const : ['deployer', 'keeper', 'investor1', 'investor2'] as const)
-  .map(n => [n, addressOf(`.keys/${n}.json`)] as [string, Address | null])
+const own = (args.length ? (['deployer'] as const) : (['deployer', 'keeper', 'investor1', 'investor2'] as const))
+  .map((n) => [n, addressOf(`.keys/${n}.json`)] as [string, Address | null])
   .filter((x): x is [string, Address] => !!x[1]);
-const named: Array<[string, Address]> = [...own, ...args.map((a, i) => [`address ${i + 1}`, a as Address] as [string, Address])];
+const named: Array<[string, Address]> = [
+  ...own,
+  ...args.map((a, i) => [`address ${i + 1}`, a as Address] as [string, Address]),
+];
 
 const client = createPublicClient({ transport: http(RPC) });
 const arb = createPublicClient({ transport: http(ARB_RPC) });
 for (const [name, who] of named) {
   const row: string[] = [];
-  for (const [tag, c, key] of [['RH', client, 'robinhood-testnet'], ['ARB', arb, 'arbitrum-sepolia']] as const) {
+  for (const [tag, c, key] of [
+    ['RH', client, 'robinhood-testnet'],
+    ['ARB', arb, 'arbitrum-sepolia'],
+  ] as const) {
     for (const t of Object.values(CHAIN_TOKENS[key])) {
       const bal = await c.readContract({ address: t.address, abi: erc20, functionName: 'balanceOf', args: [who] });
       row.push(`${t.token}(${tag}) ${formatUnits(bal, t.decimals)}`);

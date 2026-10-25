@@ -13,10 +13,15 @@ export interface Sql {
 
 /** Adapt a Postgres-style client (`$1` placeholders) to `Sql`. */
 export function pgSql(q: { query<T>(sql: string, params?: unknown[]): Promise<T[]> }): Sql {
-  const conv = (sql: string) => { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); };
+  const conv = (sql: string) => {
+    let i = 0;
+    return sql.replace(/\?/g, () => `$${++i}`);
+  };
   return {
     all: (sql, params = []) => q.query(conv(sql), params),
-    run: async (sql, params = []) => { await q.query(conv(sql), params); },
+    run: async (sql, params = []) => {
+      await q.query(conv(sql), params);
+    },
   };
 }
 
@@ -135,7 +140,14 @@ export interface SentMessage {
 }
 
 /** An email still waiting in the outbox (scheduled, or held until sending works again). */
-export interface QueuedRow { dedupe: string; noteId: string | null; category: string; payload: string; sendAfter: number; nextAt: number }
+export interface QueuedRow {
+  dedupe: string;
+  noteId: string | null;
+  category: string;
+  payload: string;
+  sendAfter: number;
+  nextAt: number;
+}
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const toBinding = (r: Record<string, unknown>): Binding => ({
@@ -143,7 +155,9 @@ const toBinding = (r: Record<string, unknown>): Binding => ({
   email: (r.email as string) ?? null,
   salt: (r.salt as string) ?? null,
   emailHash: (r.email_hash as string) ?? null,
-  categories: String(r.categories ?? '').split(',').filter(Boolean),
+  categories: String(r.categories ?? '')
+    .split(',')
+    .filter(Boolean),
   verifiedAt: n(r.verified_at),
   pendingEmail: (r.pending_email as string) ?? null,
   codeHash: (r.code_hash as string) ?? null,
@@ -167,19 +181,41 @@ export class AlertsStore {
 
   /** Start (or restart) verification of `email` for `address`: a new code and link; the verified email, if any,
    *  stays in force until the new one is verified. */
-  async startVerification(a: { address: string; email: string; categories: string[]; codeHash: string; codeExpires: number; linkTokenHash: string; unsubscribeToken: string; now: number }) {
+  async startVerification(a: {
+    address: string;
+    email: string;
+    categories: string[];
+    codeHash: string;
+    codeExpires: number;
+    linkTokenHash: string;
+    unsubscribeToken: string;
+    now: number;
+  }) {
     await this.sql.run(
       `INSERT INTO email_bindings (address, categories, pending_email, code_hash, code_expires, code_attempts, link_token_hash, unsubscribe_token, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
        ON CONFLICT (address) DO UPDATE SET categories = excluded.categories, pending_email = excluded.pending_email,
          code_hash = excluded.code_hash, code_expires = excluded.code_expires, code_attempts = 0,
          link_token_hash = excluded.link_token_hash, updated_at = excluded.updated_at`,
-      [a.address, a.categories.join(','), a.email, a.codeHash, a.codeExpires, a.linkTokenHash, a.unsubscribeToken, a.now, a.now],
+      [
+        a.address,
+        a.categories.join(','),
+        a.email,
+        a.codeHash,
+        a.codeExpires,
+        a.linkTokenHash,
+        a.unsubscribeToken,
+        a.now,
+        a.now,
+      ],
     );
   }
 
   async countAttempt(address: string, now: number) {
-    await this.sql.run('UPDATE email_bindings SET code_attempts = code_attempts + 1, updated_at = ? WHERE address = ?', [now, address]);
+    await this.sql.run(
+      'UPDATE email_bindings SET code_attempts = code_attempts + 1, updated_at = ? WHERE address = ?',
+      [now, address],
+    );
   }
 
   /** The pending email becomes the verified one, with its new salt and hash; codes and link are spent. */
@@ -198,14 +234,24 @@ export class AlertsStore {
   }
 
   async setCategories(address: string, categories: string[], now: number) {
-    await this.sql.run('UPDATE email_bindings SET categories = ?, unsubscribed = 0, updated_at = ? WHERE address = ?', [categories.join(','), now, address]);
+    await this.sql.run('UPDATE email_bindings SET categories = ?, unsubscribed = 0, updated_at = ? WHERE address = ?', [
+      categories.join(','),
+      now,
+      address,
+    ]);
   }
 
   /** One-click unsubscribe: no more alerts to this binding (the verified email itself stays, for issuing). */
   async unsubscribe(token: string, now: number): Promise<boolean> {
-    const rows = await this.sql.all<{ address: string }>('SELECT address FROM email_bindings WHERE unsubscribe_token = ?', [token]);
+    const rows = await this.sql.all<{ address: string }>(
+      'SELECT address FROM email_bindings WHERE unsubscribe_token = ?',
+      [token],
+    );
     if (!rows.length) return false;
-    await this.sql.run('UPDATE email_bindings SET unsubscribed = 1, updated_at = ? WHERE unsubscribe_token = ?', [now, token]);
+    await this.sql.run('UPDATE email_bindings SET unsubscribed = 1, updated_at = ? WHERE unsubscribe_token = ?', [
+      now,
+      token,
+    ]);
     return true;
   }
 
@@ -215,7 +261,10 @@ export class AlertsStore {
     const out: Binding[] = [];
     for (let i = 0; i < addresses.length; i += 50) {
       const chunk = addresses.slice(i, i + 50);
-      const rows = await this.sql.all(`SELECT * FROM email_bindings WHERE verified_at IS NOT NULL AND address IN (${chunk.map(() => '?').join(',')})`, chunk);
+      const rows = await this.sql.all(
+        `SELECT * FROM email_bindings WHERE verified_at IS NOT NULL AND address IN (${chunk.map(() => '?').join(',')})`,
+        chunk,
+      );
       out.push(...rows.map(toBinding));
     }
     return out;
@@ -230,7 +279,17 @@ export class AlertsStore {
       await this.sql.run(
         `INSERT INTO email_outbox (dedupe, address, note_id, category, payload, send_after, expires_at, status, attempts, next_at, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?) ON CONFLICT (dedupe) DO NOTHING`,
-        [it.dedupe, it.address, it.noteId, it.category, JSON.stringify(it.payload), it.sendAfter, it.expiresAt, it.sendAfter, now],
+        [
+          it.dedupe,
+          it.address,
+          it.noteId,
+          it.category,
+          JSON.stringify(it.payload),
+          it.sendAfter,
+          it.expiresAt,
+          it.sendAfter,
+          now,
+        ],
       );
       added++;
     }
@@ -240,19 +299,44 @@ export class AlertsStore {
   async due(now: number, limit = 50): Promise<OutboxRow[]> {
     const rows = await this.sql.all<Record<string, unknown>>(
       `SELECT dedupe, address, note_id, category, payload, send_after, expires_at, attempts FROM email_outbox
-       WHERE status = 'pending' AND next_at <= ? ORDER BY next_at LIMIT ?`, [now, limit]);
-    return rows.map(r => ({
-      dedupe: String(r.dedupe), address: String(r.address), noteId: (r.note_id as string) ?? null, category: String(r.category),
-      payload: String(r.payload), sendAfter: Number(r.send_after), expiresAt: n(r.expires_at), attempts: Number(r.attempts),
+       WHERE status = 'pending' AND next_at <= ? ORDER BY next_at LIMIT ?`,
+      [now, limit],
+    );
+    return rows.map((r) => ({
+      dedupe: String(r.dedupe),
+      address: String(r.address),
+      noteId: (r.note_id as string) ?? null,
+      category: String(r.category),
+      payload: String(r.payload),
+      sendAfter: Number(r.send_after),
+      expiresAt: n(r.expires_at),
+      attempts: Number(r.attempts),
     }));
   }
 
-  async settle(dedupe: string, status: 'sent' | 'failed' | 'expired' | 'skipped', now: number, messageId?: string, error?: string) {
-    await this.sql.run('UPDATE email_outbox SET status = ?, sent_at = ?, message_id = ?, error = ? WHERE dedupe = ?', [status, now, messageId ?? null, error ?? null, dedupe]);
+  async settle(
+    dedupe: string,
+    status: 'sent' | 'failed' | 'expired' | 'skipped',
+    now: number,
+    messageId?: string,
+    error?: string,
+  ) {
+    await this.sql.run('UPDATE email_outbox SET status = ?, sent_at = ?, message_id = ?, error = ? WHERE dedupe = ?', [
+      status,
+      now,
+      messageId ?? null,
+      error ?? null,
+      dedupe,
+    ]);
   }
 
   async retry(dedupe: string, attempts: number, nextAt: number, error: string) {
-    await this.sql.run('UPDATE email_outbox SET attempts = ?, next_at = ?, error = ? WHERE dedupe = ?', [attempts, nextAt, error, dedupe]);
+    await this.sql.run('UPDATE email_outbox SET attempts = ?, next_at = ?, error = ? WHERE dedupe = ?', [
+      attempts,
+      nextAt,
+      error,
+      dedupe,
+    ]);
   }
 
   /** Keep a copy of an email for the recipient's own list. A second copy of the same dedupe key is ignored. */
@@ -260,7 +344,20 @@ export class AlertsStore {
     await this.sql.run(
       `INSERT INTO email_messages (dedupe, address, note_id, note_label, category, recipient, subject, html, text, status, created_at, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dedupe) DO NOTHING`,
-      [m.dedupe, m.address, m.noteId, m.noteLabel, m.category, m.recipient, m.subject, m.html, m.text, m.status, m.createdAt, m.sentAt],
+      [
+        m.dedupe,
+        m.address,
+        m.noteId,
+        m.noteLabel,
+        m.category,
+        m.recipient,
+        m.subject,
+        m.html,
+        m.text,
+        m.status,
+        m.createdAt,
+        m.sentAt,
+      ],
     );
   }
 
@@ -274,17 +371,33 @@ export class AlertsStore {
   }
 
   /** An address's emails, newest first; `before` is the last one of the previous page. */
-  async messages(address: string, opts: { before?: { at: number; id: string }; limit: number }): Promise<SentMessage[]> {
+  async messages(
+    address: string,
+    opts: { before?: { at: number; id: string }; limit: number },
+  ): Promise<SentMessage[]> {
     const page = opts.before
       ? await this.sql.all<Record<string, unknown>>(
-        `SELECT * FROM email_messages WHERE address = ? AND (sent_at < ? OR (sent_at = ? AND dedupe < ?))
-         ORDER BY sent_at DESC, dedupe DESC LIMIT ?`, [address, opts.before.at, opts.before.at, opts.before.id, opts.limit])
+          `SELECT * FROM email_messages WHERE address = ? AND (sent_at < ? OR (sent_at = ? AND dedupe < ?))
+         ORDER BY sent_at DESC, dedupe DESC LIMIT ?`,
+          [address, opts.before.at, opts.before.at, opts.before.id, opts.limit],
+        )
       : await this.sql.all<Record<string, unknown>>(
-        'SELECT * FROM email_messages WHERE address = ? ORDER BY sent_at DESC, dedupe DESC LIMIT ?', [address, opts.limit]);
-    return page.map(r => ({
-      dedupe: String(r.dedupe), address: String(r.address), noteId: (r.note_id as string) ?? null, noteLabel: (r.note_label as string) ?? null,
-      category: String(r.category), recipient: String(r.recipient), subject: String(r.subject), html: String(r.html), text: String(r.text),
-      status: r.status === 'failed' ? 'failed' : 'sent', createdAt: Number(r.created_at), sentAt: Number(r.sent_at),
+          'SELECT * FROM email_messages WHERE address = ? ORDER BY sent_at DESC, dedupe DESC LIMIT ?',
+          [address, opts.limit],
+        );
+    return page.map((r) => ({
+      dedupe: String(r.dedupe),
+      address: String(r.address),
+      noteId: (r.note_id as string) ?? null,
+      noteLabel: (r.note_label as string) ?? null,
+      category: String(r.category),
+      recipient: String(r.recipient),
+      subject: String(r.subject),
+      html: String(r.html),
+      text: String(r.text),
+      status: r.status === 'failed' ? 'failed' : 'sent',
+      createdAt: Number(r.created_at),
+      sentAt: Number(r.sent_at),
     }));
   }
 
@@ -292,15 +405,23 @@ export class AlertsStore {
   async queued(address: string, limit = 20): Promise<QueuedRow[]> {
     const rows = await this.sql.all<Record<string, unknown>>(
       `SELECT dedupe, note_id, category, payload, send_after, next_at FROM email_outbox
-       WHERE address = ? AND status = 'pending' ORDER BY next_at, dedupe LIMIT ?`, [address, limit]);
-    return rows.map(r => ({
-      dedupe: String(r.dedupe), noteId: (r.note_id as string) ?? null, category: String(r.category), payload: String(r.payload),
-      sendAfter: Number(r.send_after), nextAt: Number(r.next_at),
+       WHERE address = ? AND status = 'pending' ORDER BY next_at, dedupe LIMIT ?`,
+      [address, limit],
+    );
+    return rows.map((r) => ({
+      dedupe: String(r.dedupe),
+      noteId: (r.note_id as string) ?? null,
+      category: String(r.category),
+      payload: String(r.payload),
+      sendAfter: Number(r.send_after),
+      nextAt: Number(r.next_at),
     }));
   }
 
   async counts(): Promise<Record<string, number>> {
-    const rows = await this.sql.all<{ status: string; c: unknown }>('SELECT status, COUNT(*) AS c FROM email_outbox GROUP BY status');
-    return Object.fromEntries(rows.map(r => [r.status, Number(r.c)]));
+    const rows = await this.sql.all<{ status: string; c: unknown }>(
+      'SELECT status, COUNT(*) AS c FROM email_outbox GROUP BY status',
+    );
+    return Object.fromEntries(rows.map((r) => [r.status, Number(r.c)]));
   }
 }

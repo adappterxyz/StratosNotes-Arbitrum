@@ -120,7 +120,8 @@ export interface ProductParams {
 export type PayoutMethod = 'claim' | 'push';
 export const PAYOUT_METHODS: readonly PayoutMethod[] = ['claim', 'push'];
 /** The note's payout method: 'claim' unless its terms opt in to 'push'. */
-export const payoutMethodOf = (p: Pick<ProductParams, 'payouts'> | null | undefined): PayoutMethod => (p?.payouts === 'push' ? 'push' : 'claim');
+export const payoutMethodOf = (p: Pick<ProductParams, 'payouts'> | null | undefined): PayoutMethod =>
+  p?.payouts === 'push' ? 'push' : 'claim';
 
 export type CollateralChain = 'note' | 'robinhood';
 
@@ -138,10 +139,15 @@ export const NOTE_CHAINS: readonly NoteChain[] = [HOME_CHAIN, ASSET_CHAIN];
 /** Where new notes are issued: Arbitrum Sepolia only. */
 export const ISSUANCE_CHAINS: readonly NoteChain[] = [HOME_CHAIN];
 /** A term sheet that names a chain notes are no longer issued on (a legacy Robinhood Chain note). */
-export const isLegacyChainTerms = (p: Pick<ProductParams, 'chain'> | null | undefined) => !ISSUANCE_CHAINS.includes(noteChainOf(p));
-export const NOTE_CHAIN_LABELS: Record<NoteChain, string> = { 'arbitrum-sepolia': 'Arbitrum Sepolia', 'robinhood-testnet': 'Robinhood Chain testnet' };
+export const isLegacyChainTerms = (p: Pick<ProductParams, 'chain'> | null | undefined) =>
+  !ISSUANCE_CHAINS.includes(noteChainOf(p));
+export const NOTE_CHAIN_LABELS: Record<NoteChain, string> = {
+  'arbitrum-sepolia': 'Arbitrum Sepolia',
+  'robinhood-testnet': 'Robinhood Chain testnet',
+};
 /** The note's chain: its terms' `chain`, else the home chain. */
-export const noteChainOf = (p: Pick<ProductParams, 'chain'> | null | undefined): NoteChain => (p?.chain && NOTE_CHAINS.includes(p.chain) ? p.chain : HOME_CHAIN);
+export const noteChainOf = (p: Pick<ProductParams, 'chain'> | null | undefined): NoteChain =>
+  p?.chain && NOTE_CHAINS.includes(p.chain) ? p.chain : HOME_CHAIN;
 
 /** A real token on one of the note chains. */
 export interface ChainToken {
@@ -174,26 +180,91 @@ export interface ChainToken {
  */
 export const CHAIN_TOKENS: Record<NoteChain, Record<string, ChainToken>> = {
   'arbitrum-sepolia': {
-    USDG: { token: 'USDG', decimals: 6, address: '0xFFC95faa3d63Cde504a05B567C600B78C0b41892', name: 'Global Dollar', issuer: 'Paxos', valuedAs: 'USD' },
-    WETH: { token: 'WETH', decimals: 18, address: '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73', name: 'Wrapped Ether', issuer: 'Arbitrum token bridge', valuedAs: 'ETH' },
+    USDG: {
+      token: 'USDG',
+      decimals: 6,
+      address: '0xFFC95faa3d63Cde504a05B567C600B78C0b41892',
+      name: 'Global Dollar',
+      issuer: 'Paxos',
+      valuedAs: 'USD',
+    },
+    WETH: {
+      token: 'WETH',
+      decimals: 18,
+      address: '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73',
+      name: 'Wrapped Ether',
+      issuer: 'Arbitrum token bridge',
+      valuedAs: 'ETH',
+    },
   },
   'robinhood-testnet': {
-    USDG: { token: 'USDG', decimals: 6, address: '0x7E955252E15c84f5768B83c41a71F9eba181802F', name: 'Global Dollar', issuer: 'Paxos', valuedAs: 'USD' },
-    WETH: { token: 'WETH', decimals: 18, address: '0x7943e237c7F95DA44E0301572D358911207852Fa', name: 'Wrapped Ether', issuer: 'Robinhood Chain token bridge', valuedAs: 'ETH' },
-    TSLA: { token: 'TSLA', decimals: 18, address: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E', name: 'Tesla', issuer: 'Robinhood', valuedAs: 'TSLA' },
-    AMZN: { token: 'AMZN', decimals: 18, address: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02', name: 'Amazon', issuer: 'Robinhood', valuedAs: 'AMZN' },
-    AMD: { token: 'AMD', decimals: 18, address: '0x71178BAc73cBeb415514eB542a8995b82669778d', name: 'AMD', issuer: 'Robinhood', valuedAs: 'AMD' },
-    PLTR: { token: 'PLTR', decimals: 18, address: '0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0', name: 'Palantir Technologies', issuer: 'Robinhood', valuedAs: 'PLTR' },
-    NFLX: { token: 'NFLX', decimals: 18, address: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93', name: 'Netflix', issuer: 'Robinhood', valuedAs: null },
+    USDG: {
+      token: 'USDG',
+      decimals: 6,
+      address: '0x7E955252E15c84f5768B83c41a71F9eba181802F',
+      name: 'Global Dollar',
+      issuer: 'Paxos',
+      valuedAs: 'USD',
+    },
+    WETH: {
+      token: 'WETH',
+      decimals: 18,
+      address: '0x7943e237c7F95DA44E0301572D358911207852Fa',
+      name: 'Wrapped Ether',
+      issuer: 'Robinhood Chain token bridge',
+      valuedAs: 'ETH',
+    },
+    TSLA: {
+      token: 'TSLA',
+      decimals: 18,
+      address: '0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E',
+      name: 'Tesla',
+      issuer: 'Robinhood',
+      valuedAs: 'TSLA',
+    },
+    AMZN: {
+      token: 'AMZN',
+      decimals: 18,
+      address: '0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02',
+      name: 'Amazon',
+      issuer: 'Robinhood',
+      valuedAs: 'AMZN',
+    },
+    AMD: {
+      token: 'AMD',
+      decimals: 18,
+      address: '0x71178BAc73cBeb415514eB542a8995b82669778d',
+      name: 'AMD',
+      issuer: 'Robinhood',
+      valuedAs: 'AMD',
+    },
+    PLTR: {
+      token: 'PLTR',
+      decimals: 18,
+      address: '0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0',
+      name: 'Palantir Technologies',
+      issuer: 'Robinhood',
+      valuedAs: 'PLTR',
+    },
+    NFLX: {
+      token: 'NFLX',
+      decimals: 18,
+      address: '0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93',
+      name: 'Netflix',
+      issuer: 'Robinhood',
+      valuedAs: null,
+    },
   },
 };
 
 /** Robinhood's stock tokens with no Chainlink feed CRE can read: shown as held, never offered as collateral or delivery. */
-export const UNPRICED_STOCKS = Object.values(CHAIN_TOKENS['robinhood-testnet']).filter(t => t.valuedAs === null).map(t => t.token);
+export const UNPRICED_STOCKS = Object.values(CHAIN_TOKENS['robinhood-testnet'])
+  .filter((t) => t.valuedAs === null)
+  .map((t) => t.token);
 
 /** The real local token valued as `sym` on `chain` (USD: the stablecoin), if any. */
 export function chainTokenFor(chain: NoteChain, sym: string): ChainToken | undefined {
-  return Object.values(CHAIN_TOKENS[chain] ?? {}).find(t => t.valuedAs === sym);
+  return Object.values(CHAIN_TOKENS[chain] ?? {}).find((t) => t.valuedAs === sym);
 }
 
 /**
@@ -201,10 +272,16 @@ export function chainTokenFor(chain: NoteChain, sym: string): ChainToken | undef
  * in the vault there; a receipt only records the lock for the note and moves only into or out of the engine. Just
  * these three: nothing else is carried over (NFLX's receipt exists but has no feed; no others will be added).
  */
-export const REMOTE_COLLATERAL: Record<string, Partial<Record<CollateralSymbol, { token: string; decimals: number }>>> = {
+export const REMOTE_COLLATERAL: Record<
+  string,
+  Partial<Record<CollateralSymbol, { token: string; decimals: number }>>
+> = {
   robinhood: {
-    USD: { token: 'USDG.rh', decimals: 6 }, TSLA: { token: 'TSLA.rh', decimals: 18 }, AMZN: { token: 'AMZN.rh', decimals: 18 },
-    AMD: { token: 'AMD.rh', decimals: 18 }, PLTR: { token: 'PLTR.rh', decimals: 18 },
+    USD: { token: 'USDG.rh', decimals: 6 },
+    TSLA: { token: 'TSLA.rh', decimals: 18 },
+    AMZN: { token: 'AMZN.rh', decimals: 18 },
+    AMD: { token: 'AMD.rh', decimals: 18 },
+    PLTR: { token: 'PLTR.rh', decimals: 18 },
   },
 };
 
@@ -220,7 +297,14 @@ export const DEFAULT_RULES: DefaultRule[] = ['cap-at-owed', 'all-to-holders'];
 
 export const MAX_COLLATERAL = 3;
 export const MAX_GRACE_DAYS = 7;
-export const DEFAULT_HAIRCUT: Record<CollateralSymbol, number> = { USD: 100, ETH: 70, TSLA: 60, AMZN: 60, AMD: 60, PLTR: 60 };
+export const DEFAULT_HAIRCUT: Record<CollateralSymbol, number> = {
+  USD: 100,
+  ETH: 70,
+  TSLA: 60,
+  AMZN: 60,
+  AMD: 60,
+  PLTR: 60,
+};
 export const COLLATERAL_SYMBOLS = Object.keys(DEFAULT_HAIRCUT) as CollateralSymbol[];
 export const DEFAULT_COLLATERAL: CollateralTerm[] = [{ symbol: 'USD', haircutPct: 100 }];
 
@@ -231,7 +315,7 @@ export function economicsOf(p: ProductParams) {
     collateralRatioPct: p.collateralRatioPct ?? 100,
     settlementLagDays: p.settlementLagDays ?? 2,
     gracePeriodDays: p.gracePeriodDays ?? 2,
-    defaultRule: p.defaultRule ?? 'cap-at-owed' as DefaultRule,
+    defaultRule: p.defaultRule ?? ('cap-at-owed' as DefaultRule),
   };
 }
 
@@ -240,14 +324,20 @@ export function economicsOf(p: ProductParams) {
  * both; Robinhood's TSLA, AMZN, AMD and PLTR on Robinhood Chain). Undefined when the chain has none (BTC anywhere,
  * stocks on Arbitrum: nothing is bridged over): such a note settles in cash.
  */
-export function deliverableToken(p: Pick<ProductParams, 'chain'>, symbol: string): { token: string; decimals: number } | undefined {
+export function deliverableToken(
+  p: Pick<ProductParams, 'chain'>,
+  symbol: string,
+): { token: string; decimals: number } | undefined {
   if (symbol === 'USD') return undefined;
   const local = chainTokenFor(noteChainOf(p), symbol);
   return local ? { token: local.token, decimals: local.decimals } : undefined;
 }
 
 /** The token behind a collateral asset (USD: the stablecoin) for this note: on its chain, or a Robinhood receipt. */
-export function collateralTokenOf(p: Pick<ProductParams, 'chain' | 'collateralChain'>, c: CollateralSymbol): { token: string; decimals: number } | undefined {
+export function collateralTokenOf(
+  p: Pick<ProductParams, 'chain' | 'collateralChain'>,
+  c: CollateralSymbol,
+): { token: string; decimals: number } | undefined {
   const chain = noteChainOf(p);
   if (p.collateralChain === 'robinhood' && chain === HOME_CHAIN) return REMOTE_COLLATERAL.robinhood[c];
   if (c === 'USD') return CASH_TOKEN;
@@ -257,7 +347,7 @@ export function collateralTokenOf(p: Pick<ProductParams, 'chain' | 'collateralCh
 
 /** What each collateral symbol is pledged as on a chain (local tokens, or Robinhood receipts), for pickers. */
 export const collateralChoices = (p: Pick<ProductParams, 'chain' | 'collateralChain'>) =>
-  COLLATERAL_SYMBOLS.map(symbol => ({ symbol, token: collateralTokenOf(p, symbol)?.token ?? null }));
+  COLLATERAL_SYMBOLS.map((symbol) => ({ symbol, token: collateralTokenOf(p, symbol)?.token ?? null }));
 
 /**
  * The collateral symbol behind a definition's collateral asset name ("Collateral WETH" -> ETH, "Collateral TSLA.rh"
@@ -268,17 +358,20 @@ export function collateralSymbolOfAsset(assetName: string): string | null {
   if (!m) return null;
   const t = m[1].replace(/\.rh$/, '');
   if (['USD', 'USDG', 'USDC', 'tUSD'].includes(t)) return 'USD';
-  for (const chain of NOTE_CHAINS) { const v = CHAIN_TOKENS[chain][t]?.valuedAs; if (v) return v; }
+  for (const chain of NOTE_CHAINS) {
+    const v = CHAIN_TOKENS[chain][t]?.valuedAs;
+    if (v) return v;
+  }
   const bare = t.replace(/^t(?=[A-Z]{2,}$)/, '');
   return /^[A-Z][A-Z0-9]*$/.test(bare) ? bare : null;
 }
 
 export const PRODUCT_LABELS: Record<ProductType, string> = {
-  'fcn': 'Fixed Coupon Note',
+  fcn: 'Fixed Coupon Note',
   'reverse-convertible': 'Reverse Convertible',
-  'phoenix': 'Phoenix Autocallable',
-  'snowball': 'Snowball Autocallable',
-  'ppn': 'Principal-Protected Note',
+  phoenix: 'Phoenix Autocallable',
+  snowball: 'Snowball Autocallable',
+  ppn: 'Principal-Protected Note',
 };
 
 export function productUses(t: ProductType) {
@@ -312,7 +405,9 @@ export function normalizeParams(p: ProductParams & { underlying?: Underlying; st
 
 /** "ETH" or "worst of ETH, BTC". */
 export const underlyingLabel = (p: ProductParams) =>
-  p.underlyings.length > 1 ? `worst of ${p.underlyings.map(u => u.symbol).join(', ')}` : p.underlyings[0]?.symbol ?? '';
+  p.underlyings.length > 1
+    ? `worst of ${p.underlyings.map((u) => u.symbol).join(', ')}`
+    : (p.underlyings[0]?.symbol ?? '');
 const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
 /**
@@ -323,7 +418,9 @@ const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
 export function validateProductParams(p: ProductParams): string[] {
   const e: string[] = [];
   if (p.chain !== undefined && NOTE_CHAINS.includes(p.chain) && !ISSUANCE_CHAINS.includes(p.chain)) {
-    e.push(`Notes are issued on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} only: ${NOTE_CHAIN_LABELS[p.chain]} is a collateral chain. Issue on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} and lock TSLA, AMZN, AMD, PLTR or USDG on Robinhood Chain as collateral; stock notes settle in cash.`);
+    e.push(
+      `Notes are issued on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} only: ${NOTE_CHAIN_LABELS[p.chain]} is a collateral chain. Issue on ${NOTE_CHAIN_LABELS[HOME_CHAIN]} and lock TSLA, AMZN, AMD, PLTR or USDG on Robinhood Chain as collateral; stock notes settle in cash.`,
+    );
   }
   return [...e, ...validateTermSheet(p)];
 }
@@ -335,16 +432,17 @@ export function validateProductParams(p: ProductParams): string[] {
  * is dropped). Terms already issuable come back unchanged (the same object).
  */
 export function toIssuanceTerms(p: ProductParams): ProductParams {
-  const undeliverable = p.settlement === 'physical' && (p.underlyings ?? []).some(u => !deliverableToken({}, u.symbol));
+  const undeliverable =
+    p.settlement === 'physical' && (p.underlyings ?? []).some((u) => !deliverableToken({}, u.symbol));
   if (!isLegacyChainTerms(p) && !undeliverable) return p;
   const { chain: _legacy, ...rest } = p;
   const q: ProductParams = { ...rest, ...(undeliverable ? { settlement: 'cash' as const } : {}) };
   const col = economicsOf(p).collateral;
-  if (col.some(c => !collateralTokenOf(q, c.symbol))) {
+  if (col.some((c) => !collateralTokenOf(q, c.symbol))) {
     const remote: ProductParams = { ...q, collateralChain: 'robinhood' };
-    const kept = col.filter(c => !!collateralTokenOf(remote, c.symbol));
-    if (kept.some(c => c.symbol !== 'USD')) return { ...remote, collateral: kept };
-    const local = col.filter(c => !!collateralTokenOf(q, c.symbol));
+    const kept = col.filter((c) => !!collateralTokenOf(remote, c.symbol));
+    if (kept.some((c) => c.symbol !== 'USD')) return { ...remote, collateral: kept };
+    const local = col.filter((c) => !!collateralTokenOf(q, c.symbol));
     return { ...q, collateral: local.length ? local : DEFAULT_COLLATERAL };
   }
   return q;
@@ -363,54 +461,87 @@ export function validateTermSheet(p: ProductParams): string[] {
   const unds = p.underlyings ?? [];
   if (!unds.length) e.push('Add an underlying.');
   if (unds.length > MAX_UNDERLYINGS) e.push(`At most ${MAX_UNDERLYINGS} underlyings in a basket.`);
-  if (new Set(unds.map(u => u.symbol)).size !== unds.length) e.push('Each underlying can appear once.');
+  if (new Set(unds.map((u) => u.symbol)).size !== unds.length) e.push('Each underlying can appear once.');
   for (const u of unds) {
-    if (!/^[A-Z][A-Z0-9]{0,9}$/.test(u.symbol ?? '')) e.push(`'${u.symbol}' is not a ticker (capital letters and digits).`);
+    if (!/^[A-Z][A-Z0-9]{0,9}$/.test(u.symbol ?? ''))
+      e.push(`'${u.symbol}' is not a ticker (capital letters and digits).`);
     if (!EVM_ADDR.test(u.feed || '')) e.push(`The ${u.symbol} price feed must be a Chainlink feed address (0x…).`);
     if (!(u.minPrice >= 0 && u.maxPrice > u.minPrice)) e.push(`${u.symbol}: price bounds need 0 <= min < max.`);
   }
-  if (!(Number.isInteger(p.observations) && p.observations >= 1 && p.observations <= MAX_OBSERVATIONS)) e.push(`Between 1 and ${MAX_OBSERVATIONS} observations.`);
+  if (!(Number.isInteger(p.observations) && p.observations >= 1 && p.observations <= MAX_OBSERVATIONS))
+    e.push(`Between 1 and ${MAX_OBSERVATIONS} observations.`);
   if (use.coupon && !(Number(p.couponRatePct) > 0)) e.push('Set a positive coupon rate per period.');
   if (use.couponBarrier && !(Number(p.couponBarrierPct) > 0)) e.push('A phoenix needs a coupon barrier (% of strike).');
   if (use.autocall) {
     if (!(Number(p.autocallLevelPct) > 0)) e.push('Set the autocall level (% of strike).');
     const from = p.autocallFromPeriod ?? 1;
-    if (!(Number.isInteger(from) && from >= 1 && from <= p.observations)) e.push('The first autocall observation must be within the schedule.');
+    if (!(Number.isInteger(from) && from >= 1 && from <= p.observations))
+      e.push('The first autocall observation must be within the schedule.');
   }
   if (use.knockIn) {
     if (!(Number(p.knockInBarrierPct) > 0)) e.push('Set the knock-in barrier (% of strike).');
-    if (use.autocall && Number(p.knockInBarrierPct) >= Number(p.autocallLevelPct)) e.push('The knock-in barrier must be below the autocall level.');
-    if (use.couponBarrier && Number(p.knockInBarrierPct) > Number(p.couponBarrierPct)) e.push('The knock-in barrier must not be above the coupon barrier.');
+    if (use.autocall && Number(p.knockInBarrierPct) >= Number(p.autocallLevelPct))
+      e.push('The knock-in barrier must be below the autocall level.');
+    if (use.couponBarrier && Number(p.knockInBarrierPct) > Number(p.couponBarrierPct))
+      e.push('The knock-in barrier must not be above the coupon barrier.');
   }
   if (p.settlement === 'physical') {
     if (!use.knockIn) e.push('Physical delivery applies below a knock-in barrier: this payoff has none.');
-    for (const u of unds) if (!deliverableToken(p, u.symbol)) e.push(`There is no ${u.symbol} token to deliver on ${NOTE_CHAIN_LABELS[noteChainOf(p)]} (${deliverableList(p)}): settle in cash (stock notes are cash-settled), or pick another underlying.`);
+    for (const u of unds)
+      if (!deliverableToken(p, u.symbol))
+        e.push(
+          `There is no ${u.symbol} token to deliver on ${NOTE_CHAIN_LABELS[noteChainOf(p)]} (${deliverableList(p)}): settle in cash (stock notes are cash-settled), or pick another underlying.`,
+        );
   }
   if (use.protection) {
-    if (!(Number(p.protectionPct) > 0 && Number(p.protectionPct) <= 100)) e.push('Protection must be between 0 and 100% of face.');
+    if (!(Number(p.protectionPct) > 0 && Number(p.protectionPct) <= 100))
+      e.push('Protection must be between 0 and 100% of face.');
     if (!(Number(p.participationPct) >= 0)) e.push('Participation must be zero or positive.');
   }
   const eco = economicsOf(p);
   if (eco.collateral.length > MAX_COLLATERAL) e.push(`At most ${MAX_COLLATERAL} collateral assets.`);
-  if (new Set(eco.collateral.map(c => c.symbol)).size !== eco.collateral.length) e.push('Each collateral asset can appear once.');
+  if (new Set(eco.collateral.map((c) => c.symbol)).size !== eco.collateral.length)
+    e.push('Each collateral asset can appear once.');
   for (const c of eco.collateral) {
-    if (!COLLATERAL_SYMBOLS.includes(c.symbol)) e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
-    else if (!collateralTokenOf(p, c.symbol)) e.push(p.collateralChain === 'robinhood' && noteChainOf(p) === HOME_CHAIN
-      ? `${c.symbol} can't be locked on Robinhood Chain for an Arbitrum note: lock USD (USDG), TSLA, AMZN, AMD or PLTR there.`
-      : `There is no ${c.symbol} token to pledge on ${NOTE_CHAIN_LABELS[noteChainOf(p)]}: pledge ${collateralChoices(p).filter(x => x.token).map(x => `${x.symbol}${x.token !== x.symbol ? ` (${x.token})` : ''}`).join(', ')}${noteChainOf(p) === HOME_CHAIN ? ', or lock TSLA, AMZN, AMD or PLTR on Robinhood Chain (collateral held there)' : ''}.`);
-    if (!(c.haircutPct >= 0 && c.haircutPct <= 100)) e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
+    if (!COLLATERAL_SYMBOLS.includes(c.symbol))
+      e.push(`'${c.symbol}' cannot be pledged: use ${COLLATERAL_SYMBOLS.join(', ')}.`);
+    else if (!collateralTokenOf(p, c.symbol))
+      e.push(
+        p.collateralChain === 'robinhood' && noteChainOf(p) === HOME_CHAIN
+          ? `${c.symbol} can't be locked on Robinhood Chain for an Arbitrum note: lock USD (USDG), TSLA, AMZN, AMD or PLTR there.`
+          : `There is no ${c.symbol} token to pledge on ${NOTE_CHAIN_LABELS[noteChainOf(p)]}: pledge ${collateralChoices(
+              p,
+            )
+              .filter((x) => x.token)
+              .map((x) => `${x.symbol}${x.token !== x.symbol ? ` (${x.token})` : ''}`)
+              .join(
+                ', ',
+              )}${noteChainOf(p) === HOME_CHAIN ? ', or lock TSLA, AMZN, AMD or PLTR on Robinhood Chain (collateral held there)' : ''}.`,
+      );
+    if (!(c.haircutPct >= 0 && c.haircutPct <= 100))
+      e.push(`${c.symbol} collateral: the haircut must be between 0 and 100% (the share of market value counted).`);
   }
-  if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000)) e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
-  if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30)) e.push('The settlement lag must be between 0 and 30 days.');
-  if (p.collateralChain !== undefined && !['note', 'robinhood'].includes(p.collateralChain)) e.push('Collateral must be held on the note\'s chain or on Robinhood Chain.');
-  if (p.chain !== undefined && !NOTE_CHAINS.includes(p.chain)) e.push(`The note's chain must be one of ${NOTE_CHAINS.join(', ')}.`);
-  if (p.collateralChain === 'robinhood' && noteChainOf(p) !== HOME_CHAIN) e.push('A note on Robinhood Chain holds its collateral there already: choose the note\'s chain.');
-  if (p.payouts !== undefined && !PAYOUT_METHODS.includes(p.payouts)) e.push(`Payouts must be one of ${PAYOUT_METHODS.join(', ')}.`);
+  if (!(eco.collateralRatioPct >= 0 && eco.collateralRatioPct <= 1000))
+    e.push('The collateral ratio must be between 0 and 1,000% of the outstanding notional.');
+  if (!(eco.settlementLagDays >= 0 && eco.settlementLagDays <= 30))
+    e.push('The settlement lag must be between 0 and 30 days.');
+  if (p.collateralChain !== undefined && !['note', 'robinhood'].includes(p.collateralChain))
+    e.push("Collateral must be held on the note's chain or on Robinhood Chain.");
+  if (p.chain !== undefined && !NOTE_CHAINS.includes(p.chain))
+    e.push(`The note's chain must be one of ${NOTE_CHAINS.join(', ')}.`);
+  if (p.collateralChain === 'robinhood' && noteChainOf(p) !== HOME_CHAIN)
+    e.push("A note on Robinhood Chain holds its collateral there already: choose the note's chain.");
+  if (p.payouts !== undefined && !PAYOUT_METHODS.includes(p.payouts))
+    e.push(`Payouts must be one of ${PAYOUT_METHODS.join(', ')}.`);
   if (!DEFAULT_RULES.includes(eco.defaultRule)) e.push(`The default rule must be one of ${DEFAULT_RULES.join(', ')}.`);
-  if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS)) e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
+  if (!(eco.gracePeriodDays >= 0 && eco.gracePeriodDays <= MAX_GRACE_DAYS))
+    e.push(`The grace period must be between 0 and ${MAX_GRACE_DAYS} days.`);
   // The engine holds 8 assets per note: the note, the stablecoin, deliverable tokens and collateral together.
   const nAssets = 2 + (p.settlement === 'physical' ? unds.length : 0) + eco.collateral.length;
-  if (nAssets > 8) e.push(`This note would hold ${nAssets} assets; the engine holds 8 (note, stablecoin, ${p.settlement === 'physical' ? 'one deliverable token per underlying, ' : ''}and the collateral assets). Pledge fewer collateral assets.`);
+  if (nAssets > 8)
+    e.push(
+      `This note would hold ${nAssets} assets; the engine holds 8 (note, stablecoin, ${p.settlement === 'physical' ? 'one deliverable token per underlying, ' : ''}and the collateral assets). Pledge fewer collateral assets.`,
+    );
   return e;
 }
 
@@ -444,7 +575,8 @@ export const CASH_FAUCET = 'https://faucet.paxos.com';
 
 /** Every real token's address by symbol per chain (the app merges these with the deployment's config). */
 export const EXTERNAL_TOKENS: Record<string, Record<string, `0x${string}`>> = Object.fromEntries(
-  NOTE_CHAINS.map(c => [c, Object.fromEntries(Object.values(CHAIN_TOKENS[c]).map(t => [t.token, t.address]))]));
+  NOTE_CHAINS.map((c) => [c, Object.fromEntries(Object.values(CHAIN_TOKENS[c]).map((t) => [t.token, t.address]))]),
+);
 
 /** Where to get each chain's testnet tokens (plain links: notes.markets mints nothing). */
 export const FAUCETS = {
@@ -460,8 +592,12 @@ export const STOCK_TOKEN_FAUCETS: Record<string, string> = { 'robinhood-testnet'
 
 /** The tokens a note can deliver on its chain, for messages ("WETH for ETH, …"). */
 function deliverableList(p: Pick<ProductParams, 'chain'>): string {
-  const list = (Object.keys(FEEDS) as string[]).map(s => [s, deliverableToken(p, s)?.token] as const).filter(([, t]) => t);
-  return list.length ? `deliverable: ${list.map(([s, t]) => (s === t ? s : `${s} as ${t}`)).join(', ')}` : 'none deliverable';
+  const list = (Object.keys(FEEDS) as string[])
+    .map((s) => [s, deliverableToken(p, s)?.token] as const)
+    .filter(([, t]) => t);
+  return list.length
+    ? `deliverable: ${list.map(([s, t]) => (s === t ? s : `${s} as ${t}`)).join(', ')}`
+    : 'none deliverable';
 }
 
 /**
@@ -474,13 +610,54 @@ function deliverableList(p: Pick<ProductParams, 'chain'>): string {
  * There is no NFLX feed there. Notes issued before keep the feeds compiled into their definitions (equities on
  * Arbitrum One, CRE 'ethereum-mainnet-arbitrum-1').
  */
-type FeedSymbol = 'ETH' | 'BTC' | 'SOL' | 'TSLA' | 'AMZN' | 'AMD' | 'PLTR' | 'NVDA' | 'AAPL' | 'SPY' | 'META' | 'MSFT' | 'GOOGL' | 'COIN';
-const equity = (symbol: FeedSymbol, feed: string): Underlying =>
-  ({ symbol, feed, feedChain: 'robinhood-mainnet', minPrice: 1, maxPrice: 100_000, staleness: 345_600 });
+type FeedSymbol =
+  | 'ETH'
+  | 'BTC'
+  | 'SOL'
+  | 'TSLA'
+  | 'AMZN'
+  | 'AMD'
+  | 'PLTR'
+  | 'NVDA'
+  | 'AAPL'
+  | 'SPY'
+  | 'META'
+  | 'MSFT'
+  | 'GOOGL'
+  | 'COIN';
+const equity = (symbol: FeedSymbol, feed: string): Underlying => ({
+  symbol,
+  feed,
+  feedChain: 'robinhood-mainnet',
+  minPrice: 1,
+  maxPrice: 100_000,
+  staleness: 345_600,
+});
 export const FEEDS: Record<FeedSymbol, Underlying> = {
-  ETH: { symbol: 'ETH', feed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419', feedChain: 'ethereum-mainnet', minPrice: 1, maxPrice: 1_000_000, staleness: 3600 },
-  BTC: { symbol: 'BTC', feed: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c', feedChain: 'ethereum-mainnet', minPrice: 1, maxPrice: 10_000_000, staleness: 3600 },
-  SOL: { symbol: 'SOL', feed: '0x4ffC43a60e009B551865A93d232E33Fce9f01507', feedChain: 'ethereum-mainnet', minPrice: 0.01, maxPrice: 100_000, staleness: 86400 },
+  ETH: {
+    symbol: 'ETH',
+    feed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
+    feedChain: 'ethereum-mainnet',
+    minPrice: 1,
+    maxPrice: 1_000_000,
+    staleness: 3600,
+  },
+  BTC: {
+    symbol: 'BTC',
+    feed: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c',
+    feedChain: 'ethereum-mainnet',
+    minPrice: 1,
+    maxPrice: 10_000_000,
+    staleness: 3600,
+  },
+  SOL: {
+    symbol: 'SOL',
+    feed: '0x4ffC43a60e009B551865A93d232E33Fce9f01507',
+    feedChain: 'ethereum-mainnet',
+    minPrice: 0.01,
+    maxPrice: 100_000,
+    staleness: 86400,
+  },
   TSLA: equity('TSLA', '0x4A1166a659A55625345e9515b32adECea5547C38'),
   AMZN: equity('AMZN', '0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C'),
   AMD: equity('AMD', '0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72'),
@@ -498,15 +675,60 @@ const base = { issuePricePct: 100, underlyings: [FEEDS.ETH], observations: 4 };
 
 /** A worst-of basket: the phoenix on the worst of ETH, BTC and SOL. */
 export const EXAMPLE_WORST_OF: ProductParams = {
-  ...base, productType: 'phoenix', name: '12M Worst-of Phoenix on ETH, BTC, SOL', underlyings: [FEEDS.ETH, FEEDS.BTC, FEEDS.SOL],
-  couponRatePct: 3, couponBarrierPct: 70, memory: true, autocallLevelPct: 100, autocallFromPeriod: 2, knockInBarrierPct: 60,
+  ...base,
+  productType: 'phoenix',
+  name: '12M Worst-of Phoenix on ETH, BTC, SOL',
+  underlyings: [FEEDS.ETH, FEEDS.BTC, FEEDS.SOL],
+  couponRatePct: 3,
+  couponBarrierPct: 70,
+  memory: true,
+  autocallLevelPct: 100,
+  autocallFromPeriod: 2,
+  knockInBarrierPct: 60,
 };
 
 /** One worked example per product (quarterly over a year on ETH/USD). */
 export const EXAMPLE_PRODUCTS: Record<ProductType, ProductParams> = {
-  'fcn': { ...base, productType: 'fcn', name: '12M Fixed Coupon Note on ETH', couponRatePct: 2, autocallLevelPct: 100, knockInBarrierPct: 60 },
-  'reverse-convertible': { ...base, productType: 'reverse-convertible', name: '12M Reverse Convertible on ETH', couponRatePct: 2.5, knockInBarrierPct: 70 },
-  'phoenix': { ...base, productType: 'phoenix', name: '12M Phoenix (memory) on ETH', couponRatePct: 2.5, couponBarrierPct: 70, memory: true, autocallLevelPct: 100, autocallFromPeriod: 2, knockInBarrierPct: 60 },
-  'snowball': { ...base, productType: 'snowball', name: '12M Snowball on ETH', couponRatePct: 2.25, autocallLevelPct: 100, knockInBarrierPct: 65 },
-  'ppn': { ...base, productType: 'ppn', name: '12M 100% Protected Note on ETH', observations: 1, protectionPct: 100, participationPct: 50 },
+  fcn: {
+    ...base,
+    productType: 'fcn',
+    name: '12M Fixed Coupon Note on ETH',
+    couponRatePct: 2,
+    autocallLevelPct: 100,
+    knockInBarrierPct: 60,
+  },
+  'reverse-convertible': {
+    ...base,
+    productType: 'reverse-convertible',
+    name: '12M Reverse Convertible on ETH',
+    couponRatePct: 2.5,
+    knockInBarrierPct: 70,
+  },
+  phoenix: {
+    ...base,
+    productType: 'phoenix',
+    name: '12M Phoenix (memory) on ETH',
+    couponRatePct: 2.5,
+    couponBarrierPct: 70,
+    memory: true,
+    autocallLevelPct: 100,
+    autocallFromPeriod: 2,
+    knockInBarrierPct: 60,
+  },
+  snowball: {
+    ...base,
+    productType: 'snowball',
+    name: '12M Snowball on ETH',
+    couponRatePct: 2.25,
+    autocallLevelPct: 100,
+    knockInBarrierPct: 65,
+  },
+  ppn: {
+    ...base,
+    productType: 'ppn',
+    name: '12M 100% Protected Note on ETH',
+    observations: 1,
+    protectionPct: 100,
+    participationPct: 50,
+  },
 };

@@ -13,11 +13,39 @@
  * white-and-navy palette, with fog towards white for depth. No post-processing, no glow.
  */
 import {
-  BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
-  CylinderGeometry, DoubleSide, EdgesGeometry, Fog, Group, InstancedMesh, Line, LineBasicMaterial,
-  LineDashedMaterial, LineLoop, LineSegments, LinearFilter, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
-  PlaneGeometry, Points, PointsMaterial, RingGeometry, Scene, SphereGeometry, Sprite, SpriteMaterial, SRGBColorSpace,
-  TubeGeometry, Vector3, WebGLRenderer,
+  BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
+  CatmullRomCurve3,
+  CylinderGeometry,
+  DoubleSide,
+  EdgesGeometry,
+  Fog,
+  Group,
+  InstancedMesh,
+  Line,
+  LineBasicMaterial,
+  LineDashedMaterial,
+  LineLoop,
+  LineSegments,
+  LinearFilter,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Points,
+  PointsMaterial,
+  RingGeometry,
+  Scene,
+  SphereGeometry,
+  Sprite,
+  SpriteMaterial,
+  SRGBColorSpace,
+  TubeGeometry,
+  Vector3,
+  WebGLRenderer,
 } from 'three';
 import { ENDING_SPLIT, STORY_END } from './beats';
 
@@ -25,17 +53,29 @@ import { ENDING_SPLIT, STORY_END } from './beats';
 // green USDG coins. Every colour is dark enough to read on white.
 const C = {
   // Brand (docs/brand/logo-guide.pdf): Ink line work, Signal for the live path, coins and CRE marks, Slate guides.
-  bg: 0xffffff, line: 0xe3e5ea, lineStrong: 0xc3c8d1, text: 0x0e1116, soft: 0x4a5060, muted: 0x6b7280,
-  blue: 0x0b7a52, blueHi: 0x12a971, green: 0x12a971, red: 0xc9363b, amber: 0x9a6200, panel: 0x0e1116,
-  ink: 0x0e1116, signal: 0x12a971, signalInk: 0x0b7a52,
+  bg: 0xffffff,
+  line: 0xe3e5ea,
+  lineStrong: 0xc3c8d1,
+  text: 0x0e1116,
+  soft: 0x4a5060,
+  muted: 0x6b7280,
+  blue: 0x0b7a52,
+  blueHi: 0x12a971,
+  green: 0x12a971,
+  red: 0xc9363b,
+  amber: 0x9a6200,
+  panel: 0x0e1116,
+  ink: 0x0e1116,
+  signal: 0x12a971,
+  signalInk: 0x0b7a52,
 };
 
-
 // ---- the note's world -------------------------------------------------------------------------------------
-const X0 = -20, X1 = 20;                         // strike date .. maturity along x
-const OBS_X = [-10, 0, 10, 20];                  // observation dates
+const X0 = -20,
+  X1 = 20; // strike date .. maturity along x
+const OBS_X = [-10, 0, 10, 20]; // observation dates
 const LEVEL = (perf: number) => (perf - 0.6) * 20; // knock-in 60% = y 0, coupon 70% = y 2, autocall 100% = y 8
-const PERFS = [1.0, 0.93, 0.78, 0.95, 1.04];     // strike, then the four observations: every coupon paid, par at maturity
+const PERFS = [1.0, 0.93, 0.78, 0.95, 1.04]; // strike, then the four observations: every coupon paid, par at maturity
 const FLOOR_Y = -1.6;
 const HOLDERS_Z = 9;
 const ISSUER = new Vector3(-23, 0, -7);
@@ -56,23 +96,31 @@ function pathY(x: number) {
   let i = 0;
   while (i < knots.length - 2 && x > knots[i + 1]) i++;
   const t = clamp((x - knots[i]) / (knots[i + 1] - knots[i]));
-  const y0 = LEVEL(PERFS[Math.max(0, i - 1)]), y1 = LEVEL(PERFS[i]), y2 = LEVEL(PERFS[i + 1]), y3 = LEVEL(PERFS[Math.min(PERFS.length - 1, i + 2)]);
+  const y0 = LEVEL(PERFS[Math.max(0, i - 1)]),
+    y1 = LEVEL(PERFS[i]),
+    y2 = LEVEL(PERFS[i + 1]),
+    y3 = LEVEL(PERFS[Math.min(PERFS.length - 1, i + 2)]);
   // Catmull-Rom between the knots, then a wiggle that is zero at every knot.
-  const t2 = t * t, t3 = t2 * t;
-  const base = 0.5 * (2 * y1 + (-y0 + y2) * t + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3);
-  const wiggle = Math.sin(Math.PI * t) * (0.55 * Math.sin(x * 1.7 + 0.6) + 0.35 * Math.sin(x * 3.1 + 2.1) + 0.2 * Math.sin(x * 5.3));
+  const t2 = t * t,
+    t3 = t2 * t;
+  const base =
+    0.5 * (2 * y1 + (-y0 + y2) * t + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3);
+  const wiggle =
+    Math.sin(Math.PI * t) * (0.55 * Math.sin(x * 1.7 + 0.6) + 0.35 * Math.sin(x * 3.1 + 2.1) + 0.2 * Math.sin(x * 5.3));
   return base + wiggle;
 }
 
 /** A crisp text sprite from a canvas (mono labels, the page's typography). */
 function label(text: string, color: string, height = 0.9, weight = 500) {
-  const pad = 18, fontPx = 64;
+  const pad = 18,
+    fontPx = 64;
   const cv = document.createElement('canvas');
   const ctx = cv.getContext('2d')!;
   const font = `${weight} ${fontPx}px "Geist Mono", ui-monospace, Menlo, monospace`;
   ctx.font = font;
   const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-  cv.width = w; cv.height = fontPx + pad * 2;
+  cv.width = w;
+  cv.height = fontPx + pad * 2;
   ctx.font = font;
   ctx.fillStyle = color;
   ctx.textBaseline = 'middle';
@@ -98,10 +146,13 @@ function usdgFace() {
   ctx.fillRect(0, 0, 128, 128);
   ctx.strokeStyle = 'rgba(255,255,255,.75)';
   ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.arc(64, 64, 52, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.fillStyle = '#ffffff';
   ctx.font = '600 34px "Geist Mono", ui-monospace, Menlo, monospace';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.fillText('USDG', 64, 66);
   const tex = new CanvasTexture(cv);
   tex.colorSpace = SRGBColorSpace;
@@ -113,7 +164,10 @@ function coinMaterials() {
   return [new MeshBasicMaterial({ color: C.green }), face, face];
 }
 
-export interface SceneOptions { lowPower: boolean; reducedMotion: boolean }
+export interface SceneOptions {
+  lowPower: boolean;
+  reducedMotion: boolean;
+}
 
 export class NoteScene {
   private renderer: WebGLRenderer;
@@ -135,7 +189,8 @@ export class NoteScene {
   private curve!: CatmullRomCurve3;
   private head!: Mesh;
   private preview!: Mesh;
-  private obs: Array<{ ring: Mesh; pulse: Mesh; hexMark: LineLoop; stem: Line; x: number; at: number; cre: Sprite }> = [];
+  private obs: Array<{ ring: Mesh; pulse: Mesh; hexMark: LineLoop; stem: Line; x: number; at: number; cre: Sprite }> =
+    [];
   private strikeMark!: Group;
   private strikeCre!: Sprite;
   private marginCre!: Sprite;
@@ -174,7 +229,12 @@ export class NoteScene {
 
   constructor(canvas: HTMLCanvasElement, opts: SceneOptions) {
     this.opts = opts;
-    this.renderer = new WebGLRenderer({ canvas, antialias: !opts.lowPower, alpha: false, powerPreference: 'high-performance' });
+    this.renderer = new WebGLRenderer({
+      canvas,
+      antialias: !opts.lowPower,
+      alpha: false,
+      powerPreference: 'high-performance',
+    });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.lowPower ? 1.5 : 2));
     this.renderer.setClearColor(C.bg, 1);
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -205,11 +265,19 @@ export class NoteScene {
       [LEVEL(0.6), C.red, 'KNOCK-IN 60%', 0.05],
     ];
     for (const [y, color, text, op] of sheets) {
-      const plane = new Mesh(new PlaneGeometry(X1 - X0 + 8, 12), new MeshBasicMaterial({ color, transparent: true, opacity: op, side: DoubleSide, depthWrite: false }));
+      const plane = new Mesh(
+        new PlaneGeometry(X1 - X0 + 8, 12),
+        new MeshBasicMaterial({ color, transparent: true, opacity: op, side: DoubleSide, depthWrite: false }),
+      );
       plane.rotation.x = -Math.PI / 2;
       plane.position.set(0, y, -1);
       s.add(plane);
-      const edge = new BufferGeometry().setFromPoints([new Vector3(X0 - 4, y, 5), new Vector3(X1 + 4, y, 5), new Vector3(X1 + 4, y, -7), new Vector3(X0 - 4, y, -7)]);
+      const edge = new BufferGeometry().setFromPoints([
+        new Vector3(X0 - 4, y, 5),
+        new Vector3(X1 + 4, y, 5),
+        new Vector3(X1 + 4, y, -7),
+        new Vector3(X0 - 4, y, -7),
+      ]);
       s.add(new LineLoop(edge, new LineBasicMaterial({ color, transparent: true, opacity: 0.8 })));
       const l = label(text, hex(color), 0.62);
       l.position.set(X1 + 4.6, y, 5);
@@ -219,15 +287,21 @@ export class NoteScene {
     // The price path: a ghost of the whole path (visible in the hero), and the bright path that draws in.
     const pts: Vector3[] = [];
     const N = low ? 160 : 320;
-    for (let i = 0; i <= N; i++) { const x = X0 + (X1 - X0) * (i / N); pts.push(new Vector3(x, pathY(x), 0)); }
+    for (let i = 0; i <= N; i++) {
+      const x = X0 + (X1 - X0) * (i / N);
+      pts.push(new Vector3(x, pathY(x), 0));
+    }
     this.curve = new CatmullRomCurve3(pts);
     {
       const ghost = new BufferGeometry().setFromPoints(this.curve.getPoints(N));
-      const gl = new Line(ghost, new LineDashedMaterial({ color: C.soft, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.4 }));
+      const gl = new Line(
+        ghost,
+        new LineDashedMaterial({ color: C.soft, dashSize: 0.35, gapSize: 0.25, transparent: true, opacity: 0.4 }),
+      );
       gl.computeLineDistances();
       s.add(gl);
       // Its shadow on the floor, for depth.
-      const shadow = new BufferGeometry().setFromPoints(pts.map(p => new Vector3(p.x, FLOOR_Y + 0.02, p.z)));
+      const shadow = new BufferGeometry().setFromPoints(pts.map((p) => new Vector3(p.x, FLOOR_Y + 0.02, p.z)));
       s.add(new Line(shadow, new LineBasicMaterial({ color: C.lineStrong, transparent: true, opacity: 0.8 })));
     }
     this.pathSegs = low ? 220 : 480;
@@ -237,7 +311,10 @@ export class NoteScene {
     this.head = new Mesh(new SphereGeometry(0.26, 16, 12), new MeshBasicMaterial({ color: C.text }));
     s.add(this.head);
     // The opening shot shows the whole path; it steps back to a ghost when the story starts, then redraws.
-    this.preview = new Mesh(new TubeGeometry(this.curve, this.pathSegs, 0.06, this.pathRadial, false), new MeshBasicMaterial({ color: C.soft, transparent: true, depthWrite: false }));
+    this.preview = new Mesh(
+      new TubeGeometry(this.curve, this.pathSegs, 0.06, this.pathRadial, false),
+      new MeshBasicMaterial({ color: C.soft, transparent: true, depthWrite: false }),
+    );
     s.add(this.preview);
 
     // Strike date.
@@ -258,15 +335,35 @@ export class NoteScene {
 
     // Observation dates: a stem, a ring at the price, a pulse when the date passes, and Chainlink's check mark.
     const ringGeo = new RingGeometry(0.42, 0.52, 40);
-    const hexPts = Array.from({ length: 6 }, (_, k) => new Vector3(Math.cos(k * Math.PI / 3 + Math.PI / 6) * 0.9, Math.sin(k * Math.PI / 3 + Math.PI / 6) * 0.9, 0));
+    const hexPts = Array.from(
+      { length: 6 },
+      (_, k) =>
+        new Vector3(
+          Math.cos((k * Math.PI) / 3 + Math.PI / 6) * 0.9,
+          Math.sin((k * Math.PI) / 3 + Math.PI / 6) * 0.9,
+          0,
+        ),
+    );
     OBS_X.forEach((x, k) => {
       const y = pathY(x);
-      const stem = new Line(new BufferGeometry().setFromPoints([new Vector3(x, FLOOR_Y, 0), new Vector3(x, y, 0)]), new LineBasicMaterial({ color: C.lineStrong, transparent: true, opacity: 0.9 }));
-      const ring = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.text, transparent: true, side: DoubleSide, depthWrite: false }));
+      const stem = new Line(
+        new BufferGeometry().setFromPoints([new Vector3(x, FLOOR_Y, 0), new Vector3(x, y, 0)]),
+        new LineBasicMaterial({ color: C.lineStrong, transparent: true, opacity: 0.9 }),
+      );
+      const ring = new Mesh(
+        ringGeo,
+        new MeshBasicMaterial({ color: C.text, transparent: true, side: DoubleSide, depthWrite: false }),
+      );
       ring.position.set(x, y, 0);
-      const pulse = new Mesh(ringGeo, new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }));
+      const pulse = new Mesh(
+        ringGeo,
+        new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }),
+      );
       pulse.position.copy(ring.position);
-      const hexMark = new LineLoop(new BufferGeometry().setFromPoints(hexPts), new LineBasicMaterial({ color: C.signal, transparent: true }));
+      const hexMark = new LineLoop(
+        new BufferGeometry().setFromPoints(hexPts),
+        new LineBasicMaterial({ color: C.signal, transparent: true }),
+      );
       hexMark.position.set(x, y + 2.1, 0);
       const l = label(k === OBS_X.length - 1 ? 'MATURITY' : `OBSERVATION ${k + 1}`, hex(C.muted), 0.5);
       l.position.set(x - 1.6, FLOOR_Y - 0.9, 0.6);
@@ -279,7 +376,10 @@ export class NoteScene {
 
     // Holders: a rail at the front where coupons land.
     {
-      const rail = new BufferGeometry().setFromPoints([new Vector3(X0 - 4, FLOOR_Y + 0.01, HOLDERS_Z), new Vector3(X1 + 4, FLOOR_Y + 0.01, HOLDERS_Z)]);
+      const rail = new BufferGeometry().setFromPoints([
+        new Vector3(X0 - 4, FLOOR_Y + 0.01, HOLDERS_Z),
+        new Vector3(X1 + 4, FLOOR_Y + 0.01, HOLDERS_Z),
+      ]);
       s.add(new Line(rail, new LineBasicMaterial({ color: C.green, transparent: true, opacity: 0.5 })));
       this.holdersLabel = label('HOLDERS · COUPONS IN USDG', hex(C.signalInk), 0.6);
       this.holdersLabel.position.set(X1 + 4.6, FLOOR_Y + 0.2, HOLDERS_Z);
@@ -296,7 +396,9 @@ export class NoteScene {
       for (let j = 0; j < perObs; j++) {
         const jitter = (j - (perObs - 1) / 2) * 0.55;
         this.coinFrom.push(new Vector3(x + jitter * 0.3, y, 0));
-        this.coinTo.push(new Vector3(x + jitter * 1.6, FLOOR_Y + 0.5 + (j % 3) * 0.12, HOLDERS_Z + (Math.floor(j / 3) - 1) * 0.7));
+        this.coinTo.push(
+          new Vector3(x + jitter * 1.6, FLOOR_Y + 0.5 + (j % 3) * 0.12, HOLDERS_Z + (Math.floor(j / 3) - 1) * 0.7),
+        );
         this.coinAt.push(this.obs[k].at + j * 0.004);
         ci++;
       }
@@ -339,7 +441,8 @@ export class NoteScene {
     {
       const crowd = new InstancedMesh(new SphereGeometry(0.28, 12, 10), new MeshBasicMaterial({ color: C.text }), 14);
       for (let i = 0; i < 14; i++) {
-        const a = i * 2.39996, r = 0.55 * Math.sqrt(i + 0.5);
+        const a = i * 2.39996,
+          r = 0.55 * Math.sqrt(i + 0.5);
         this.tmp.position.set(INVESTORS.x + Math.cos(a) * r, FLOOR_Y + 0.3, INVESTORS.z + Math.sin(a) * r);
         this.tmp.updateMatrix();
         crowd.setMatrixAt(i, this.tmp.matrix);
@@ -352,13 +455,20 @@ export class NoteScene {
     // Subscription flows: stablecoins to the issuer, note units to the investors.
     const flowN = low ? 10 : 18;
     this.flowCoins = new InstancedMesh(new CylinderGeometry(0.3, 0.3, 0.07, 24), coinMaterials(), flowN);
-    this.flowUnits = new InstancedMesh(new BoxGeometry(0.34, 0.34, 0.34), new MeshBasicMaterial({ color: C.text }), flowN);
+    this.flowUnits = new InstancedMesh(
+      new BoxGeometry(0.34, 0.34, 0.34),
+      new MeshBasicMaterial({ color: C.text }),
+      flowN,
+    );
     s.add(this.flowCoins, this.flowUnits);
     // The swap point: USDG and units cross here in the same transaction (DvP), so the note shows it as one step.
     {
       const mid = new Vector3().lerpVectors(INVESTORS, ISSUER, 0.5);
       this.swapMark = new Group();
-      const ring = new Mesh(new RingGeometry(1.25, 1.4, 48), new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }));
+      const ring = new Mesh(
+        new RingGeometry(1.25, 1.4, 48),
+        new MeshBasicMaterial({ color: C.signal, transparent: true, side: DoubleSide, depthWrite: false }),
+      );
       ring.rotation.y = Math.PI / 2;
       this.swapMark.add(ring);
       this.swapMark.position.set(mid.x, FLOOR_Y + 1.6, mid.z);
@@ -373,7 +483,13 @@ export class NoteScene {
       this.principal = new InstancedMesh(new CylinderGeometry(0.62, 0.62, 0.12, 32), coinMaterials(), n);
       for (let i = 0; i < n; i++) {
         this.principalFrom.push(new Vector3(ISSUER.x + 1, FLOOR_Y + 2.4, ISSUER.z + 2));
-        this.principalTo.push(new Vector3(13 + (i % 5) * 1.5, FLOOR_Y + 0.75 + Math.floor(i / 5) * 0.25, HOLDERS_Z - 0.6 + Math.floor(i / 5) * 1.1));
+        this.principalTo.push(
+          new Vector3(
+            13 + (i % 5) * 1.5,
+            FLOOR_Y + 0.75 + Math.floor(i / 5) * 0.25,
+            HOLDERS_Z - 0.6 + Math.floor(i / 5) * 1.1,
+          ),
+        );
       }
       this.principal.count = n;
       s.add(this.principal);
@@ -384,11 +500,16 @@ export class NoteScene {
     }
     // Ending B: the price falls through the knock-in at maturity (a red branch from the last observation).
     {
-      const x0 = OBS_X[2], x1 = X1, yEnd = LEVEL(0.5);
+      const x0 = OBS_X[2],
+        x1 = X1,
+        yEnd = LEVEL(0.5);
       const bp: Vector3[] = [];
       for (let i = 0; i <= 80; i++) {
-        const tt = i / 80, x = mix(x0, x1, tt);
-        bp.push(new Vector3(x, mix(pathY(x0), yEnd, smooth(tt)) + Math.sin(Math.PI * tt) * 0.5 * Math.sin(x * 2.3), 0.15));
+        const tt = i / 80,
+          x = mix(x0, x1, tt);
+        bp.push(
+          new Vector3(x, mix(pathY(x0), yEnd, smooth(tt)) + Math.sin(Math.PI * tt) * 0.5 * Math.sin(x * 2.3), 0.15),
+        );
       }
       this.branchSegs = low ? 90 : 160;
       this.branchGeo = new TubeGeometry(new CatmullRomCurve3(bp), this.branchSegs, 0.12, this.pathRadial, false);
@@ -401,13 +522,21 @@ export class NoteScene {
       s.add(this.knockTag);
       // Stock tokens: holders receive TSLA instead of cash.
       const n = low ? 6 : 9;
-      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 128;
       const g2 = cv.getContext('2d')!;
-      g2.fillStyle = hex(C.text); g2.fillRect(0, 0, 128, 128);
-      g2.strokeStyle = 'rgba(255,255,255,.6)'; g2.lineWidth = 6; g2.strokeRect(8, 8, 112, 112);
-      g2.fillStyle = '#ffffff'; g2.font = '700 38px "Geist Mono", ui-monospace, Menlo, monospace';
-      g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText('USDG', 64, 66); // cash-settled: stock notes repay final ÷ strike in USDG
-      const tex = new CanvasTexture(cv); tex.colorSpace = SRGBColorSpace;
+      g2.fillStyle = hex(C.text);
+      g2.fillRect(0, 0, 128, 128);
+      g2.strokeStyle = 'rgba(255,255,255,.6)';
+      g2.lineWidth = 6;
+      g2.strokeRect(8, 8, 112, 112);
+      g2.fillStyle = '#ffffff';
+      g2.font = '700 38px "Geist Mono", ui-monospace, Menlo, monospace';
+      g2.textAlign = 'center';
+      g2.textBaseline = 'middle';
+      g2.fillText('USDG', 64, 66); // cash-settled: stock notes repay final ÷ strike in USDG
+      const tex = new CanvasTexture(cv);
+      tex.colorSpace = SRGBColorSpace;
       this.tsla = new InstancedMesh(new BoxGeometry(0.95, 0.95, 0.95), new MeshBasicMaterial({ map: tex }), n);
       for (let i = 0; i < n; i++) {
         this.tslaFrom.push(new Vector3(x1, yEnd, 0));
@@ -433,7 +562,10 @@ export class NoteScene {
       }
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(this.dustBase.slice(), 3));
-      this.dust = new Points(g, new PointsMaterial({ color: C.soft, size: 0.06, transparent: true, opacity: 0.3, depthWrite: false }));
+      this.dust = new Points(
+        g,
+        new PointsMaterial({ color: C.soft, size: 0.06, transparent: true, opacity: 0.3, depthWrite: false }),
+      );
       s.add(this.dust);
     }
   }
@@ -456,7 +588,8 @@ export class NoteScene {
     const S = NoteScene.SHOTS;
     let i = 0;
     while (i < S.length - 2 && p > S[i + 1].p) i++;
-    const a = S[i], b = S[i + 1];
+    const a = S[i],
+      b = S[i + 1];
     const k = smoother(span(p, a.p, b.p));
     this.camera.position.set(mix(a.pos[0], b.pos[0], k), mix(a.pos[1], b.pos[1], k), mix(a.pos[2], b.pos[2], k));
     this.look.set(mix(a.at[0], b.at[0], k), mix(a.at[1], b.at[1], k), mix(a.at[2], b.at[2], k));
@@ -464,13 +597,22 @@ export class NoteScene {
     const follow = smooth(span(p, 0.45, 0.5)) * (1 - smooth(span(p, 0.8, 0.86)));
     if (follow > 0) {
       this.curve.getPointAt(clamp(pathAt(p)), this.v);
-      const fx = this.v.x, fy = this.v.y;
+      const fx = this.v.x,
+        fy = this.v.y;
       // Observing: close, beside the head. Paying: lower and wider, so coins can be seen landing with the holders.
       const pay = smooth(span(p, 0.63, 0.7));
-      const lx = mix(fx + 3, fx * 0.45, pay), ly = mix(fy * 0.6 + 1.2, 1.6, pay), lz = mix(0.5, 3.5, pay);
-      const cx = mix(fx + 9, fx * 0.45 + 9, pay), cy = mix(fy * 0.5 + 6.5, 9.5, pay), cz = mix(17, 31, pay);
+      const lx = mix(fx + 3, fx * 0.45, pay),
+        ly = mix(fy * 0.6 + 1.2, 1.6, pay),
+        lz = mix(0.5, 3.5, pay);
+      const cx = mix(fx + 9, fx * 0.45 + 9, pay),
+        cy = mix(fy * 0.5 + 6.5, 9.5, pay),
+        cz = mix(17, 31, pay);
       this.look.set(mix(this.look.x, lx, follow), mix(this.look.y, ly, follow), mix(this.look.z, lz, follow));
-      this.camera.position.set(mix(this.camera.position.x, cx, follow), mix(this.camera.position.y, cy, follow), mix(this.camera.position.z, cz, follow));
+      this.camera.position.set(
+        mix(this.camera.position.x, cx, follow),
+        mix(this.camera.position.y, cy, follow),
+        mix(this.camera.position.z, cz, follow),
+      );
     }
     if (!this.opts.reducedMotion) {
       // A slow sway, strongest on the opening shot.
@@ -481,7 +623,10 @@ export class NoteScene {
     // Keep the whole stage in frame on narrow (portrait) screens.
     if (this.camera.aspect < 1) {
       const pull = clamp((1 - this.camera.aspect) * 0.75, 0, 0.55) * (1 - 0.6 * smooth(span(p, 0.84, 1)));
-      this.v.copy(this.camera.position).sub(this.look).multiplyScalar(1 + pull);
+      this.v
+        .copy(this.camera.position)
+        .sub(this.look)
+        .multiplyScalar(1 + pull);
       this.camera.position.copy(this.look).add(this.v);
       // Captions sit at the bottom on phones: aim lower so the subject rides in the upper half.
       const drop = (1 - this.camera.aspect) * 7;
@@ -493,7 +638,8 @@ export class NoteScene {
     // right (a lens shift, not a camera move) and ease it back to centre as the story starts.
     const shift = this.camera.aspect >= 1 ? 0.27 * (1 - smooth(span(p, 0.03, 0.13))) : 0;
     if (shift > 0.001) {
-      const fw = 1000, fh = 1000 / this.camera.aspect;
+      const fw = 1000,
+        fh = 1000 / this.camera.aspect;
       this.camera.setViewOffset(fw, fh, -shift * fw, 0, fw, fh);
     } else if (this.camera.view?.enabled) {
       this.camera.clearViewOffset();
@@ -524,10 +670,12 @@ export class NoteScene {
     const flowOn = sub > 0 && sub < 1;
     const flowFade = Math.sin(Math.PI * sub);
     const n = this.flowCoins.count;
-    const WAVES = 3, perWave = Math.max(1, Math.floor(n / WAVES));
+    const WAVES = 3,
+      perWave = Math.max(1, Math.floor(n / WAVES));
     let cross = 0;
     for (let i = 0; i < n; i++) {
-      const w = Math.floor(i / perWave), j = i % perWave;
+      const w = Math.floor(i / perWave),
+        j = i % perWave;
       const ph = clamp(sub * 1.6 - w * 0.28);
       const e = smoother(ph);
       cross = Math.max(cross, 1 - Math.min(1, Math.abs(e - 0.5) * 6));
@@ -606,26 +754,37 @@ export class NoteScene {
       this.coins.setMatrixAt(i, this.tmp.matrix);
     }
     this.coins.instanceMatrix.needsUpdate = true;
-    for (const c of this.couponTags) (c.s.material as SpriteMaterial).opacity = smooth(clamp((pathT - c.at - 0.02) / 0.05));
-    (this.strikeCre.material as SpriteMaterial).opacity = smooth(clamp(pathT / 0.03)) * (1 - smooth(span(p, 0.86, 0.9)));
-    (this.marginCre.material as SpriteMaterial).opacity = smooth(span(p, 0.5, 0.56)) * (1 - smooth(span(p, 0.84, 0.88)));
+    for (const c of this.couponTags)
+      (c.s.material as SpriteMaterial).opacity = smooth(clamp((pathT - c.at - 0.02) / 0.05));
+    (this.strikeCre.material as SpriteMaterial).opacity =
+      smooth(clamp(pathT / 0.03)) * (1 - smooth(span(p, 0.86, 0.9)));
+    (this.marginCre.material as SpriteMaterial).opacity =
+      smooth(span(p, 0.5, 0.56)) * (1 - smooth(span(p, 0.84, 0.88)));
 
     // Dust drifts slowly upward.
     if (!this.opts.reducedMotion) {
       const pos = this.dust.geometry.getAttribute('position') as BufferAttribute;
       const arr = pos.array as Float32Array;
-      for (let i = 1; i < arr.length; i += 3) arr[i] = FLOOR_Y + frac((this.dustBase[i] - FLOOR_Y + t * 0.18) / 18) * 18;
+      for (let i = 1; i < arr.length; i += 3)
+        arr[i] = FLOOR_Y + frac((this.dustBase[i] - FLOOR_Y + t * 0.18) / 18) * 18;
       pos.needsUpdate = true;
     }
   }
 
   // ---------------------------------------------------------------------------------------------------------
-  setProgress(p: number) { this.target = clamp(p); this.wake(); }
-  setVisible(v: boolean) { this.visible = v; if (v) this.wake(); }
+  setProgress(p: number) {
+    this.target = clamp(p);
+    this.wake();
+  }
+  setVisible(v: boolean) {
+    this.visible = v;
+    if (v) this.wake();
+  }
 
   resize() {
     const c = this.renderer.domElement;
-    const w = c.clientWidth || window.innerWidth, h = c.clientHeight || window.innerHeight;
+    const w = c.clientWidth || window.innerWidth,
+      h = c.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.fov = this.camera.aspect < 1 ? 58 : 42;
@@ -682,25 +841,45 @@ export class NoteScene {
     // Camera: ending A frames the holders receiving principal; ending B settles on maturity and the rail.
     const ca = smooth(span(q, STORY_END + 0.01, STORY_END + 0.08)) * (1 - smooth(b));
     if (ca > 0) {
-      this.camera.position.set(mix(this.camera.position.x, 22, ca), mix(this.camera.position.y, 10, ca), mix(this.camera.position.z, 31, ca));
+      this.camera.position.set(
+        mix(this.camera.position.x, 22, ca),
+        mix(this.camera.position.y, 10, ca),
+        mix(this.camera.position.z, 31, ca),
+      );
       this.look.set(mix(this.look.x, 6, ca), mix(this.look.y, 1.2, ca), mix(this.look.z, 3, ca));
-      if (this.camera.aspect < 1) { this.camera.position.z += 10 * ca; }
+      if (this.camera.aspect < 1) {
+        this.camera.position.z += 10 * ca;
+      }
       this.camera.lookAt(this.look);
     }
     if (b > 0) {
       const k = smooth(b);
-      this.camera.position.set(mix(this.camera.position.x, 30, k), mix(this.camera.position.y, 8.5, k), mix(this.camera.position.z, 27, k));
+      this.camera.position.set(
+        mix(this.camera.position.x, 30, k),
+        mix(this.camera.position.y, 8.5, k),
+        mix(this.camera.position.z, 27, k),
+      );
       this.look.set(mix(this.look.x, 15, k), mix(this.look.y, 0.4, k), mix(this.look.z, 4.5, k));
-      if (this.camera.aspect < 1) { this.camera.position.z += 10 * k; this.camera.position.x += 4 * k; }
+      if (this.camera.aspect < 1) {
+        this.camera.position.z += 10 * k;
+        this.camera.position.x += 4 * k;
+      }
       this.camera.lookAt(this.look);
     }
   }
 
   /** Jump straight to a progress value (no easing), e.g. the reduced-motion still. */
-  snap(p: number) { this.current = this.target = clamp(p); this.renderFrame(); }
+  snap(p: number) {
+    this.current = this.target = clamp(p);
+    this.renderFrame();
+  }
 
   private wake() {
-    if (this.opts.reducedMotion) { this.current = this.target; this.renderFrame(); return; }
+    if (this.opts.reducedMotion) {
+      this.current = this.target;
+      this.renderFrame();
+      return;
+    }
     if (this.running || !this.visible) return;
     this.running = true;
     this.last = performance.now();
@@ -712,24 +891,32 @@ export class NoteScene {
       this.current += (this.target - this.current) * (1 - Math.exp(-dt * 6));
       if (Math.abs(this.target - this.current) < 0.0004) this.current = this.target;
       this.renderFrame(now, this.current);
-      if (!this.visible) { this.running = false; return; }
+      if (!this.visible) {
+        this.running = false;
+        return;
+      }
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
   }
 
-  stop() { this.running = false; cancelAnimationFrame(this.raf); }
+  stop() {
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+  }
 
   dispose() {
     this.stop();
-    this.scene.traverse(o => {
+    this.scene.traverse((o) => {
       const m = o as Mesh;
       m.geometry?.dispose?.();
       const mat = m.material as unknown;
       const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
-      for (const x of mats as Array<{ map?: { dispose(): void }; dispose(): void }>) { x.map?.dispose(); x.dispose(); }
+      for (const x of mats as Array<{ map?: { dispose(): void }; dispose(): void }>) {
+        x.map?.dispose();
+        x.dispose();
+      }
     });
     this.renderer.dispose();
   }
 }
-

@@ -29,7 +29,9 @@ export interface IssueRequest {
 
 export type Progress = (message: string) => void;
 
-export interface Submitted { tx: string[] }
+export interface Submitted {
+  tx: string[];
+}
 
 /** A claim's outcome: what reached the wallet with a receipt, and whether a payment could not be sent. */
 export interface Claimed extends Submitted {
@@ -55,14 +57,25 @@ export interface ChainAdapter<Signer> {
   history(id: NoteId): Promise<Array<{ block: number; tx: string; event: EngineEvent }>>;
 
   /** Publish a workflow (idempotent). */
-  registerDefinition(signer: Signer, bytes: Uint8Array, onProgress?: Progress): Promise<Submitted & { definition: string }>;
+  registerDefinition(
+    signer: Signer,
+    bytes: Uint8Array,
+    onProgress?: Progress,
+  ): Promise<Submitted & { definition: string }>;
   /** Start an issuance and run its pre-trade steps (terms, reserves); the book opens at the end. */
   issue(signer: Signer, req: IssueRequest, onProgress?: Progress): Promise<Submitted & { id: NoteId }>;
   /**
    * Complete a waiting user task or decision: its inputs by field index, and for a decision the chosen
    * outgoing flow. Deposits the step takes are approved and pulled from the signer.
    */
-  executeStep(signer: Signer, id: NoteId, step: number, inputs: Record<number, InputValue>, choice?: number, onProgress?: Progress): Promise<Submitted>;
+  executeStep(
+    signer: Signer,
+    id: NoteId,
+    step: number,
+    inputs: Record<number, InputValue>,
+    choice?: number,
+    onProgress?: Progress,
+  ): Promise<Submitted>;
   /** Buy `units` (engine fixed point) from an open book, paying in the note's stablecoin. */
   subscribe(signer: Signer, id: NoteId, units: bigint, onProgress?: Progress): Promise<Submitted>;
   /**
@@ -88,5 +101,11 @@ export interface ChainAdapter<Signer> {
    * the default: holders claim (claimPayouts). Used by issuers who chose to pay holders automatically.
    * Returns how many holders are still to push in this round.
    */
-  pushPayouts(signer: Signer, id: NoteId, asset: number, count: number, onProgress?: Progress): Promise<Submitted & { left: number }>;
+  pushPayouts(
+    signer: Signer,
+    id: NoteId,
+    asset: number,
+    count: number,
+    onProgress?: Progress,
+  ): Promise<Submitted & { left: number }>;
 }

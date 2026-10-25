@@ -14,20 +14,73 @@ import type { EngineEvent } from '../events';
 
 const ZERO32 = `0x${'0'.repeat(64)}` as Hex;
 
-export interface PayoutScope { chainId: number | bigint; engine: string }
-
-export function distributionHash(scope: PayoutScope, pid: bigint | string, asset: number, period: number, perUnit: bigint | string, supply: bigint | string): Hex {
-  return keccak256(encodeAbiParameters(
-    [{ type: 'uint256' }, { type: 'address' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'uint64' }, { type: 'int256' }, { type: 'uint256' }],
-    [BigInt(scope.chainId), scope.engine as Address, BigInt(pid), BigInt(asset), BigInt(period), BigInt(perUnit), BigInt(supply)],
-  ));
+export interface PayoutScope {
+  chainId: number | bigint;
+  engine: string;
 }
 
-export function payoutId(scope: PayoutScope, pid: bigint | string, asset: number, period: number, holder: string, amount: bigint | string): Hex {
-  return keccak256(encodeAbiParameters(
-    [{ type: 'uint256' }, { type: 'address' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'uint64' }, { type: 'address' }, { type: 'uint256' }],
-    [BigInt(scope.chainId), scope.engine as Address, BigInt(pid), BigInt(asset), BigInt(period), holder as Address, BigInt(amount)],
-  ));
+export function distributionHash(
+  scope: PayoutScope,
+  pid: bigint | string,
+  asset: number,
+  period: number,
+  perUnit: bigint | string,
+  supply: bigint | string,
+): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: 'uint256' },
+        { type: 'address' },
+        { type: 'uint256' },
+        { type: 'uint256' },
+        { type: 'uint64' },
+        { type: 'int256' },
+        { type: 'uint256' },
+      ],
+      [
+        BigInt(scope.chainId),
+        scope.engine as Address,
+        BigInt(pid),
+        BigInt(asset),
+        BigInt(period),
+        BigInt(perUnit),
+        BigInt(supply),
+      ],
+    ),
+  );
+}
+
+export function payoutId(
+  scope: PayoutScope,
+  pid: bigint | string,
+  asset: number,
+  period: number,
+  holder: string,
+  amount: bigint | string,
+): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: 'uint256' },
+        { type: 'address' },
+        { type: 'uint256' },
+        { type: 'uint256' },
+        { type: 'uint64' },
+        { type: 'address' },
+        { type: 'uint256' },
+      ],
+      [
+        BigInt(scope.chainId),
+        scope.engine as Address,
+        BigInt(pid),
+        BigInt(asset),
+        BigInt(period),
+        holder as Address,
+        BigInt(amount),
+      ],
+    ),
+  );
 }
 
 /** Chain payoutIds in push order (the round's DistributionSettled.rollingHash). */
@@ -67,7 +120,8 @@ export function verifyPayouts(scope: PayoutScope, events: readonly EngineEvent[]
     if (e.name === 'DistributionRecorded') {
       const key = `${e.pid}|${e.asset}|${e.period}`;
       const problems: string[] = [];
-      if (distributionHash(scope, e.pid, e.asset, e.period, e.perUnit, e.supply).toLowerCase() !== e.hash.toLowerCase()) problems.push(`distribution ${key}: hash mismatch`);
+      if (distributionHash(scope, e.pid, e.asset, e.period, e.perUnit, e.supply).toLowerCase() !== e.hash.toLowerCase())
+        problems.push(`distribution ${key}: hash mismatch`);
       open.set(key, { ids: [], total: 0n, problems });
     } else if (e.name === 'PayoutPaid') {
       const key = `${e.pid}|${e.asset}|${e.period}`;
@@ -83,15 +137,37 @@ export function verifyPayouts(scope: PayoutScope, events: readonly EngineEvent[]
       const rolling = rollingHash(r.ids);
       const problems = [...r.problems];
       if (rolling.toLowerCase() !== e.rollingHash.toLowerCase()) problems.push(`round ${key}: rolling hash mismatch`);
-      if (r.ids.length !== e.paidCount) problems.push(`round ${key}: ${r.ids.length} payouts logged, ${e.paidCount} settled`);
-      if (r.total !== BigInt(e.paidTotal)) problems.push(`round ${key}: total ${r.total} logged, ${e.paidTotal} settled`);
-      out.push({ pid: e.pid, asset: e.asset, period: e.period, paidCount: e.paidCount, paidTotal: BigInt(e.paidTotal), rollingHash: e.rollingHash as Hex, settled: true, ok: !problems.length, problems });
+      if (r.ids.length !== e.paidCount)
+        problems.push(`round ${key}: ${r.ids.length} payouts logged, ${e.paidCount} settled`);
+      if (r.total !== BigInt(e.paidTotal))
+        problems.push(`round ${key}: total ${r.total} logged, ${e.paidTotal} settled`);
+      out.push({
+        pid: e.pid,
+        asset: e.asset,
+        period: e.period,
+        paidCount: e.paidCount,
+        paidTotal: BigInt(e.paidTotal),
+        rollingHash: e.rollingHash as Hex,
+        settled: true,
+        ok: !problems.length,
+        problems,
+      });
       open.delete(key);
     }
   }
   for (const [key, r] of open) {
     const [pid, asset, period] = key.split('|');
-    out.push({ pid, asset: Number(asset), period: Number(period), paidCount: r.ids.length, paidTotal: r.total, rollingHash: rollingHash(r.ids), settled: false, ok: !r.problems.length, problems: r.problems });
+    out.push({
+      pid,
+      asset: Number(asset),
+      period: Number(period),
+      paidCount: r.ids.length,
+      paidTotal: r.total,
+      rollingHash: rollingHash(r.ids),
+      settled: false,
+      ok: !r.problems.length,
+      problems: r.problems,
+    });
   }
   return out;
 }

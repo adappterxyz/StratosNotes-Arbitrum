@@ -49,19 +49,38 @@ export function collateralShortfalls(readings: VaultReading[]): Shortfall[] {
   for (const r of readings) {
     const backing = r.vaultBalance - r.unclaimedTotal;
     if (backing < r.locked) out.push({ watch: r.watch, kind: 'vault-backing', missing: r.locked - backing });
-    if (r.receiptsOutstanding > r.locked) out.push({ watch: r.watch, kind: 'receipts-exceed-locked', missing: r.receiptsOutstanding - r.locked });
+    if (r.receiptsOutstanding > r.locked)
+      out.push({ watch: r.watch, kind: 'receipts-exceed-locked', missing: r.receiptsOutstanding - r.locked });
   }
   return out;
 }
 
 /** The ABI fragments the keeper reads (RemoteVault on the asset chain, RemoteReceipt at home). */
 export const remoteVaultAbi = [
-  { type: 'function', name: 'locked', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'unclaimedTotal', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  {
+    type: 'function',
+    name: 'locked',
+    stateMutability: 'view',
+    inputs: [{ name: 'token', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'unclaimedTotal',
+    stateMutability: 'view',
+    inputs: [{ name: 'token', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
 ] as const;
 
 export const erc20ReadAbi = [
-  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'a', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
   { type: 'function', name: 'totalSupply', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
 ] as const;
 
@@ -80,10 +99,16 @@ export const erc20ReadAbi = [
  */
 export const releaseQueueAbi = [
   {
-    type: 'function', name: 'releaseQueue', stateMutability: 'view', inputs: [],
+    type: 'function',
+    name: 'releaseQueue',
+    stateMutability: 'view',
+    inputs: [],
     outputs: [
-      { name: 'pending', type: 'uint256' }, { name: 'head', type: 'uint256' }, { name: 'queued', type: 'uint256' },
-      { name: 'pool', type: 'uint256' }, { name: 'nextFee', type: 'uint256' },
+      { name: 'pending', type: 'uint256' },
+      { name: 'head', type: 'uint256' },
+      { name: 'queued', type: 'uint256' },
+      { name: 'pool', type: 'uint256' },
+      { name: 'nextFee', type: 'uint256' },
     ],
   },
 ] as const;
@@ -93,7 +118,13 @@ export const REPORT_FLUSH = 1;
 /** The gateway sends at most this many per flush. */
 export const MAX_FLUSH = 25;
 
-export interface ReleaseQueueReading { pending: bigint; head: bigint; queued: bigint; pool: bigint; nextFee: bigint }
+export interface ReleaseQueueReading {
+  pending: bigint;
+  head: bigint;
+  queued: bigint;
+  pool: bigint;
+  nextFee: bigint;
+}
 
 export interface FlushPlan {
   flush: boolean;
@@ -110,7 +141,10 @@ export interface FlushPlan {
  * waiting; 0 with something pending means its chain has no vault configured (an operator issue: logged, no write).
  * Gas: about 60k of report overhead plus one CCIP send per release (~200k on Arbitrum Sepolia's router, with margin).
  */
-export function planFlush(q: ReleaseQueueReading, opts: { maxItems?: number; baseGas?: bigint; gasPerItem?: bigint } = {}): FlushPlan {
+export function planFlush(
+  q: ReleaseQueueReading,
+  opts: { maxItems?: number; baseGas?: bigint; gasPerItem?: bigint } = {},
+): FlushPlan {
   const cap = Math.max(1, Math.min(opts.maxItems ?? 10, MAX_FLUSH));
   const base = opts.baseGas ?? 150_000n;
   const per = opts.gasPerItem ?? 300_000n;
@@ -133,14 +167,22 @@ export function releaseQueueReading(r: readonly [bigint, bigint, bigint, bigint,
 export function describeFlush(tag: string, q: ReleaseQueueReading, plan: FlushPlan): string {
   const state = `${q.pending} release(s) waiting (head ${q.head}, queued ${q.queued}), fee pool ${q.pool} wei, next fee ${q.nextFee} wei`;
   if (plan.flush) return `${tag} gateway flush: ${state} -> flush up to ${plan.maxItems} (gas ${plan.gasLimit})`;
-  const why = plan.reason === 'pool-short' ? 'pool-short: the fee pool cannot pay the next release, top it up'
-    : plan.reason === 'no-vault' ? 'no-vault: the next release\'s chain has no vault configured (operator)' : 'nothing to send';
+  const why =
+    plan.reason === 'pool-short'
+      ? 'pool-short: the fee pool cannot pay the next release, top it up'
+      : plan.reason === 'no-vault'
+        ? "no-vault: the next release's chain has no vault configured (operator)"
+        : 'nothing to send';
   return `${tag} gateway flush: ${state} -> no report (${why})`;
 }
 
 /** The keeper's gateway entry per home chain (CRE config `gateways`), with the flush gas settings. */
 export interface KeeperGateway {
-  chainSelectorName: string; gateway: string; maxItems: number; baseGas: string; gasPerItem: string;
+  chainSelectorName: string;
+  gateway: string;
+  maxItems: number;
+  baseGas: string;
+  gasPerItem: string;
   stateBlock?: 'finalized' | 'latest';
 }
 
@@ -149,7 +191,8 @@ export interface KeeperGateway {
  * (home.version >= 2; a v1 gateway has no queue). `creNames` maps deployment chain names to CRE selector names.
  */
 export function keeperGateways(
-  x: { home: { chain: string; gateway?: string; version?: number } }, creNames: Record<string, string>,
+  x: { home: { chain: string; gateway?: string; version?: number } },
+  creNames: Record<string, string>,
   opts: { stateBlock?: 'finalized' | 'latest' } = {},
 ): KeeperGateway[] {
   const h = x.home;
@@ -158,7 +201,16 @@ export function keeperGateways(
   if (!chainSelectorName) throw new Error(`no CRE chain name for ${h.chain}`);
   // Base gas above planFlush's 150k default: one release through the KeystoneForwarder measured ~395k on an Arbitrum
   // Sepolia fork (450k would leave ~12%), and Arbitrum also charges L1 data gas inside the limit.
-  return [{ chainSelectorName, gateway: h.gateway, maxItems: 10, baseGas: '250000', gasPerItem: '300000', ...(opts.stateBlock ? { stateBlock: opts.stateBlock } : {}) }];
+  return [
+    {
+      chainSelectorName,
+      gateway: h.gateway,
+      maxItems: 10,
+      baseGas: '250000',
+      gasPerItem: '300000',
+      ...(opts.stateBlock ? { stateBlock: opts.stateBlock } : {}),
+    },
+  ];
 }
 
 const word = (v: bigint) => BigInt.asUintN(256, v).toString(16).padStart(64, '0');
@@ -172,21 +224,32 @@ export function encodeFlushReport(maxItems: number): `0x${string}` {
 /** The gateway's queue events (for the app and indexers): a release queued for `account`, and its CCIP send. */
 export const releaseEventsAbi = [
   {
-    type: 'event', name: 'ReleaseQueued', anonymous: false,
+    type: 'event',
+    name: 'ReleaseQueued',
+    anonymous: false,
     inputs: [
-      { name: 'index', type: 'uint256', indexed: true }, { name: 'releaseId', type: 'bytes32', indexed: true },
-      { name: 'account', type: 'address', indexed: true }, { name: 'receipt', type: 'address', indexed: false },
-      { name: 'to', type: 'address', indexed: false }, { name: 'added', type: 'uint256', indexed: false },
+      { name: 'index', type: 'uint256', indexed: true },
+      { name: 'releaseId', type: 'bytes32', indexed: true },
+      { name: 'account', type: 'address', indexed: true },
+      { name: 'receipt', type: 'address', indexed: false },
+      { name: 'to', type: 'address', indexed: false },
+      { name: 'added', type: 'uint256', indexed: false },
       { name: 'amount', type: 'uint256', indexed: false },
     ],
   },
   {
-    type: 'event', name: 'ReleaseSent', anonymous: false,
+    type: 'event',
+    name: 'ReleaseSent',
+    anonymous: false,
     inputs: [
-      { name: 'index', type: 'uint256', indexed: true }, { name: 'releaseId', type: 'bytes32', indexed: true },
-      { name: 'to', type: 'address', indexed: true }, { name: 'receipt', type: 'address', indexed: false },
-      { name: 'amount', type: 'uint256', indexed: false }, { name: 'messageId', type: 'bytes32', indexed: false },
-      { name: 'fee', type: 'uint256', indexed: false }, { name: 'fromPool', type: 'bool', indexed: false },
+      { name: 'index', type: 'uint256', indexed: true },
+      { name: 'releaseId', type: 'bytes32', indexed: true },
+      { name: 'to', type: 'address', indexed: true },
+      { name: 'receipt', type: 'address', indexed: false },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'messageId', type: 'bytes32', indexed: false },
+      { name: 'fee', type: 'uint256', indexed: false },
+      { name: 'fromPool', type: 'bool', indexed: false },
     ],
   },
 ] as const;
@@ -200,8 +263,14 @@ export const releaseEventsAbi = [
 export const gatewayRegistryAbi = [
   { type: 'function', name: 'VERSION', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   {
-    type: 'function', name: 'receiptInfo', stateMutability: 'view', inputs: [{ name: 'receipt', type: 'address' }],
-    outputs: [{ name: 'chainSelector', type: 'uint64' }, { name: 'remoteToken', type: 'address' }],
+    type: 'function',
+    name: 'receiptInfo',
+    stateMutability: 'view',
+    inputs: [{ name: 'receipt', type: 'address' }],
+    outputs: [
+      { name: 'chainSelector', type: 'uint64' },
+      { name: 'remoteToken', type: 'address' },
+    ],
   },
 ] as const;
 
@@ -223,7 +292,12 @@ export function withdrawableBase(balance: bigint, decimals: number): bigint {
 }
 
 /** One cash asset of a note on an account's engine ledger. */
-export interface LedgerAsset { asset: number; token: string; decimals: number; balance: bigint }
+export interface LedgerAsset {
+  asset: number;
+  token: string;
+  decimals: number;
+  balance: bigint;
+}
 
 /**
  * Which receipts an issuer withdraws from a note (each withdraw burns them and queues a release to the issuer on the
@@ -232,13 +306,15 @@ export interface LedgerAsset { asset: number; token: string; decimals: number; b
  * runs its ledger may hold what a workflow step is about to move, so nothing is withdrawn then.
  */
 export function planReceiptWithdrawals(
-  noteRunning: boolean, assets: readonly LedgerAsset[], isReceipt: (token: string) => boolean,
+  noteRunning: boolean,
+  assets: readonly LedgerAsset[],
+  isReceipt: (token: string) => boolean,
 ): Array<{ asset: number; token: string; base: bigint }> {
   if (noteRunning) return [];
   return assets
-    .filter(a => isReceipt(a.token))
-    .map(a => ({ asset: a.asset, token: a.token, base: withdrawableBase(a.balance, a.decimals) }))
-    .filter(w => w.base > 0n);
+    .filter((a) => isReceipt(a.token))
+    .map((a) => ({ asset: a.asset, token: a.token, base: withdrawableBase(a.balance, a.decimals) }))
+    .filter((w) => w.base > 0n);
 }
 
 /**
@@ -247,7 +323,12 @@ export function planReceiptWithdrawals(
  * account). Each pushed receipt burns and queues a release inside the engine's 150k per-transfer cap (~102k worst
  * case), so a batch costs up to ~150k gas per holder plus the call (see `receiptPushGas`).
  */
-export function planReceiptPush(holders: readonly string[], owed: readonly bigint[], decimals: number, batch: number): string[][] {
+export function planReceiptPush(
+  holders: readonly string[],
+  owed: readonly bigint[],
+  decimals: number,
+  batch: number,
+): string[][] {
   if (holders.length !== owed.length) throw new Error('holders and owed differ in length');
   if (!Number.isInteger(batch) || batch < 1) throw new Error('batch must be a positive integer');
   const due = holders.filter((_, i) => withdrawableBase(owed[i], decimals) > 0n);
@@ -273,8 +354,12 @@ export function receiptPushGas(holders: number, opts: { baseGas?: bigint; perHol
  * stops at the first unsent release that is younger or whose time is unknown. At most `cap`.
  */
 export function overdueReleases(
-  q: Pick<ReleaseQueueReading, 'head' | 'queued'>, queuedAt: ReadonlyMap<bigint, number>, sent: ReadonlySet<bigint>,
-  now: number, flushAfter: number, cap = MAX_FLUSH,
+  q: Pick<ReleaseQueueReading, 'head' | 'queued'>,
+  queuedAt: ReadonlyMap<bigint, number>,
+  sent: ReadonlySet<bigint>,
+  now: number,
+  flushAfter: number,
+  cap = MAX_FLUSH,
 ): number {
   let n = 0;
   for (let i = q.head; i <= q.queued && n < cap; i++) {
@@ -295,7 +380,9 @@ export interface FallbackFlushPlan extends Omit<FlushPlan, 'reason'> {
  * (`overdue`, from overdueReleases). Nothing overdue: no flush (`cre-window`), CRE is expected to send them.
  */
 export function planFallbackFlush(
-  q: ReleaseQueueReading, overdue: number, opts: { maxItems?: number; baseGas?: bigint; gasPerItem?: bigint } = {},
+  q: ReleaseQueueReading,
+  overdue: number,
+  opts: { maxItems?: number; baseGas?: bigint; gasPerItem?: bigint } = {},
 ): FallbackFlushPlan {
   const plan = planFlush(q, opts);
   if (!plan.flush) return plan;

@@ -15,8 +15,16 @@ export const BEAT_COPY: ReadonlyArray<{ k: string; t: string; n?: string }> = [
   { k: 'Subscribe', t: 'USDG in, note units out, in one transaction on Arbitrum.' },
   { k: 'Fix and observe', t: 'Chainlink fixes the strike, then prices every observation date.' },
   { k: 'Pay', t: 'Coupons paid in USDG on the payment date, ready to claim.' },
-  { k: 'Held to maturity', t: 'Every coupon, then full principal back in USDG.', n: 'Paid in full: CRE releases the collateral to the issuer.' },
-  { k: 'Barrier breached', t: 'Below the knock-in, holders are repaid final ÷ strike in USDG: the loss follows TSLA.', n: 'Missed payment: CRE triggers the default and the collateral goes to holders; TSLA locked on Robinhood Chain is released to them there.' },
+  {
+    k: 'Held to maturity',
+    t: 'Every coupon, then full principal back in USDG.',
+    n: 'Paid in full: CRE releases the collateral to the issuer.',
+  },
+  {
+    k: 'Barrier breached',
+    t: 'Below the knock-in, holders are repaid final ÷ strike in USDG: the loss follows TSLA.',
+    n: 'Missed payment: CRE triggers the default and the collateral goes to holders; TSLA locked on Robinhood Chain is released to them there.',
+  },
 ];
 
 function prefersReducedMotion() {
@@ -40,7 +48,8 @@ export default function Stage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const stage = stageRef.current, canvas = canvasRef.current;
+    const stage = stageRef.current,
+      canvas = canvasRef.current;
     if (!stage || !canvas) return;
     let disposed = false;
     let scene: import('./scene/NoteScene').NoteScene | null = null;
@@ -64,7 +73,8 @@ export default function Stage() {
       BEATS.forEach((b, i) => {
         const el = beatRefs.current[i];
         if (!el) return;
-        const w = b.to - b.from, edge = Math.min(0.035, w * 0.25);
+        const w = b.to - b.from,
+          edge = Math.min(0.035, w * 0.25);
         const last = i === BEATS.length - 1;
         const o = clamp((p - b.from) / edge) * (last ? 1 : clamp((b.to - p) / edge));
         el.style.opacity = String(o);
@@ -74,24 +84,35 @@ export default function Stage() {
       const rail = railRef.current;
       if (rail) {
         rail.style.opacity = String(clamp((p - 0.11) / 0.04));
-        const active = BEATS.findIndex(b => p >= b.from && p < b.to);
-        [...rail.children].forEach((c, i) => c.classList.toggle('on', i <= (active < 0 ? (p >= 1 ? BEATS.length - 1 : -1) : active)));
+        const active = BEATS.findIndex((b) => p >= b.from && p < b.to);
+        [...rail.children].forEach((c, i) =>
+          c.classList.toggle('on', i <= (active < 0 ? (p >= 1 ? BEATS.length - 1 : -1) : active)),
+        );
       }
     };
     const onScroll = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { const p = progress(); paint(p); scene?.setProgress(p); });
+      frame = requestAnimationFrame(() => {
+        const p = progress();
+        paint(p);
+        scene?.setProgress(p);
+      });
     };
 
     if (!reduced) {
       paint(progress());
       window.addEventListener('scroll', onScroll, { passive: true });
     }
-    const onResize = () => { scene?.resize(); onScroll(); };
+    const onResize = () => {
+      scene?.resize();
+      onScroll();
+    };
     window.addEventListener('resize', onResize);
 
     // Pause rendering while the stage is offscreen or the tab is hidden.
-    const io = new IntersectionObserver(([e]) => scene?.setVisible(e.isIntersecting && !document.hidden), { threshold: 0 });
+    const io = new IntersectionObserver(([e]) => scene?.setVisible(e.isIntersecting && !document.hidden), {
+      threshold: 0,
+    });
     io.observe(stage);
     const onVis = () => scene?.setVisible(!document.hidden && stage.getBoundingClientRect().bottom > 0);
     document.addEventListener('visibilitychange', onVis);
@@ -109,7 +130,10 @@ export default function Stage() {
         return; // no WebGL: the page stands without the scene
       }
       if (reduced) scene.snap(0.8);
-      else { scene.snap(progress()); scene.setProgress(progress()); }
+      else {
+        scene.snap(progress());
+        scene.setProgress(progress());
+      }
       setReady(true);
     };
     void start();
@@ -132,40 +156,79 @@ export default function Stage() {
         <div className="stage-shade" aria-hidden="true" />
         <div ref={heroRef} className="stage-hero">
           <div className="wrap hero-inner">
-            <span className="badge"><i />Structured notes · Arbitrum · Robinhood Chain</span>
+            <span className="badge">
+              <i />
+              Structured notes · Arbitrum · Robinhood Chain
+            </span>
             <h1>Know the outcome before you invest.</h1>
-            <p className="sub">Fixed-coupon and autocallable notes on stocks and crypto. Terms lock at subscription, collateral is pledged onchain, and Chainlink prices every observation and executes every payment.</p>
+            <p className="sub">
+              Fixed-coupon and autocallable notes on stocks and crypto. Terms lock at subscription, collateral is
+              pledged onchain, and Chainlink prices every observation and executes every payment.
+            </p>
             <ul className="outcomes" aria-label="Why you can trust the terms">
-              <li><b>Prices and payments by Chainlink</b></li>
-              <li><b>Collateral visible onchain</b></li>
-              <li><b>Winner, Chainlink CRE track · TOKEN2049</b></li>
+              <li>
+                <b>Prices and payments by Chainlink</b>
+              </li>
+              <li>
+                <b>Collateral visible onchain</b>
+              </li>
+              <li>
+                <b>Winner, Chainlink CRE track · TOKEN2049</b>
+              </li>
             </ul>
             <div className="hero-cta">
-              <a href={APP_URL} className="btn btn-primary btn-lg">Browse live notes</a>
-              <a href={ISSUE_URL} className="btn btn-ghost btn-lg">Issue a note</a>
+              <a href={APP_URL} className="btn btn-primary btn-lg">
+                Browse live notes
+              </a>
+              <a href={ISSUE_URL} className="btn btn-ghost btn-lg">
+                Issue a note
+              </a>
             </div>
             <div className="built-on">
               <span className="built-label">Built on</span>
-              <span className="built-mark"><img src="/logos/arbitrum.svg" alt="" height={26} />Arbitrum</span>
-              <span className="built-mark"><img src="/logos/robinhood-chain-dark.svg" alt="" height={24} />Robinhood Chain</span>
-              <span className="built-mark"><img src="/logos/chainlink.svg" alt="Chainlink" height={20} /></span>
+              <span className="built-mark">
+                <img src="/logos/arbitrum.svg" alt="" height={26} />
+                Arbitrum
+              </span>
+              <span className="built-mark">
+                <img src="/logos/robinhood-chain-dark.svg" alt="" height={24} />
+                Robinhood Chain
+              </span>
+              <span className="built-mark">
+                <img src="/logos/chainlink.svg" alt="Chainlink" height={20} />
+              </span>
             </div>
           </div>
-          {!reduced && <span className="scroll-cue" aria-hidden="true">Scroll</span>}
+          {!reduced && (
+            <span className="scroll-cue" aria-hidden="true">
+              Scroll
+            </span>
+          )}
         </div>
         {!reduced && (
           <>
             <div className="beats wrap">
               {BEAT_COPY.map((b, i) => (
-                <div key={b.k} ref={el => { beatRefs.current[i] = el; }} className="beat" aria-hidden="true">
-                  <span className="beat-k"><b>{String(i + 1).padStart(2, '0')}</b> {b.k}</span>
+                <div
+                  key={b.k}
+                  ref={(el) => {
+                    beatRefs.current[i] = el;
+                  }}
+                  className="beat"
+                  aria-hidden="true"
+                >
+                  <span className="beat-k">
+                    <b>{String(i + 1).padStart(2, '0')}</b> {b.k}
+                  </span>
                   <p>{b.t}</p>
                   {b.n && <span className="beat-n">{b.n}</span>}
                 </div>
               ))}
             </div>
             <div ref={railRef} className="beat-rail" aria-hidden="true">
-              {BEAT_COPY.map(b => <span key={b.k} />)}
+              {BEAT_COPY.map((b) => (
+                <span key={b.k} />
+              ))}
             </div>
           </>
         )}
@@ -173,11 +236,19 @@ export default function Stage() {
       {/* Anchor for the scroll story: the first beat. */}
       <span id="story" className="stage-anchor" />
       {/* The story in words: visible as a list with reduced motion, for screen readers otherwise. */}
-      {(
+      {
         <ol className={`beats-list wrap${reduced ? '' : ' sr-only'}`}>
-          {BEAT_COPY.map((b, i) => <li key={b.k}><span className="beat-k"><b>{String(i + 1).padStart(2, '0')}</b> {b.k}</span><p>{b.t}</p>{b.n && <span className="beat-n">{b.n}</span>}</li>)}
+          {BEAT_COPY.map((b, i) => (
+            <li key={b.k}>
+              <span className="beat-k">
+                <b>{String(i + 1).padStart(2, '0')}</b> {b.k}
+              </span>
+              <p>{b.t}</p>
+              {b.n && <span className="beat-n">{b.n}</span>}
+            </li>
+          ))}
         </ol>
-      )}
+      }
     </section>
   );
 }

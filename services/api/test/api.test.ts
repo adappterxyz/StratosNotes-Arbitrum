@@ -1,7 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bytesToHex as hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { compile, compileTemplate, dec, definitionId, EXAMPLE_PRODUCTS, evmCoreLength, instantiateProduct, parseBpmn, templateMessage, type AiRunner } from '@sn/core';
+import {
+  compile,
+  compileTemplate,
+  dec,
+  definitionId,
+  EXAMPLE_PRODUCTS,
+  evmCoreLength,
+  instantiateProduct,
+  parseBpmn,
+  templateMessage,
+  type AiRunner,
+} from '@sn/core';
 import { bytesToHex } from '@sn/sdk';
 import { Ingestor, migrate, pgliteDb, type Db } from '@sn/indexer';
 import { FakeChain, type FakeEvent } from '../../indexer/test/fake-chain';
@@ -18,19 +29,40 @@ const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
 const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });
 const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
-const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
+const field = (n: string) => c.def.fields.findIndex((f) => f.name === n);
 const word = (v: bigint) => `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}`;
 const NOW = 1_700_000_100;
 
 function note(pid: bigint, strikeAt: number, status = 0): FakeEvent[] {
   return [
-    { eventName: 'ProcessStarted', args: { pid, definition: defId, creator: ISSUER, ref: pid, roles: [ISSUER, ISSUER, ZERO], assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'] } },
+    {
+      eventName: 'ProcessStarted',
+      args: {
+        pid,
+        definition: defId,
+        creator: ISSUER,
+        ref: pid,
+        roles: [ISSUER, ISSUER, ZERO],
+        assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'],
+      },
+    },
     { eventName: 'FieldSet', args: { pid, field: field('notional'), tag: 1, value: word(dec(1000)) } },
     { eventName: 'FieldSet', args: { pid, field: field('strikeDate'), tag: 1, value: word(BigInt(strikeAt)) } },
-    { eventName: 'FieldSet', args: { pid, field: field('isin'), tag: 2, value: `0x${Buffer.from(`XSTEST${pid}`).toString('hex').padEnd(64, '0')}` } },
+    {
+      eventName: 'FieldSet',
+      args: {
+        pid,
+        field: field('isin'),
+        tag: 2,
+        value: `0x${Buffer.from(`XSTEST${pid}`).toString('hex').padEnd(64, '0')}`,
+      },
+    },
     { eventName: 'HoldingChanged', args: { pid, asset: 0, owner: ISSUER, balance: dec(400) } },
     { eventName: 'HoldingChanged', args: { pid, asset: 0, owner: ALICE, balance: dec(600) } },
-    { eventName: 'TokensUpdated', args: { pid, status, stepsRun: 3, tokens: status ? [] : [c.stepIndex.Task_Subscribe] } },
+    {
+      eventName: 'TokensUpdated',
+      args: { pid, status, stepsRun: 3, tokens: status ? [] : [c.stepIndex.Task_Subscribe] },
+    },
   ];
 }
 
@@ -39,12 +71,25 @@ let chain: FakeChain;
 let ing: Ingestor;
 const config = ApiConfig.parse({
   allowedOrigins: [ORIGIN],
-  chains: [{ key: 'local', rpc: 'http://127.0.0.1:1', engine: ENGINE, lens: ENGINE, stablecoin: { symbol: 'USDC', address: '0x00000000000000000000000000000000000000c1', decimals: 6 } }],
+  chains: [
+    {
+      key: 'local',
+      rpc: 'http://127.0.0.1:1',
+      engine: ENGINE,
+      lens: ENGINE,
+      stablecoin: { symbol: 'USDC', address: '0x00000000000000000000000000000000000000c1', decimals: 6 },
+    },
+  ],
   limits: { templatesPerHour: 5 },
 });
 let app: ReturnType<typeof createApp>;
 const get = (path: string, headers: Record<string, string> = {}) => app.request(path, { headers });
-const post = (path: string, body: unknown, origin = ORIGIN) => app.request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body) });
+const post = (path: string, body: unknown, origin = ORIGIN) =>
+  app.request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify(body),
+  });
 
 beforeAll(async () => {
   db = await pgliteDb();
@@ -53,14 +98,21 @@ beforeAll(async () => {
   chain.cores.set(defId, hex(c.bytes.subarray(0, coreLen)));
   ing = new Ingestor(db, { key: 'local', family: 'evm', chainId: 998, rpc: '', engine: ENGINE, startBlock: 1 }, chain);
   await ing.init();
-  chain.mine([{ eventName: 'DefinitionRegistered', args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) } }]);
-  chain.mine(note(1n, NOW + 3600));       // book open
-  chain.mine(note(2n, NOW - 3600));       // book closed: live
-  chain.mine(note(3n, NOW - 7200, 1));    // redeemed
+  chain.mine([
+    {
+      eventName: 'DefinitionRegistered',
+      args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) },
+    },
+  ]);
+  chain.mine(note(1n, NOW + 3600)); // book open
+  chain.mine(note(2n, NOW - 3600)); // book closed: live
+  chain.mine(note(3n, NOW - 7200, 1)); // redeemed
   await ing.catchUp();
   app = createApp({ db, config, ai: null, now: () => NOW * 1000 });
 }, 60_000);
-afterAll(async () => { await db.close(); });
+afterAll(async () => {
+  await db.close();
+});
 
 const id = (pid: number) => `local:${ENGINE}:${pid}`;
 
@@ -71,8 +123,12 @@ describe('notes', () => {
     const book = await (await get('/api/notes?status=book')).json();
     expect(book.notes.map((n: { id: string }) => n.id)).toEqual([id(1)]);
     expect(book.notes[0].view.phase).toBe('book');
-    expect((await (await get('/api/notes?status=live')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(2)]);
-    expect((await (await get('/api/notes?status=redeemed')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(3)]);
+    expect((await (await get('/api/notes?status=live')).json()).notes.map((n: { id: string }) => n.id)).toEqual([
+      id(2),
+    ]);
+    expect((await (await get('/api/notes?status=redeemed')).json()).notes.map((n: { id: string }) => n.id)).toEqual([
+      id(3),
+    ]);
     expect((await (await get('/api/notes?underlying=eth&product=phoenix&status=active')).json()).notes).toHaveLength(2);
     expect((await (await get('/api/notes?underlying=BTC')).json()).notes).toHaveLength(0);
     expect((await (await get('/api/notes?q=XSTEST2')).json()).notes.map((n: { id: string }) => n.id)).toEqual([id(2)]);
@@ -141,7 +197,9 @@ describe('templates', () => {
     const r = await post('/api/templates', { entry: { ...entry, definition: def, product: rh }, signature });
     expect(r.status).toBe(400);
     expect((await r.json()).error).toMatch(/issued on Arbitrum Sepolia only/);
-    expect((await (await get('/api/templates')).json()).map((t: { definition: string }) => t.definition)).not.toContain(def);
+    expect((await (await get('/api/templates')).json()).map((t: { definition: string }) => t.definition)).not.toContain(
+      def,
+    );
   });
 
   it('refuses a wrong signature, a mismatched workflow, a foreign origin, and too many saves', async () => {
@@ -161,7 +219,11 @@ describe('ai', () => {
     expect((await post('/api/ai', { prompt: 'hi' })).status).toBe(503);
     const fake: AiRunner = { decide: async () => ({}), json: async () => ({}) as never, text: async () => 'ok' };
     const withAi = createApp({ db, config, ai: fake });
-    const r = await withAi.request('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN }, body: JSON.stringify({ prompt: '' }) });
+    const r = await withAi.request('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+      body: JSON.stringify({ prompt: '' }),
+    });
     expect(r.status).toBe(400);
   });
 });

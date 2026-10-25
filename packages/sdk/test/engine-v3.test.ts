@@ -28,19 +28,23 @@ function fakes(reads: Record<string, unknown>) {
     account: { address: ME },
     chain: undefined,
     writeContract: async (r: { address: string; abi: never; functionName: string; args: unknown[] }) => {
-      writes.push({ address: r.address, data: encodeFunctionData({ abi: r.abi, functionName: r.functionName, args: r.args } as never) });
+      writes.push({
+        address: r.address,
+        data: encodeFunctionData({ abi: r.abi, functionName: r.functionName, args: r.args } as never),
+      });
       return '0xabc';
     },
   } as unknown as WalletClient;
   return { client, wallet, calls, writes };
 }
 
-const v3 = (client: PublicClient) => new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V3, lens: LENS, fromBlock: 322211118n, version: 3 });
+const v3 = (client: PublicClient) =>
+  new EvmAdapter(CHAINS['arbitrum-sepolia'], client, { engine: V3, lens: LENS, fromBlock: 322211118n, version: 3 });
 
 describe('EvmAdapter on a v3 engine', () => {
   const id = noteId('arbitrum-sepolia', V3, 2n);
 
-  it('keeps v3 note ids exactly as they were and only runs its own engine\'s notes', () => {
+  it("keeps v3 note ids exactly as they were and only runs its own engine's notes", () => {
     const { client } = fakes({});
     const a = v3(client);
     expect(id).toBe('arbitrum-sepolia:0xaf8425a4b2d8994796e019d9b42cd99d40297e10:2');
@@ -52,14 +56,17 @@ describe('EvmAdapter on a v3 engine', () => {
   });
 
   it('moves units with the v3 ledger transfer (fixed point, no ERC-20), after the recipient check', async () => {
-    const { client, wallet, writes, calls } = fakes({ requireEmail: true, emailOf: ['0x' + '0'.repeat(64), BigInt(Math.floor(Date.now() / 1000) + 3600)] });
+    const { client, wallet, writes, calls } = fakes({
+      requireEmail: true,
+      emailOf: ['0x' + '0'.repeat(64), BigInt(Math.floor(Date.now() / 1000) + 3600)],
+    });
     await v3(client).transferUnits(wallet, id, TO, 12_345n);
     expect(writes).toHaveLength(1);
     expect(writes[0].address).toBe(V3);
     expect(writes[0].data.slice(0, 10)).toBe(toFunctionSelector('transferUnits(uint256,uint8,address,int256)'));
     const d = decodeFunctionData({ abi: flowEngineV3Abi, data: writes[0].data });
     expect(d.args).toEqual([2n, 0, '0x2222222222222222222222222222222222222222', 12_345n]);
-    expect(calls.map(c => c.fn)).not.toContain('assetTokenOf');
+    expect(calls.map((c) => c.fn)).not.toContain('assetTokenOf');
   });
 
   it('refuses a transfer to an unverified recipient', async () => {
@@ -83,7 +90,10 @@ describe('EvmAdapter on a v3 engine', () => {
 
   it('withdraws with the unchanged withdraw ABI', async () => {
     const def = { assets: [{ decimals: 6 }, { decimals: 6 }] };
-    const { client, wallet, writes } = fakes({ processOf: { definition: '0x' + '11'.repeat(32) }, balanceOf: 600_000_000_000n });
+    const { client, wallet, writes } = fakes({
+      processOf: { definition: '0x' + '11'.repeat(32) },
+      balanceOf: 600_000_000_000n,
+    });
     const a = v3(client);
     (a as unknown as { defs: Map<string, Promise<unknown>> }).defs.set('0x' + '11'.repeat(32), Promise.resolve(def));
     await a.withdraw(wallet, id, 1);

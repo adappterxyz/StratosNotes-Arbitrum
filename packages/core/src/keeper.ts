@@ -12,7 +12,10 @@
 import type { WorkflowDef } from './def-types';
 import { evalExpr } from './eval';
 
-const KIND_SERVICE = 3, KIND_RECEIVE = 4, KIND_CATCH = 7, SRC_ORACLE = 1;
+const KIND_SERVICE = 3,
+  KIND_RECEIVE = 4,
+  KIND_CATCH = 7,
+  SRC_ORACLE = 1;
 const NO_EXPR = 0xffff;
 
 /** Report step that only runs what is due (FlowEngine.STEP_ADVANCE). */
@@ -59,9 +62,14 @@ export interface DueReport {
 }
 
 /** Where each oracle field's feed is, from the definition's metadata (packages/core/src/compile.ts). */
-export function oracleFeeds(def: WorkflowDef): Record<string, { feed: string; feedChain?: string; staleness?: number }> {
+export function oracleFeeds(
+  def: WorkflowDef,
+): Record<string, { feed: string; feedChain?: string; staleness?: number }> {
   try {
-    return (JSON.parse(def.meta) as { oracles?: Record<string, { feed: string; feedChain?: string; staleness?: number }> }).oracles ?? {};
+    return (
+      (JSON.parse(def.meta) as { oracles?: Record<string, { feed: string; feedChain?: string; staleness?: number }> })
+        .oracles ?? {}
+    );
   } catch {
     return {};
   }
@@ -81,10 +89,15 @@ export function guardHolds(p: ProcessState, def: WorkflowDef, step: number, nowS
   const g = def.steps[step]?.guard;
   if (g === undefined || g === NO_EXPR) return true;
   const nAssets = def.assets.length;
-  const v = evalExpr(def.exprs[g], def.fields.map(f => f.kind), f => p.numbers[f] ?? null, {
-    balance: (role, asset) => (p.balances ? p.balances[role * nAssets + asset] ?? 0n : null),
-    now: () => nowSec,
-  });
+  const v = evalExpr(
+    def.exprs[g],
+    def.fields.map((f) => f.kind),
+    (f) => p.numbers[f] ?? null,
+    {
+      balance: (role, asset) => (p.balances ? (p.balances[role * nAssets + asset] ?? 0n) : null),
+      now: () => nowSec,
+    },
+  );
   return v === null ? null : v !== 0n;
 }
 
@@ -107,7 +120,7 @@ export function dueReports(p: ProcessState, def: WorkflowDef, nowSec: number): D
     const at = u.kind === 0 ? Number(u.at) : p.numbers[u.field] === undefined ? undefined : Number(p.numbers[u.field]);
     return at !== undefined && nowSec >= at;
   };
-  if (p.tokens.length && p.tokens.every(t => def.steps[t]?.until) && p.tokens.some(closed)) advance = true;
+  if (p.tokens.length && p.tokens.every((t) => def.steps[t]?.until) && p.tokens.some(closed)) advance = true;
   for (const t of [...new Set(p.tokens)].sort((a, b) => a - b)) {
     const s = def.steps[t];
     if (!s) continue;
@@ -117,7 +130,7 @@ export function dueReports(p: ProcessState, def: WorkflowDef, nowSec: number): D
       continue;
     }
     if (s.kind !== KIND_SERVICE && s.kind !== KIND_CATCH) continue; // tasks and gateways: not the keeper's
-    const caps = s.captures.filter(c => c.source === SRC_ORACLE);
+    const caps = s.captures.filter((c) => c.source === SRC_ORACLE);
     if (!s.timer && !caps.length) continue; // runs by itself
     const at = timerAt(def, p, t);
     if (at === undefined || nowSec < at) continue;
@@ -125,15 +138,18 @@ export function dueReports(p: ProcessState, def: WorkflowDef, nowSec: number): D
       advance = true; // a plain timer: nothing else will move the note
       continue;
     }
-    const feeds = caps.map(c => {
+    const feeds = caps.map((c) => {
       const name = def.fields[c.field].name;
       const o = oracles[name];
-      return o ? { field: name, feed: o.feed, feedChain: o.feedChain ?? 'ethereum-mainnet', staleness: o.staleness ?? 3600 } : null;
+      return o
+        ? { field: name, feed: o.feed, feedChain: o.feedChain ?? 'ethereum-mainnet', staleness: o.staleness ?? 3600 }
+        : null;
     });
-    if (feeds.some(f => !f)) continue; // a capture with no recorded feed cannot be observed
+    if (feeds.some((f) => !f)) continue; // a capture with no recorded feed cannot be observed
     out.push({ process: p.id, definition: p.definition, step: t, stepId: s.id, feeds: feeds as FeedRef[] });
   }
-  if (advance && !out.length) out.push({ process: p.id, definition: p.definition, step: STEP_ADVANCE, stepId: 'advance', feeds: [] });
+  if (advance && !out.length)
+    out.push({ process: p.id, definition: p.definition, step: STEP_ADVANCE, stepId: 'advance', feeds: [] });
   return out;
 }
 
@@ -160,7 +176,10 @@ export function feedToFixed(answer: bigint, decimals: number): bigint {
  */
 export function checkRound(
   round: { roundId: bigint; answer: bigint; updatedAt: bigint; answeredInRound: bigint },
-  decimals: number, nowSec: number, staleness: number, allowanceSec: number,
+  decimals: number,
+  nowSec: number,
+  staleness: number,
+  allowanceSec: number,
 ): bigint {
   if (round.roundId === 0n || round.answeredInRound < round.roundId) throw new Error('round not answered');
   if (round.answer <= 0n) throw new Error('non-positive answer');

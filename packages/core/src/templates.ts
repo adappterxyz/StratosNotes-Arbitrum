@@ -9,7 +9,17 @@
 import { parseBpmn } from './bpmn';
 import { compile, type Compiled } from './compile';
 import { instantiateProduct } from './products/instantiate';
-import { CHAIN_TOKENS, deliverableToken, isLegacyChainTerms, isRetiredTestToken, normalizeParams, PRODUCT_LABELS, underlyingLabel, validateProductParams, type ProductParams } from './products/params';
+import {
+  CHAIN_TOKENS,
+  deliverableToken,
+  isLegacyChainTerms,
+  isRetiredTestToken,
+  normalizeParams,
+  PRODUCT_LABELS,
+  underlyingLabel,
+  validateProductParams,
+  type ProductParams,
+} from './products/params';
 import type { AssetDefinition } from './types';
 
 export interface TemplateSource {
@@ -44,8 +54,18 @@ export interface TemplateSummary {
 
 export function summarize(t: TemplateEntry): TemplateSummary {
   const p = t.product ?? t.basis;
-  const label = p ? `${t.product && !t.bpmnXml ? '' : 'Custom '}${PRODUCT_LABELS[normalizeParams(p).productType]} · ${underlyingLabel(normalizeParams(p))}` : 'Custom workflow';
-  return { definition: t.definition, name: t.name, description: t.description, author: t.author, createdAt: t.createdAt, kind: t.product && !t.bpmnXml ? 'product' : 'custom', label };
+  const label = p
+    ? `${t.product && !t.bpmnXml ? '' : 'Custom '}${PRODUCT_LABELS[normalizeParams(p).productType]} · ${underlyingLabel(normalizeParams(p))}`
+    : 'Custom workflow';
+  return {
+    definition: t.definition,
+    name: t.name,
+    description: t.description,
+    author: t.author,
+    createdAt: t.createdAt,
+    kind: t.product && !t.bpmnXml ? 'product' : 'custom',
+    label,
+  };
 }
 
 export const templateMessage = (definition: string) => `StratosNotes: publish template ${definition}`;
@@ -58,18 +78,31 @@ export const templateMessage = (definition: string) => `StratosNotes: publish te
  * the term sheet it was edited from.
  */
 export function templateOffered(t: TemplateSource): boolean {
-  if (t.assets?.some(a => !!a.token && isRetiredTestToken(a.token))) return false;
+  if (t.assets?.some((a) => !!a.token && isRetiredTestToken(a.token))) return false;
   // A workflow that moves a Robinhood Chain stock token itself (not its .rh receipt) runs on Robinhood Chain.
-  if (t.assets?.some(a => !!a.token && !!CHAIN_TOKENS['robinhood-testnet'][a.token] && !CHAIN_TOKENS['arbitrum-sepolia'][a.token])) return false;
+  if (
+    t.assets?.some(
+      (a) => !!a.token && !!CHAIN_TOKENS['robinhood-testnet'][a.token] && !CHAIN_TOKENS['arbitrum-sepolia'][a.token],
+    )
+  )
+    return false;
   const p = t.product ?? t.basis;
   if (p) {
     let q: ProductParams;
-    try { q = normalizeParams(p); } catch { return false; }
+    try {
+      q = normalizeParams(p);
+    } catch {
+      return false;
+    }
     if (isLegacyChainTerms(q)) return false;
-    if (q.settlement === 'physical' && (q.underlyings ?? []).some(u => !deliverableToken(q, u.symbol))) return false;
+    if (q.settlement === 'physical' && (q.underlyings ?? []).some((u) => !deliverableToken(q, u.symbol))) return false;
   }
   if (p && t.product && !t.bpmnXml) {
-    try { return validateProductParams(normalizeParams(p)).length === 0; } catch { return false; }
+    try {
+      return validateProductParams(normalizeParams(p)).length === 0;
+    } catch {
+      return false;
+    }
   }
   return true;
 }
@@ -80,7 +113,8 @@ export function templateBpmn(t: TemplateSource): { bpmnXml: string; assets: Asse
     const prod = instantiateProduct(normalizeParams(t.product));
     return { bpmnXml: prod.bpmnXml, assets: prod.assets };
   }
-  if (!t.bpmnXml || !t.assets) throw new Error('A template needs a product term sheet or a BPMN workflow with its assets.');
+  if (!t.bpmnXml || !t.assets)
+    throw new Error('A template needs a product term sheet or a BPMN workflow with its assets.');
   return { bpmnXml: t.bpmnXml, assets: t.assets };
 }
 
@@ -98,5 +132,5 @@ export function compileTemplate(t: TemplateSource): Compiled {
 
 /** A compiled workflow's id on every chain: the 0x-hex SHA-256 of its definition bytes. */
 export function definitionId(c: Compiled): string {
-  return '0x' + Array.from(c.hash, b => b.toString(16).padStart(2, '0')).join('');
+  return '0x' + Array.from(c.hash, (b) => b.toString(16).padStart(2, '0')).join('');
 }

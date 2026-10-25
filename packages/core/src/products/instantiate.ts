@@ -32,12 +32,32 @@
  * on-chain in 10-decimal fixed point. Worst-of baskets observe one feed per underlying in the same CRE report
  * and compare the worst performance perfK = min(obsK_i / initialLevel_i) with each level.
  */
-import { buildWorkflow, chain, field, type BuildSpec, type BuiltWorkflow, type SpecFlow, type SpecMessage, type SpecNode } from '../bpmn';
+import {
+  buildWorkflow,
+  chain,
+  field,
+  type BuildSpec,
+  type BuiltWorkflow,
+  type SpecFlow,
+  type SpecMessage,
+  type SpecNode,
+} from '../bpmn';
 import { productNotifications } from '../notify';
 import type { AssetDefinition, AssetOperation, TemplateField } from '../types';
 import {
-  CASH_TOKEN, collateralTokenOf, deliverableToken, economicsOf, FEEDS, MAX_GRACE_DAYS, PRODUCT_LABELS, productUses, underlyingLabel,
-  validateTermSheet, type CollateralSymbol, type ProductParams, type Underlying,
+  CASH_TOKEN,
+  collateralTokenOf,
+  deliverableToken,
+  economicsOf,
+  FEEDS,
+  MAX_GRACE_DAYS,
+  PRODUCT_LABELS,
+  productUses,
+  underlyingLabel,
+  validateTermSheet,
+  type CollateralSymbol,
+  type ProductParams,
+  type Underlying,
 } from './params';
 
 export const ISSUER = 'Issuer';
@@ -85,28 +105,68 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     { id: 'note', name: 'Note', kind: 'issued' },
     { id: 'cash', name: 'USDG', kind: 'cash', decimals: CASH_TOKEN.decimals, token: CASH_TOKEN.token },
     // Physical delivery: each underlying's token, delivered below the knock-in barrier.
-    ...(physical ? unds.map(u => { const d = deliverableToken(p, u.symbol)!; return { id: deliverAsset(u.symbol), name: d.token, kind: 'cash' as const, decimals: d.decimals, token: d.token }; }) : []),
+    ...(physical
+      ? unds.map((u) => {
+          const d = deliverableToken(p, u.symbol)!;
+          return {
+            id: deliverAsset(u.symbol),
+            name: d.token,
+            kind: 'cash' as const,
+            decimals: d.decimals,
+            token: d.token,
+          };
+        })
+      : []),
     // Collateral: its own asset per token (even the stablecoin), so pledged collateral never mixes with payments.
-    ...col.map(c => { const t = collateralTokenOf(p, c.symbol)!; return { id: colAsset(c.symbol), name: `Collateral ${t.token}`, kind: 'cash' as const, decimals: t.decimals, token: t.token }; }),
+    ...col.map((c) => {
+      const t = collateralTokenOf(p, c.symbol)!;
+      return {
+        id: colAsset(c.symbol),
+        name: `Collateral ${t.token}`,
+        kind: 'cash' as const,
+        decimals: t.decimals,
+        token: t.token,
+      };
+    }),
   ];
-  const escrowAssets = assets.filter(a => a.kind === 'cash').map(a => a.id);
+  const escrowAssets = assets.filter((a) => a.kind === 'cash').map((a) => a.id);
 
-  const oracleField = (name: string, u: Underlying) => field(name, 'Decimal', {
-    oracle: { feed: u.feed, feedChain: u.feedChain, min: num(u.minPrice), max: num(u.maxPrice), staleness: u.staleness ?? 3600 },
-  });
+  const oracleField = (name: string, u: Underlying) =>
+    field(name, 'Decimal', {
+      oracle: {
+        feed: u.feed,
+        feedChain: u.feedChain,
+        min: num(u.minPrice),
+        max: num(u.maxPrice),
+        staleness: u.staleness ?? 3600,
+      },
+    });
   // Collateral prices ride on the same CRE reports as the observations (USD needs none).
-  const priced = col.filter(c => c.symbol !== 'USD');
-  const priceFields = () => priced.map(c => oracleField(priceField(c.symbol), FEEDS[c.symbol as Exclude<CollateralSymbol, 'USD'>]));
+  const priced = col.filter((c) => c.symbol !== 'USD');
+  const priceFields = () =>
+    priced.map((c) => oracleField(priceField(c.symbol), FEEDS[c.symbol as Exclude<CollateralSymbol, 'USD'>]));
   /** Coverage now: escrowed collateral x price x haircut, in stablecoin. */
-  const coverageExpr = col.map(c => (c.symbol === 'USD'
-    ? `balance(${ESCROW}, ${colAsset(c.symbol)}) * ${haircutField(c.symbol)}`
-    : `balance(${ESCROW}, ${colAsset(c.symbol)}) * ${priceField(c.symbol)} * ${haircutField(c.symbol)}`)).join(' + ') || '0';
+  const coverageExpr =
+    col
+      .map((c) =>
+        c.symbol === 'USD'
+          ? `balance(${ESCROW}, ${colAsset(c.symbol)}) * ${haircutField(c.symbol)}`
+          : `balance(${ESCROW}, ${colAsset(c.symbol)}) * ${priceField(c.symbol)} * ${haircutField(c.symbol)}`,
+      )
+      .join(' + ') || '0';
   const covered = `${coverageExpr} >= required`;
 
-  const strikeFields = basket ? unds.map(u => oracleField(`initialLevel_${u.symbol}`, u)) : [oracleField('initialLevel', unds[0])];
+  const strikeFields = basket
+    ? unds.map((u) => oracleField(`initialLevel_${u.symbol}`, u))
+    : [oracleField('initialLevel', unds[0])];
   const obsFields = (k: number): TemplateField[] => [
     ...(basket
-      ? [...unds.map(u => oracleField(`obs${k}_${u.symbol}`, u)), field(`perf${k}`, 'Decimal', { formula: `min(${unds.map(u => `obs${k}_${u.symbol} / initialLevel_${u.symbol}`).join(', ')})` })]
+      ? [
+          ...unds.map((u) => oracleField(`obs${k}_${u.symbol}`, u)),
+          field(`perf${k}`, 'Decimal', {
+            formula: `min(${unds.map((u) => `obs${k}_${u.symbol} / initialLevel_${u.symbol}`).join(', ')})`,
+          }),
+        ]
       : [oracleField(`obs${k}`, unds[0])]),
     ...priceFields(),
     field('coverage', 'Decimal', { formula: coverageExpr }),
@@ -115,7 +175,8 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
   /** Worst performance at observation k (a ratio, 1 = at strike). */
   const ratio = (k: number) => (basket ? `perf${k}` : `obs${k} / initialLevel`);
   /** Performance at observation k at or above `levelPct` % of strike. */
-  const atLeast = (k: number, levelPct: number) => (basket ? `perf${k} >= ${pct(levelPct)}` : `obs${k} >= initialLevel * ${pct(levelPct)}`);
+  const atLeast = (k: number, levelPct: number) =>
+    basket ? `perf${k} >= ${pct(levelPct)}` : `obs${k} >= initialLevel * ${pct(levelPct)}`;
   const issuePrice = pct(p.issuePricePct);
 
   // ---- Paying Agent lifecycle ---------------------------------------------
@@ -123,7 +184,8 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
   const flows: SpecFlow[] = [];
   const messages: SpecMessage[] = [];
   let fid = 0;
-  const flow = (src: string, tgt: string, extra: Partial<SpecFlow> = {}) => flows.push({ id: `P_F${++fid}`, src, tgt, ...extra });
+  const flow = (src: string, tgt: string, extra: Partial<SpecFlow> = {}) =>
+    flows.push({ id: `P_F${++fid}`, src, tgt, ...extra });
   let col0 = 7;
   const at = () => col0++;
   const memory = p.productType === 'phoenix' && !!p.memory;
@@ -142,53 +204,127 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     if (a.startsWith('col_')) return priceField(a.slice(4) as CollateralSymbol);
     return basket ? `initialLevel_${a.slice(2)}` : 'initialLevel';
   };
-  const defaultTakes: TemplateField[] = capped ? [
-    field('owed', 'Decimal', { formula: 'owedDue + principal' }),
-    ...escrowAssets.map((a, i) => {
-      const taken = escrowAssets.slice(0, i).map(b => ` - ${takeField(b)} * ${priceOf(b)}`).join('');
-      const rest = `(owed${taken})`;
-      const px = priceOf(a);
-      return field(takeField(a), 'Decimal', { formula: `max(0, min(balance(${ESCROW}, ${a}), ${px === '1' ? rest : `${rest} / ${px}`}))` });
-    }),
-  ] : [];
+  const defaultTakes: TemplateField[] = capped
+    ? [
+        field('owed', 'Decimal', { formula: 'owedDue + principal' }),
+        ...escrowAssets.map((a, i) => {
+          const taken = escrowAssets
+            .slice(0, i)
+            .map((b) => ` - ${takeField(b)} * ${priceOf(b)}`)
+            .join('');
+          const rest = `(owed${taken})`;
+          const px = priceOf(a);
+          return field(takeField(a), 'Decimal', {
+            formula: `max(0, min(balance(${ESCROW}, ${a}), ${px === '1' ? rest : `${rest} / ${px}`}))`,
+          });
+        }),
+      ]
+    : [];
 
   nodes.push(
-    { id: 'Recv_Mandate', type: 'receiveTask', name: 'Mandate Received', col: 3, props: { receiveGuard: 'notional > 0' } },
-    { id: 'Task_IssueNote', type: 'serviceTask', name: 'Issue Note to Issuer', col: 4, props: { assetOperation: { assetId: 'note', operation: 'mint', params: { amountSource: 'field', amountField: 'notional', owner: ISSUER } } } },
-    { id: 'Task_FixStrike', type: 'serviceTask', name: 'Fix Strike (oracle)', col: 5, props: {
-      timer: { dateField: 'strikeDate' },
-      templateFields: [
-        ...strikeFields, ...priceFields(),
-        // Units sold when the book closed; the issuer's unsold units are cancelled below.
-        field('sold', 'Decimal', { formula: `notional - balance(${ISSUER}, note)` }),
-        field('required', 'Decimal', { formula: 'collateralRatio * sold' }),
-        field('coverage', 'Decimal', { formula: coverageExpr }),
-        ...(memory ? [field('missed', 'Decimal', { formula: '0' })] : []),
-        // What a default would owe the holders: par on every unit sold, plus a missed payment (none yet).
-        ...(capped ? [field('principal', 'Decimal', { formula: 'sold' }), field('owedDue', 'Decimal', { formula: '0' })] : []),
-      ],
-      assetOperation: { assetId: 'note', operation: 'burn', params: { from: ISSUER, amountSource: 'expr', amountExpr: `balance(${ISSUER}, note)` } },
-    } },
+    {
+      id: 'Recv_Mandate',
+      type: 'receiveTask',
+      name: 'Mandate Received',
+      col: 3,
+      props: { receiveGuard: 'notional > 0' },
+    },
+    {
+      id: 'Task_IssueNote',
+      type: 'serviceTask',
+      name: 'Issue Note to Issuer',
+      col: 4,
+      props: {
+        assetOperation: {
+          assetId: 'note',
+          operation: 'mint',
+          params: { amountSource: 'field', amountField: 'notional', owner: ISSUER },
+        },
+      },
+    },
+    {
+      id: 'Task_FixStrike',
+      type: 'serviceTask',
+      name: 'Fix Strike (oracle)',
+      col: 5,
+      props: {
+        timer: { dateField: 'strikeDate' },
+        templateFields: [
+          ...strikeFields,
+          ...priceFields(),
+          // Units sold when the book closed; the issuer's unsold units are cancelled below.
+          field('sold', 'Decimal', { formula: `notional - balance(${ISSUER}, note)` }),
+          field('required', 'Decimal', { formula: 'collateralRatio * sold' }),
+          field('coverage', 'Decimal', { formula: coverageExpr }),
+          ...(memory ? [field('missed', 'Decimal', { formula: '0' })] : []),
+          // What a default would owe the holders: par on every unit sold, plus a missed payment (none yet).
+          ...(capped
+            ? [field('principal', 'Decimal', { formula: 'sold' }), field('owedDue', 'Decimal', { formula: '0' })]
+            : []),
+        ],
+        assetOperation: {
+          assetId: 'note',
+          operation: 'burn',
+          params: { from: ISSUER, amountSource: 'expr', amountExpr: `balance(${ISSUER}, note)` },
+        },
+      },
+    },
     { id: 'GW_Sold', type: 'exclusiveGateway', name: 'Any units sold?', col: 6 },
     // Shared ends: default (escrow to holders) and release (escrow back to the issuer).
-    { id: 'Task_Default', type: 'serviceTask', name: capped ? 'Default: Owed to Holders, Rest to Issuer' : 'Default: Collateral to Holders', col: 0, row: 3, props: {
-      milestone: 'defaulted',
-      templateFields: capped ? [...closing, ...defaultTakes] : closing,
-      assetOperations: [
-        ...escrowAssets.map((a, i) => ({
-          assetId: a, operation: 'distribute' as const,
-          params: { holdingAssetId: 'note', payer: ESCROW, amountSource: 'expr' as const, amountExpr: capped ? `${takeField(a)} / sold` : `balance(${ESCROW}, ${a}) / sold`, ...(i === escrowAssets.length - 1 ? { retire: true } : {}) },
-        })),
-        // Capped: whatever the holders are not owed goes back to the issuer.
-        ...(capped ? escrowAssets.map(a => ({ assetId: a, operation: 'transfer' as const, params: { from: ESCROW, to: ISSUER, amountSource: 'expr' as const, amountExpr: `balance(${ESCROW}, ${a})` } })) : []),
-      ],
-    } },
+    {
+      id: 'Task_Default',
+      type: 'serviceTask',
+      name: capped ? 'Default: Owed to Holders, Rest to Issuer' : 'Default: Collateral to Holders',
+      col: 0,
+      row: 3,
+      props: {
+        milestone: 'defaulted',
+        templateFields: capped ? [...closing, ...defaultTakes] : closing,
+        assetOperations: [
+          ...escrowAssets.map((a, i) => ({
+            assetId: a,
+            operation: 'distribute' as const,
+            params: {
+              holdingAssetId: 'note',
+              payer: ESCROW,
+              amountSource: 'expr' as const,
+              amountExpr: capped ? `${takeField(a)} / sold` : `balance(${ESCROW}, ${a}) / sold`,
+              ...(i === escrowAssets.length - 1 ? { retire: true } : {}),
+            },
+          })),
+          // Capped: whatever the holders are not owed goes back to the issuer.
+          ...(capped
+            ? escrowAssets.map((a) => ({
+                assetId: a,
+                operation: 'transfer' as const,
+                params: {
+                  from: ESCROW,
+                  to: ISSUER,
+                  amountSource: 'expr' as const,
+                  amountExpr: `balance(${ESCROW}, ${a})`,
+                },
+              }))
+            : []),
+        ],
+      },
+    },
     { id: 'End_Defaulted', type: 'endEvent', name: 'Defaulted', col: 1, row: 3 },
-    { id: 'Task_Release', type: 'serviceTask', name: 'Release Collateral', col: 0, row: 2, props: {
-      milestone: 'collateral-released',
-      templateFields: closing,
-      assetOperations: escrowAssets.map(a => ({ assetId: a, operation: 'transfer' as const, params: { from: ESCROW, to: ISSUER, amountSource: 'expr' as const, amountExpr: `balance(${ESCROW}, ${a})` } })),
-    } },
+    {
+      id: 'Task_Release',
+      type: 'serviceTask',
+      name: 'Release Collateral',
+      col: 0,
+      row: 2,
+      props: {
+        milestone: 'collateral-released',
+        templateFields: closing,
+        assetOperations: escrowAssets.map((a) => ({
+          assetId: a,
+          operation: 'transfer' as const,
+          params: { from: ESCROW, to: ISSUER, amountSource: 'expr' as const, amountExpr: `balance(${ESCROW}, ${a})` },
+        })),
+      },
+    },
     { id: 'End_Closed', type: 'endEvent', name: 'Note Closed', col: 1, row: 2 },
   );
   flows.push(...chain('P_S', 'Recv_Mandate', 'Task_IssueNote', 'Task_FixStrike', 'GW_Sold'));
@@ -198,15 +334,40 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
 
   /** Margin check after a fixing or an observation; returns the step the note continues from. */
   const marginCheck = (k: number, from: string, extra: Partial<SpecFlow> = {}) => {
-    const gw = `GW_Margin${k}`, call = `Task_MarginCall${k}`, wait = `Recv_MarginCure${k}`, cured = `GW_MarginCured${k}`, ok = `Task_MarginCured${k}`;
+    const gw = `GW_Margin${k}`,
+      call = `Task_MarginCall${k}`,
+      wait = `Recv_MarginCure${k}`,
+      cured = `GW_MarginCured${k}`,
+      ok = `Task_MarginCured${k}`;
     const dateOf = k === 0 ? 'strikeDate' : `obsDate${k}`;
     const c = at();
     nodes.push(
       { id: gw, type: 'exclusiveGateway', name: k === 0 ? 'Collateral covers the note?' : `Covered at ${k}?`, col: c },
-      { id: call, type: 'serviceTask', name: `Margin Call${k ? ` ${k}` : ''}`, col: c, row: 4, props: { milestone: 'margin-call' } },
-      { id: wait, type: 'receiveTask', name: `Await Top-up${k ? ` ${k}` : ''} (grace)`, col: c + 1, row: 4, props: { receiveGuard: `${covered} or now >= ${dateOf} + grace` } },
+      {
+        id: call,
+        type: 'serviceTask',
+        name: `Margin Call${k ? ` ${k}` : ''}`,
+        col: c,
+        row: 4,
+        props: { milestone: 'margin-call' },
+      },
+      {
+        id: wait,
+        type: 'receiveTask',
+        name: `Await Top-up${k ? ` ${k}` : ''} (grace)`,
+        col: c + 1,
+        row: 4,
+        props: { receiveGuard: `${covered} or now >= ${dateOf} + grace` },
+      },
       { id: cured, type: 'exclusiveGateway', name: 'Cured?', col: c + 2, row: 4 },
-      { id: ok, type: 'serviceTask', name: `Margin Call${k ? ` ${k}` : ''} Cured`, col: c + 3, row: 4, props: { milestone: 'margin-cured', templateFields: [field('coverage', 'Decimal', { formula: coverageExpr })] } },
+      {
+        id: ok,
+        type: 'serviceTask',
+        name: `Margin Call${k ? ` ${k}` : ''} Cured`,
+        col: c + 3,
+        row: 4,
+        props: { milestone: 'margin-cured', templateFields: [field('coverage', 'Decimal', { formula: coverageExpr })] },
+      },
     );
     flow(from, gw, extra);
     flow(gw, call, { name: 'Below requirement', isDefault: true });
@@ -222,30 +383,113 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
    * `deliver` tokens per unit for physical settlement), else grace, then pay or default. Returns the pay step.
    */
   const firstSettle: Record<number, string> = {};
-  const settle = (k: number, tag: string, dueExpr: string, opts: { final: boolean; deliver?: { sym: string; perUnit: string } }) => {
-    const due = `S_Due${k}${tag}`, gw = `GW_Funded${k}${tag}`, missed = `Task_Missed${k}${tag}`, grace = `Recv_Grace${k}${tag}`, cured = `GW_Cured${k}${tag}`, pay = `Task_Pay${k}${tag}`;
+  const settle = (
+    k: number,
+    tag: string,
+    dueExpr: string,
+    opts: { final: boolean; deliver?: { sym: string; perUnit: string } },
+  ) => {
+    const due = `S_Due${k}${tag}`,
+      gw = `GW_Funded${k}${tag}`,
+      missed = `Task_Missed${k}${tag}`,
+      grace = `Recv_Grace${k}${tag}`,
+      cured = `GW_Cured${k}${tag}`,
+      pay = `Task_Pay${k}${tag}`;
     const funded = `balance(${ESCROW}, cash) >= dueTotal${opts.deliver ? ` and balance(${ESCROW}, ${deliverAsset(opts.deliver.sym)}) >= sold * ${opts.deliver.perUnit}` : ''}`;
     const c = at();
     const row = opts.final ? 2 : 0;
     firstSettle[k] ??= due;
     const pays: AssetOperation[] = [
-      { assetId: 'cash', operation: 'distribute', params: { holdingAssetId: 'note', payer: ESCROW, amountSource: 'field', amountField: 'due', ...(opts.final && !opts.deliver ? { retire: true } : {}) } },
-      ...(opts.deliver ? [{ assetId: deliverAsset(opts.deliver.sym), operation: 'distribute' as const, params: { holdingAssetId: 'note', payer: ESCROW, amountSource: 'expr' as const, amountExpr: opts.deliver.perUnit, retire: true } }] : []),
+      {
+        assetId: 'cash',
+        operation: 'distribute',
+        params: {
+          holdingAssetId: 'note',
+          payer: ESCROW,
+          amountSource: 'field',
+          amountField: 'due',
+          ...(opts.final && !opts.deliver ? { retire: true } : {}),
+        },
+      },
+      ...(opts.deliver
+        ? [
+            {
+              assetId: deliverAsset(opts.deliver.sym),
+              operation: 'distribute' as const,
+              params: {
+                holdingAssetId: 'note',
+                payer: ESCROW,
+                amountSource: 'expr' as const,
+                amountExpr: opts.deliver.perUnit,
+                retire: true,
+              },
+            },
+          ]
+        : []),
     ];
-    const label = opts.deliver ? `Deliver ${opts.deliver.sym} + Pay ${k}` : opts.final ? (k === n ? 'Pay at Maturity' : `Pay Redemption ${k}`) : `Pay Coupon ${k}`;
+    const label = opts.deliver
+      ? `Deliver ${opts.deliver.sym} + Pay ${k}`
+      : opts.final
+        ? k === n
+          ? 'Pay at Maturity'
+          : `Pay Redemption ${k}`
+        : `Pay Coupon ${k}`;
     nodes.push(
-      { id: due, type: 'serviceTask', name: `Payment Date ${k}`, col: c, row, props: {
-        timer: { dateField: 'payDate' },
-        templateFields: [field('due', 'Decimal', { formula: dueExpr }), field('dueTotal', 'Decimal', { formula: 'due * sold' })],
-      } },
+      {
+        id: due,
+        type: 'serviceTask',
+        name: `Payment Date ${k}`,
+        col: c,
+        row,
+        props: {
+          timer: { dateField: 'payDate' },
+          templateFields: [
+            field('due', 'Decimal', { formula: dueExpr }),
+            field('dueTotal', 'Decimal', { formula: 'due * sold' }),
+          ],
+        },
+      },
       { id: gw, type: 'exclusiveGateway', name: 'Funded?', col: c + 1, row },
-      { id: missed, type: 'serviceTask', name: `Payment ${k} Missed`, col: c + 1, row: row + 1, props: { milestone: 'payment-missed',
-        // Owed on a default: this payment, plus par unless it pays the redemption in cash (a delivery still owes par).
-        ...(capped ? { templateFields: [field('owedDue', 'Decimal', { formula: 'due * sold' }), ...(opts.final && !opts.deliver ? [field('principal', 'Decimal', { formula: '0' })] : [])] } : {}) } },
-      { id: grace, type: 'receiveTask', name: `Grace ${k}`, col: c + 2, row: row + 1, props: { receiveGuard: `${funded} or now >= payDate + grace` } },
+      {
+        id: missed,
+        type: 'serviceTask',
+        name: `Payment ${k} Missed`,
+        col: c + 1,
+        row: row + 1,
+        props: {
+          milestone: 'payment-missed',
+          // Owed on a default: this payment, plus par unless it pays the redemption in cash (a delivery still owes par).
+          ...(capped
+            ? {
+                templateFields: [
+                  field('owedDue', 'Decimal', { formula: 'due * sold' }),
+                  ...(opts.final && !opts.deliver ? [field('principal', 'Decimal', { formula: '0' })] : []),
+                ],
+              }
+            : {}),
+        },
+      },
+      {
+        id: grace,
+        type: 'receiveTask',
+        name: `Grace ${k}`,
+        col: c + 2,
+        row: row + 1,
+        props: { receiveGuard: `${funded} or now >= payDate + grace` },
+      },
       { id: cured, type: 'exclusiveGateway', name: 'Cured in grace?', col: c + 3, row: row + 1 },
-      { id: pay, type: 'serviceTask', name: label, col: c + 2, row, props: { milestone: 'payment-made', assetOperations: pays,
-        ...(capped ? { templateFields: [field('owedDue', 'Decimal', { formula: '0' })] } : {}) } },
+      {
+        id: pay,
+        type: 'serviceTask',
+        name: label,
+        col: c + 2,
+        row,
+        props: {
+          milestone: 'payment-made',
+          assetOperations: pays,
+          ...(capped ? { templateFields: [field('owedDue', 'Decimal', { formula: '0' })] } : {}),
+        },
+      },
     );
     flow(due, gw);
     flow(gw, pay, { name: 'Funded', cond: funded });
@@ -261,37 +505,73 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
 
   // Strike: the book has closed. Nothing sold cancels the note; otherwise check the collateral.
   const m0 = marginCheck(0, 'GW_Sold', { name: 'Sold', cond: 'sold > 0' });
-  let cont: { from: string; extra?: Partial<SpecFlow> }[] = [{ from: m0.gw, extra: { name: 'Covered', cond: covered } }, { from: m0.ok }];
-  const linkTo = (tgt: string) => { for (const c of cont) flow(c.from, tgt, c.extra ?? {}); cont = []; };
+  let cont: { from: string; extra?: Partial<SpecFlow> }[] = [
+    { from: m0.gw, extra: { name: 'Covered', cond: covered } },
+    { from: m0.ok },
+  ];
+  const linkTo = (tgt: string) => {
+    for (const c of cont) flow(c.from, tgt, c.extra ?? {});
+    cont = [];
+  };
 
   const rate = p.couponRatePct ?? 0;
   const acFrom = p.autocallFromPeriod ?? 1;
   const redeemPerUnit = (k: number) => (p.productType === 'snowball' ? `1 + ${pct(rate)} * ${k}` : '1');
   /** This period's coupon per unit, as an expression. */
-  const cpnExpr = p.productType === 'phoenix' ? 'cpn' : p.productType === 'fcn' || p.productType === 'reverse-convertible' ? pct(rate) : '0';
+  const cpnExpr =
+    p.productType === 'phoenix'
+      ? 'cpn'
+      : p.productType === 'fcn' || p.productType === 'reverse-convertible'
+        ? pct(rate)
+        : '0';
 
   for (let k = 1; k <= n; k++) {
     const last = k === n;
     const obsId = `Task_Observe${k}`;
-    nodes.push({ id: obsId, type: 'serviceTask', name: last ? 'Final Observation' : `Observe ${k}`, col: at(), props: { timer: { dateField: `obsDate${k}` }, templateFields: obsFields(k) } });
+    nodes.push({
+      id: obsId,
+      type: 'serviceTask',
+      name: last ? 'Final Observation' : `Observe ${k}`,
+      col: at(),
+      props: { timer: { dateField: `obsDate${k}` }, templateFields: obsFields(k) },
+    });
     linkTo(obsId);
     const mk = marginCheck(k, obsId);
     cont = [{ from: mk.gw, extra: { name: 'Covered', cond: covered } }, { from: mk.ok }];
 
     // The coupon this period (phoenix: only above the barrier; memory catches up missed ones).
     if (p.productType === 'phoenix') {
-      const gw = `GW_Coupon${k}`, on = `Task_CouponOn${k}`, off = `Task_CouponOff${k}`;
+      const gw = `GW_Coupon${k}`,
+        on = `Task_CouponOn${k}`,
+        off = `Task_CouponOff${k}`;
       const c = at();
       nodes.push(
         { id: gw, type: 'exclusiveGateway', name: `Coupon ${k} barrier met?`, col: c },
-        { id: on, type: 'serviceTask', name: memory ? `Coupon ${k} Due (with memory)` : `Coupon ${k} Due`, col: c + 1, props: { templateFields: [
-          field('cpn', 'Decimal', { formula: memory ? `${pct(rate)} * (missed + 1)` : pct(rate) }),
-          ...(memory ? [field('missed', 'Decimal', { formula: '0' })] : []),
-        ] } },
-        { id: off, type: 'serviceTask', name: `No Coupon ${k}`, col: c + 1, row: 1, props: { templateFields: [
-          field('cpn', 'Decimal', { formula: '0' }),
-          ...(memory ? [field('missed', 'Decimal', { formula: 'missed + 1' })] : []),
-        ] } },
+        {
+          id: on,
+          type: 'serviceTask',
+          name: memory ? `Coupon ${k} Due (with memory)` : `Coupon ${k} Due`,
+          col: c + 1,
+          props: {
+            templateFields: [
+              field('cpn', 'Decimal', { formula: memory ? `${pct(rate)} * (missed + 1)` : pct(rate) }),
+              ...(memory ? [field('missed', 'Decimal', { formula: '0' })] : []),
+            ],
+          },
+        },
+        {
+          id: off,
+          type: 'serviceTask',
+          name: `No Coupon ${k}`,
+          col: c + 1,
+          row: 1,
+          props: {
+            templateFields: [
+              field('cpn', 'Decimal', { formula: '0' }),
+              ...(memory ? [field('missed', 'Decimal', { formula: 'missed + 1' })] : []),
+            ],
+          },
+        },
       );
       linkTo(gw);
       flow(gw, on, { name: 'Barrier met', cond: atLeast(k, p.couponBarrierPct!) });
@@ -326,7 +606,9 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
 
     // ---- Maturity ---------------------------------------------------------
     if (p.productType === 'ppn') {
-      const s = settle(n, 'Mat', `${pct(p.protectionPct!)} + ${pct(p.participationPct!)} * max(${ratio(n)} - 1, 0)`, { final: true });
+      const s = settle(n, 'Mat', `${pct(p.protectionPct!)} + ${pct(p.participationPct!)} * max(${ratio(n)} - 1, 0)`, {
+        final: true,
+      });
       linkTo(s.due);
       continue;
     }
@@ -356,9 +638,18 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
       nodes.push({ id: worst, type: 'exclusiveGateway', name: 'Which is the worst performer?', col: at() });
       flow(gw, worst, { name: 'Knocked in', isDefault: true });
       unds.forEach((u, i) => {
-        const ki = settle(n, `KI${u.symbol}`, cpnExpr, { final: true, deliver: { sym: u.symbol, perUnit: `1 / initialLevel_${u.symbol}` } });
+        const ki = settle(n, `KI${u.symbol}`, cpnExpr, {
+          final: true,
+          deliver: { sym: u.symbol, perUnit: `1 / initialLevel_${u.symbol}` },
+        });
         const lastU = i === unds.length - 1;
-        flow(worst, ki.due, lastU ? { name: `${u.symbol} worst`, isDefault: true } : { name: `${u.symbol} worst`, cond: `perf${n} == obs${n}_${u.symbol} / initialLevel_${u.symbol}` });
+        flow(
+          worst,
+          ki.due,
+          lastU
+            ? { name: `${u.symbol} worst`, isDefault: true }
+            : { name: `${u.symbol} worst`, cond: `perf${n} == obs${n}_${u.symbol} / initialLevel_${u.symbol}` },
+        );
       });
     }
   }
@@ -366,8 +657,16 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
   // ---- Issuer: pre-trade terms, collateral, funding windows ----------------
   const label = PRODUCT_LABELS[p.productType];
   const terms = [
-    'notional > 0', 'grace >= 0', `grace <= ${MAX_GRACE_DAYS * SECONDS_PER_DAY}`, 'lag >= 0', 'collateralRatio >= 0',
-    ...col.flatMap(c => [`${haircutField(c.symbol)} >= 0`, `${haircutField(c.symbol)} <= 1`, `${pledgeField(c.symbol)} >= 0`]),
+    'notional > 0',
+    'grace >= 0',
+    `grace <= ${MAX_GRACE_DAYS * SECONDS_PER_DAY}`,
+    'lag >= 0',
+    'collateralRatio >= 0',
+    ...col.flatMap((c) => [
+      `${haircutField(c.symbol)} >= 0`,
+      `${haircutField(c.symbol)} <= 1`,
+      `${pledgeField(c.symbol)} >= 0`,
+    ]),
     'strikeDate < obsDate1',
     // Each period settles (payment date + grace) before the next observation.
     ...Array.from({ length: n - 1 }, (_, i) => `${fundUntil(i + 1)} <= obsDate${i + 2}`),
@@ -380,38 +679,71 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     field('lag', 'Int'),
     field('grace', 'Int'),
     field('collateralRatio', 'Decimal'),
-    ...col.flatMap(c => [field(haircutField(c.symbol), 'Decimal'), field(pledgeField(c.symbol), 'Decimal')]),
+    ...col.flatMap((c) => [field(haircutField(c.symbol), 'Decimal'), field(pledgeField(c.symbol), 'Decimal')]),
     // Each period's funding window closes at its payment date + grace.
-    ...Array.from({ length: n }, (_, i) => field(fundUntil(i + 1), 'Date', { formula: `obsDate${i + 1} + lag + grace` })),
+    ...Array.from({ length: n }, (_, i) =>
+      field(fundUntil(i + 1), 'Date', { formula: `obsDate${i + 1} + lag + grace` }),
+    ),
   ];
   const intoEscrow = (asset: string, amount: string): AssetOperation[] => [
     { assetId: asset, operation: 'deposit', params: { amountSource: 'field', amountField: amount } },
-    { assetId: asset, operation: 'transfer', params: { from: ISSUER, to: ESCROW, amountSource: 'field', amountField: amount } },
+    {
+      assetId: asset,
+      operation: 'transfer',
+      params: { from: ISSUER, to: ESCROW, amountSource: 'field', amountField: amount },
+    },
   ];
   const windows: SpecNode[] = [
     ...Array.from({ length: n }, (_, i): SpecNode => ({
-      id: `Task_Fund${i + 1}`, type: 'userTask', name: `Fund Payment ${i + 1}`, col: 5, row: i, props: {
-        until: { dateField: fundUntil(i + 1) }, milestone: 'funding-deposited',
-        templateFields: [field('fundAmount', 'Decimal')], assetOperations: intoEscrow('cash', 'fundAmount'),
+      id: `Task_Fund${i + 1}`,
+      type: 'userTask',
+      name: `Fund Payment ${i + 1}`,
+      col: 5,
+      row: i,
+      props: {
+        until: { dateField: fundUntil(i + 1) },
+        milestone: 'funding-deposited',
+        templateFields: [field('fundAmount', 'Decimal')],
+        assetOperations: intoEscrow('cash', 'fundAmount'),
       },
     })),
     ...col.map((c, i): SpecNode => ({
-      id: `Task_TopUp_${c.symbol}`, type: 'userTask', name: `Top Up Collateral ${collateralTokenOf(p, c.symbol)!.token}`, col: 5, row: n + i, props: {
-        until: { dateField: 'closedAt' }, milestone: 'collateral-pledged',
-        templateFields: [field(topUpField(c.symbol), 'Decimal')], assetOperations: intoEscrow(colAsset(c.symbol), topUpField(c.symbol)),
+      id: `Task_TopUp_${c.symbol}`,
+      type: 'userTask',
+      name: `Top Up Collateral ${collateralTokenOf(p, c.symbol)!.token}`,
+      col: 5,
+      row: n + i,
+      props: {
+        until: { dateField: 'closedAt' },
+        milestone: 'collateral-pledged',
+        templateFields: [field(topUpField(c.symbol), 'Decimal')],
+        assetOperations: intoEscrow(colAsset(c.symbol), topUpField(c.symbol)),
       },
     })),
-    ...(physical ? unds.map((u, i): SpecNode => ({
-      id: `Task_FundDelivery_${u.symbol}`, type: 'userTask', name: `Fund Delivery ${deliverableToken(p, u.symbol)!.token}`, col: 5, row: n + col.length + i, props: {
-        until: { dateField: fundUntil(n) }, milestone: 'funding-deposited',
-        templateFields: [field(`fundDelivery_${u.symbol}`, 'Decimal')], assetOperations: intoEscrow(deliverAsset(u.symbol), `fundDelivery_${u.symbol}`),
-      },
-    })) : []),
+    ...(physical
+      ? unds.map((u, i): SpecNode => ({
+          id: `Task_FundDelivery_${u.symbol}`,
+          type: 'userTask',
+          name: `Fund Delivery ${deliverableToken(p, u.symbol)!.token}`,
+          col: 5,
+          row: n + col.length + i,
+          props: {
+            until: { dateField: fundUntil(n) },
+            milestone: 'funding-deposited',
+            templateFields: [field(`fundDelivery_${u.symbol}`, 'Decimal')],
+            assetOperations: intoEscrow(deliverAsset(u.symbol), `fundDelivery_${u.symbol}`),
+          },
+        }))
+      : []),
   ];
-  for (let k = 1; k <= n; k++) if (firstSettle[k]) messages.push({ id: `MF_Fund${k}`, src: `Task_Fund${k}`, tgt: firstSettle[k], notice: true });
+  for (let k = 1; k <= n; k++)
+    if (firstSettle[k]) messages.push({ id: `MF_Fund${k}`, src: `Task_Fund${k}`, tgt: firstSettle[k], notice: true });
   const issuerFlows: SpecFlow[] = [
     ...chain('I_F', 'Start_Issuer', 'Task_ApproveTerms', 'Task_CheckTerms', 'Task_Mandate', 'GW_Windows'),
-    ...windows.flatMap((w, i): SpecFlow[] => [{ id: `I_W${i + 1}`, src: 'GW_Windows', tgt: w.id }, { id: `I_C${i + 1}`, src: w.id, tgt: 'GW_WindowsClosed' }]),
+    ...windows.flatMap((w, i): SpecFlow[] => [
+      { id: `I_W${i + 1}`, src: 'GW_Windows', tgt: w.id },
+      { id: `I_C${i + 1}`, src: w.id, tgt: 'GW_WindowsClosed' },
+    ]),
     { id: 'I_End', src: 'GW_WindowsClosed', tgt: 'End_Issuer' },
   ];
 
@@ -419,35 +751,77 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     key: 'SP',
     name: p.name,
     pools: [
-      { id: 'Part_Issuer', name: ISSUER, proc: 'Proc_Issuer', nodes: [
-        { id: 'Start_Issuer', type: 'startEvent', name: 'Offer Drafted', col: 0 },
-        // Pre-trade: this issuance's terms; the collateral is pledged (deposited and locked in escrow) now.
-        { id: 'Task_ApproveTerms', type: 'userTask', name: 'Approve Terms + Pledge Collateral', col: 1, props: {
-          templateFields: pretrade, milestone: 'collateral-pledged',
-          assetOperations: col.flatMap(c => intoEscrow(colAsset(c.symbol), pledgeField(c.symbol))),
-        } },
-        { id: 'Task_CheckTerms', type: 'serviceTask', name: 'Check Terms', col: 2, props: { receiveGuard: terms } },
-        { id: 'Task_Mandate', type: 'userTask', name: 'Mandate Paying Agent', col: 3 },
-        { id: 'GW_Windows', type: 'parallelGateway', name: 'Open funding windows', col: 4 },
-        ...windows,
-        { id: 'GW_WindowsClosed', type: 'parallelGateway', name: 'All windows closed', col: 6 },
-        { id: 'End_Issuer', type: 'endEvent', name: 'Funding Closed', col: 7 },
-      ], flows: issuerFlows },
+      {
+        id: 'Part_Issuer',
+        name: ISSUER,
+        proc: 'Proc_Issuer',
+        nodes: [
+          { id: 'Start_Issuer', type: 'startEvent', name: 'Offer Drafted', col: 0 },
+          // Pre-trade: this issuance's terms; the collateral is pledged (deposited and locked in escrow) now.
+          {
+            id: 'Task_ApproveTerms',
+            type: 'userTask',
+            name: 'Approve Terms + Pledge Collateral',
+            col: 1,
+            props: {
+              templateFields: pretrade,
+              milestone: 'collateral-pledged',
+              assetOperations: col.flatMap((c) => intoEscrow(colAsset(c.symbol), pledgeField(c.symbol))),
+            },
+          },
+          { id: 'Task_CheckTerms', type: 'serviceTask', name: 'Check Terms', col: 2, props: { receiveGuard: terms } },
+          { id: 'Task_Mandate', type: 'userTask', name: 'Mandate Paying Agent', col: 3 },
+          { id: 'GW_Windows', type: 'parallelGateway', name: 'Open funding windows', col: 4 },
+          ...windows,
+          { id: 'GW_WindowsClosed', type: 'parallelGateway', name: 'All windows closed', col: 6 },
+          { id: 'End_Issuer', type: 'endEvent', name: 'Funding Closed', col: 7 },
+        ],
+        flows: issuerFlows,
+      },
       { id: 'Part_PayingAgent', name: PA, proc: 'Proc_PayingAgent', nodes, flows },
-      { id: 'Part_Investor', name: INVESTOR, proc: 'Proc_Investor', open: true, nodes: [
-        { id: 'Recv_Offer', type: 'receiveTask', name: 'Offer Listed', col: 4 },
-        // The subscription book: anyone, any number of times, until the strike date. The stablecoin goes to
-        // the issuer (the funds the note raises); the investor receives units, atomically.
-        { id: 'Task_Subscribe', type: 'userTask', name: 'Subscribe', col: 5, props: {
-          until: { dateField: 'strikeDate' },
-          templateFields: [field('units', 'Decimal')],
-          assetOperations: [
-            { assetId: 'cash', operation: 'deposit', params: { amountSource: 'expr', amountExpr: `units * ${issuePrice}` } },
-            { assetId: 'note', operation: 'swap', params: { deliveryParty: ISSUER, paymentParty: INVESTOR, amountSource: 'field', amountField: 'units', counterAssetId: 'cash', counterAmountSource: 'expr', counterAmountExpr: `units * ${issuePrice}` } },
-          ],
-        } },
-        { id: 'End_Investor', type: 'endEvent', name: 'Book Closed', col: 6 },
-      ], flows: chain('V_F', 'Recv_Offer', 'Task_Subscribe', 'End_Investor') },
+      {
+        id: 'Part_Investor',
+        name: INVESTOR,
+        proc: 'Proc_Investor',
+        open: true,
+        nodes: [
+          { id: 'Recv_Offer', type: 'receiveTask', name: 'Offer Listed', col: 4 },
+          // The subscription book: anyone, any number of times, until the strike date. The stablecoin goes to
+          // the issuer (the funds the note raises); the investor receives units, atomically.
+          {
+            id: 'Task_Subscribe',
+            type: 'userTask',
+            name: 'Subscribe',
+            col: 5,
+            props: {
+              until: { dateField: 'strikeDate' },
+              templateFields: [field('units', 'Decimal')],
+              assetOperations: [
+                {
+                  assetId: 'cash',
+                  operation: 'deposit',
+                  params: { amountSource: 'expr', amountExpr: `units * ${issuePrice}` },
+                },
+                {
+                  assetId: 'note',
+                  operation: 'swap',
+                  params: {
+                    deliveryParty: ISSUER,
+                    paymentParty: INVESTOR,
+                    amountSource: 'field',
+                    amountField: 'units',
+                    counterAssetId: 'cash',
+                    counterAmountSource: 'expr',
+                    counterAmountExpr: `units * ${issuePrice}`,
+                  },
+                },
+              ],
+            },
+          },
+          { id: 'End_Investor', type: 'endEvent', name: 'Book Closed', col: 6 },
+        ],
+        flows: chain('V_F', 'Recv_Offer', 'Task_Subscribe', 'End_Investor'),
+      },
       { id: 'Part_Escrow', name: ESCROW, proc: 'Proc_Escrow', nodes: [], flows: [], escrow: true },
     ],
     messages: [
@@ -458,18 +832,21 @@ export function instantiateProduct(p: ProductParams): InstantiatedProduct {
     assets,
   };
   // Email notifications on the payment cycle (notify.ts): declared on the BPMN, compiled into META only.
-  for (const pool of spec.pools) for (const n of pool.nodes) {
-    const notify = productNotifications(n.id);
-    if (notify) n.props = { ...(n.props ?? {}), notify };
-  }
+  for (const pool of spec.pools)
+    for (const n of pool.nodes) {
+      const notify = productNotifications(n.id);
+      if (notify) n.props = { ...(n.props ?? {}), notify };
+    }
   const built = buildWorkflow(spec);
-  const layout = Object.fromEntries(spec.pools.flatMap(pl => pl.nodes.map(nd => [nd.id, { col: nd.col ?? 0, row: nd.row ?? 0 }])));
+  const layout = Object.fromEntries(
+    spec.pools.flatMap((pl) => pl.nodes.map((nd) => [nd.id, { col: nd.col ?? 0, row: nd.row ?? 0 }])),
+  );
   return {
     ...built,
     layout,
     id: `product-${p.productType}`,
     name: p.name,
     params: p,
-    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDG until the strike date and the issuer receives the funds; the issuer pledges ${col.map(c => collateralTokenOf(p, c.symbol)!.token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map(u => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
+    description: `${label} on ${underlyingLabel(p)}: ${n} observation${n > 1 ? 's' : ''} per issuance; investors subscribe in USDG until the strike date and the issuer receives the funds; the issuer pledges ${col.map((c) => collateralTokenOf(p, c.symbol)!.token).join(', ')} collateral (ratio set per issuance) and funds each payment before its date (${eco.settlementLagDays} days after the observation, ${eco.gracePeriodDays} days' grace), or the collateral goes to the holders. Chainlink CRE fixes the strike and observes from the ${unds.map((u) => `${u.symbol}/USD`).join(', ')} feed${basket ? 's' : ''}. Pools: Issuer, Paying Agent, Investor, Escrow.`,
   };
 }

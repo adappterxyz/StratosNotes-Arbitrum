@@ -42,19 +42,37 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 /** Block hashes kept per chain for reorg checks (older ones are pruned). */
 const KEEP_BLOCKS = 2048n;
 
-export interface StepResult { from: bigint; to: bigint; events: number; notes: string[]; reorgedTo?: bigint; idle?: boolean }
+export interface StepResult {
+  from: bigint;
+  to: bigint;
+  events: number;
+  notes: string[];
+  reorgedTo?: bigint;
+  idle?: boolean;
+}
 
 export class Ingestor {
-  constructor(readonly db: Db, readonly cfg: ChainConfig, readonly src: ChainSource) {}
+  constructor(
+    readonly db: Db,
+    readonly cfg: ChainConfig,
+    readonly src: ChainSource,
+  ) {}
 
-  private get chain() { return this.cfg.key; }
-  private get engine() { return this.cfg.engine.toLowerCase(); }
+  private get chain() {
+    return this.cfg.key;
+  }
+  private get engine() {
+    return this.cfg.engine.toLowerCase();
+  }
 
   /** Create the chain row on first run (cursor just before the start block). */
   async init() {
     const rows = await this.db.query<{ engine: string }>('SELECT engine FROM chains WHERE chain = $1', [this.chain]);
     if (rows.length) {
-      if (rows[0].engine !== this.engine) throw new Error(`chain ${this.chain} is indexed for engine ${rows[0].engine}, not ${this.engine}: use a new chain key or reset it`);
+      if (rows[0].engine !== this.engine)
+        throw new Error(
+          `chain ${this.chain} is indexed for engine ${rows[0].engine}, not ${this.engine}: use a new chain key or reset it`,
+        );
       return;
     }
     const start = BigInt(this.cfg.startBlock);
@@ -66,7 +84,10 @@ export class Ingestor {
   }
 
   private async cursor(): Promise<{ cursor: bigint; fallback: string; start: bigint }> {
-    const [r] = await this.db.query<{ cursor: string; fallback_reporter: string; start_block: string }>('SELECT cursor, fallback_reporter, start_block FROM chains WHERE chain = $1', [this.chain]);
+    const [r] = await this.db.query<{ cursor: string; fallback_reporter: string; start_block: string }>(
+      'SELECT cursor, fallback_reporter, start_block FROM chains WHERE chain = $1',
+      [this.chain],
+    );
     return { cursor: BigInt(r.cursor), fallback: r.fallback_reporter, start: BigInt(r.start_block) };
   }
 
@@ -84,7 +105,10 @@ export class Ingestor {
     const { cursor, start } = await this.cursor();
     // Reorg check: does the chain still have the block we last ingested?
     if (cursor >= start) {
-      const [stored] = await this.db.query<{ hash: string }>('SELECT hash FROM blocks WHERE chain = $1 AND number = $2', [this.chain, cursor.toString()]);
+      const [stored] = await this.db.query<{ hash: string }>(
+        'SELECT hash FROM blocks WHERE chain = $1 AND number = $2',
+        [this.chain, cursor.toString()],
+      );
       if (stored) {
         const now = await this.src.block(cursor);
         if (!now || now.hash !== stored.hash) return this.rewind(cursor);
@@ -98,13 +122,14 @@ export class Ingestor {
 
     // Each block with events must still have the hash its logs carry; the batch end's hash is recorded too.
     const blocks = new Map<bigint, { hash: string; ts: number }>();
-    for (const n of new Set([...logs.map(l => l.block), to])) {
+    for (const n of new Set([...logs.map((l) => l.block), to])) {
       const b = await this.src.block(n);
       if (!b) throw new Error(`block ${n} not available on ${this.chain}`);
       blocks.set(n, b);
     }
     for (const l of logs) {
-      if (blocks.get(l.block)!.hash !== l.blockHash) throw new Error(`reorg during batch at block ${l.block} on ${this.chain}; retrying`);
+      if (blocks.get(l.block)!.hash !== l.blockHash)
+        throw new Error(`reorg during batch at block ${l.block} on ${this.chain}; retrying`);
     }
 
     // Definitions registered in this batch: fetch their CORE now (outside the transaction).
@@ -112,15 +137,17 @@ export class Ingestor {
     const decoded: Array<{ l: (typeof logs)[number]; e: EngineEvent }> = [];
     let fallback = (await this.cursor()).fallback;
     for (const l of logs) {
-      const e = decodeEngineLog(l, r => r === fallback && fallback !== ZERO);
+      const e = decodeEngineLog(l, (r) => r === fallback && fallback !== ZERO);
       if (!e) continue;
       if (e.name === 'FallbackReporterUpdated') fallback = e.next;
       if (e.name === 'DefinitionRegistered' && !cores.has(e.id)) cores.set(e.id, await this.src.definitionCore(e.id));
       decoded.push({ l, e });
     }
 
-    const notes = await this.db.tx(async q => {
-      const [row] = await q.query<{ cursor: string }>('SELECT cursor FROM chains WHERE chain = $1 FOR UPDATE', [this.chain]);
+    const notes = await this.db.tx(async (q) => {
+      const [row] = await q.query<{ cursor: string }>('SELECT cursor FROM chains WHERE chain = $1 FOR UPDATE', [
+        this.chain,
+      ]);
       if (BigInt(row.cursor) !== cursor) return null; // another writer moved on: drop this batch
       const inserted: StoredEvent[] = [];
       for (const { l, e } of decoded) {
@@ -136,12 +163,16 @@ export class Ingestor {
       }
       const changed = await applyNew(q, this.chain, this.engine, inserted);
       for (const [n, b] of blocks) {
-        await q.query('INSERT INTO blocks (chain, number, hash, ts) VALUES ($1,$2,$3,$4) ON CONFLICT (chain, number) DO UPDATE SET hash = EXCLUDED.hash, ts = EXCLUDED.ts',
-          [this.chain, n.toString(), b.hash, b.ts]);
+        await q.query(
+          'INSERT INTO blocks (chain, number, hash, ts) VALUES ($1,$2,$3,$4) ON CONFLICT (chain, number) DO UPDATE SET hash = EXCLUDED.hash, ts = EXCLUDED.ts',
+          [this.chain, n.toString(), b.hash, b.ts],
+        );
       }
       await q.query('DELETE FROM blocks WHERE chain = $1 AND number < $2', [this.chain, (to - KEEP_BLOCKS).toString()]);
-      await q.query('UPDATE chains SET cursor = $2, head = $3, fallback_reporter = $4, updated_at = now() WHERE chain = $1',
-        [this.chain, to.toString(), safe.toString(), fallback]);
+      await q.query(
+        'UPDATE chains SET cursor = $2, head = $3, fallback_reporter = $4, updated_at = now() WHERE chain = $1',
+        [this.chain, to.toString(), safe.toString(), fallback],
+      );
       if (changed.length || inserted.length) await this.notify(q, changed);
       return changed;
     });
@@ -149,37 +180,66 @@ export class Ingestor {
     return { from, to, events: decoded.length, notes };
   }
 
-  private async storeDefinition(q: Queryable, e: Extract<EngineEvent, { name: 'DefinitionRegistered' }>, core: string, block: bigint) {
+  private async storeDefinition(
+    q: Queryable,
+    e: Extract<EngineEvent, { name: 'DefinitionRegistered' }>,
+    core: string,
+    block: bigint,
+  ) {
     const bytes = new Uint8Array([...hexToBytes(core), ...hexToBytes(e.meta)]);
     if (bytesToHex(sha256(bytes)) !== e.id) throw new Error(`definition ${e.id} does not hash to its id`);
     let name = '';
-    try { name = (JSON.parse(new TextDecoder().decode(hexToBytes(e.meta))) as { name?: string }).name ?? ''; } catch { /* unnamed */ }
-    await q.query('INSERT INTO definitions (chain, id, creator, bytes, name, block) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (chain, id) DO NOTHING',
-      [this.chain, e.id, e.creator, bytes, name, block.toString()]);
+    try {
+      name = (JSON.parse(new TextDecoder().decode(hexToBytes(e.meta))) as { name?: string }).name ?? '';
+    } catch {
+      /* unnamed */
+    }
+    await q.query(
+      'INSERT INTO definitions (chain, id, creator, bytes, name, block) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (chain, id) DO NOTHING',
+      [this.chain, e.id, e.creator, bytes, name, block.toString()],
+    );
   }
 
   /** The chain no longer has block `at` as we saw it: find the last common block and undo everything after. */
   private async rewind(at: bigint): Promise<StepResult> {
     const stored = await this.db.query<{ number: string; hash: string }>(
-      'SELECT number, hash FROM blocks WHERE chain = $1 AND number <= $2 ORDER BY number DESC', [this.chain, at.toString()]);
+      'SELECT number, hash FROM blocks WHERE chain = $1 AND number <= $2 ORDER BY number DESC',
+      [this.chain, at.toString()],
+    );
     const { start } = await this.cursor();
     let ancestor = start - 1n; // nothing in common within the kept window: rebuild from the start
     for (const b of stored) {
       const now = await this.src.block(BigInt(b.number));
-      if (now && now.hash === b.hash) { ancestor = BigInt(b.number); break; }
+      if (now && now.hash === b.hash) {
+        ancestor = BigInt(b.number);
+        break;
+      }
     }
-    const changed = await this.db.tx(async q => {
+    const changed = await this.db.tx(async (q) => {
       await q.query('SELECT cursor FROM chains WHERE chain = $1 FOR UPDATE', [this.chain]);
-      const gone = await q.query<{ note_id: string | null }>('DELETE FROM events WHERE chain = $1 AND block > $2 RETURNING note_id', [this.chain, ancestor.toString()]);
+      const gone = await q.query<{ note_id: string | null }>(
+        'DELETE FROM events WHERE chain = $1 AND block > $2 RETURNING note_id',
+        [this.chain, ancestor.toString()],
+      );
       await q.query('DELETE FROM definitions WHERE chain = $1 AND block > $2', [this.chain, ancestor.toString()]);
       await q.query('DELETE FROM blocks WHERE chain = $1 AND number > $2', [this.chain, ancestor.toString()]);
-      const notes = [...new Set(gone.map(g => g.note_id).filter((x): x is string => !!x))];
+      const notes = [...new Set(gone.map((g) => g.note_id).filter((x): x is string => !!x))];
       for (const id of notes) await rebuildNote(q, this.chain, this.engine, id);
       // The fallback reporter in force at the ancestor: the last update left in the log, else as of the start.
       const [last] = await q.query<{ data: { next: string } | string }>(
-        "SELECT data FROM events WHERE chain = $1 AND name = 'FallbackReporterUpdated' ORDER BY block DESC, log_index DESC LIMIT 1", [this.chain]);
-      const fallback = last ? (typeof last.data === 'string' ? JSON.parse(last.data).next : last.data.next) : await this.src.fallbackReporterAt(start - 1n);
-      await q.query('UPDATE chains SET cursor = $2, fallback_reporter = $3, updated_at = now() WHERE chain = $1', [this.chain, ancestor.toString(), fallback]);
+        "SELECT data FROM events WHERE chain = $1 AND name = 'FallbackReporterUpdated' ORDER BY block DESC, log_index DESC LIMIT 1",
+        [this.chain],
+      );
+      const fallback = last
+        ? typeof last.data === 'string'
+          ? JSON.parse(last.data).next
+          : last.data.next
+        : await this.src.fallbackReporterAt(start - 1n);
+      await q.query('UPDATE chains SET cursor = $2, fallback_reporter = $3, updated_at = now() WHERE chain = $1', [
+        this.chain,
+        ancestor.toString(),
+        fallback,
+      ]);
       await this.notify(q, notes);
       return notes;
     });
@@ -188,7 +248,9 @@ export class Ingestor {
 
   private async notify(q: Queryable, notes: string[]) {
     // NOTIFY payloads are capped at 8000 bytes: name the notes when few, else say "everything on this chain".
-    const payload = JSON.stringify(notes.length <= 40 ? { chain: this.chain, notes } : { chain: this.chain, all: true });
+    const payload = JSON.stringify(
+      notes.length <= 40 ? { chain: this.chain, notes } : { chain: this.chain, all: true },
+    );
     await q.query('SELECT pg_notify($1, $2)', [NOTIFY_CHANNEL, payload]);
   }
 

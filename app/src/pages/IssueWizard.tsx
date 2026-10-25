@@ -8,18 +8,57 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowLeftRight, ArrowRight, Check, Flame, Layers, Repeat, ShieldCheck, Snowflake, Workflow,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  Check,
+  Flame,
+  Layers,
+  Repeat,
+  ShieldCheck,
+  Snowflake,
+  Workflow,
 } from 'lucide-react';
 import {
-  check, COLLATERAL_SYMBOLS, collateralTokenOf, compileTemplate, DEFAULT_HAIRCUT, deliverableToken, economicsOf, EXAMPLE_PRODUCTS, FEEDS,
-  instantiateProduct, MAX_COLLATERAL, MAX_GRACE_DAYS, MAX_UNDERLYINGS, parseBpmn, PRODUCT_LABELS, productUses, toIssuanceTerms, UNPRICED_STOCKS,
-  validateProductParams, type CollateralSymbol, type DefaultRule, type ProductParams, type ProductType,
+  check,
+  COLLATERAL_SYMBOLS,
+  collateralTokenOf,
+  compileTemplate,
+  DEFAULT_HAIRCUT,
+  deliverableToken,
+  economicsOf,
+  EXAMPLE_PRODUCTS,
+  FEEDS,
+  instantiateProduct,
+  MAX_COLLATERAL,
+  MAX_GRACE_DAYS,
+  MAX_UNDERLYINGS,
+  parseBpmn,
+  PRODUCT_LABELS,
+  productUses,
+  toIssuanceTerms,
+  UNPRICED_STOCKS,
+  validateProductParams,
+  type CollateralSymbol,
+  type DefaultRule,
+  type ProductParams,
+  type ProductType,
 } from '@sn/core';
 import PayoffChart from '../components/PayoffChart';
 import { IssuePanel, TemplatePanel, type Built, type DocInfo, type IssuePreset } from '../components/Stages';
 import ReadyMadeList from '../components/issue/ReadyMadeList';
 import DescribeIt from '../components/issue/DescribeIt';
-import { AI_DRAFT_KEY, exampleOf, kindOf, loadAiReading, readyMade, saveAiReading, type AiReading, type NoteKind, type ReadyMade } from '../lib/readymade';
+import {
+  AI_DRAFT_KEY,
+  exampleOf,
+  kindOf,
+  loadAiReading,
+  readyMade,
+  saveAiReading,
+  type AiReading,
+  type NoteKind,
+  type ReadyMade,
+} from '../lib/readymade';
 import { Asset, AssetIcon, AssetStack } from '../components/AssetIcon';
 import { issueChains, PREFERRED_CHAIN, useChains } from '../lib/chains';
 import { fmtMoney, lockedAsset } from '../lib/format';
@@ -27,11 +66,36 @@ import { fmtMoney, lockedAsset } from '../lib/format';
 type Kind = NoteKind;
 const PRODUCTS: Array<{ kind: Kind; icon: ReactNode; title: string; line: string }> = [
   { kind: 'fcn', icon: <Repeat />, title: 'Fixed coupon note', line: 'Steady income: the same coupon every period.' },
-  { kind: 'reverse-convertible', icon: <ArrowLeftRight />, title: 'Reverse convertible', line: 'A higher coupon; may pay back in stock.' },
-  { kind: 'phoenix', icon: <Flame />, title: 'Phoenix', line: 'Coupons while the price stays above a barrier, with memory.' },
-  { kind: 'snowball', icon: <Snowflake />, title: 'Snowball', line: 'The payout grows each period until it is called.' },
-  { kind: 'ppn', icon: <ShieldCheck />, title: 'Principal-protected', line: 'Money back at maturity, plus a share of the upside.' },
-  { kind: 'worst-of', icon: <Layers />, title: 'Worst-of', line: 'Any of these on a basket: the weakest asset decides.' },
+  {
+    kind: 'reverse-convertible',
+    icon: <ArrowLeftRight />,
+    title: 'Reverse convertible',
+    line: 'A higher coupon; may pay back in stock.',
+  },
+  {
+    kind: 'phoenix',
+    icon: <Flame />,
+    title: 'Phoenix',
+    line: 'Coupons while the price stays above a barrier, with memory.',
+  },
+  {
+    kind: 'snowball',
+    icon: <Snowflake />,
+    title: 'Snowball',
+    line: 'The payout grows each period until it is called.',
+  },
+  {
+    kind: 'ppn',
+    icon: <ShieldCheck />,
+    title: 'Principal-protected',
+    line: 'Money back at maturity, plus a share of the upside.',
+  },
+  {
+    kind: 'worst-of',
+    icon: <Layers />,
+    title: 'Worst-of',
+    line: 'Any of these on a basket: the weakest asset decides.',
+  },
 ];
 const STEPS = ['Product', 'Terms', 'Schedule', 'Collateral', 'Review & issue'] as const;
 
@@ -39,18 +103,52 @@ const start = exampleOf;
 
 /** The recorded demo's note (?product=reverse-convertible&demo=tsla). */
 const DEMO_TSLA: ProductParams = {
-  ...EXAMPLE_PRODUCTS['reverse-convertible'], name: 'TSLA Reverse Convertible', underlyings: [FEEDS.TSLA], settlement: 'cash',
-  issuePricePct: 100, observations: 2, couponRatePct: 2.5, knockInBarrierPct: 70,
-  collateralChain: 'robinhood', collateral: [{ symbol: 'TSLA', haircutPct: 60 }], collateralRatioPct: 100,
-  defaultRule: 'cap-at-owed', payouts: 'claim',
+  ...EXAMPLE_PRODUCTS['reverse-convertible'],
+  name: 'TSLA Reverse Convertible',
+  underlyings: [FEEDS.TSLA],
+  settlement: 'cash',
+  issuePricePct: 100,
+  observations: 2,
+  couponRatePct: 2.5,
+  knockInBarrierPct: 70,
+  collateralChain: 'robinhood',
+  collateral: [{ symbol: 'TSLA', haircutPct: 60 }],
+  collateralRatioPct: 100,
+  defaultRule: 'cap-at-owed',
+  payouts: 'claim',
 };
 
-function Num({ id, label, value, onChange, hint, suffix, step = 'any', min }: { id: string; label: string; value: number | undefined; onChange: (v: number) => void; hint?: string; suffix?: string; step?: string; min?: number }) {
+function Num({
+  id,
+  label,
+  value,
+  onChange,
+  hint,
+  suffix,
+  step = 'any',
+  min,
+}: {
+  id: string;
+  label: string;
+  value: number | undefined;
+  onChange: (v: number) => void;
+  hint?: string;
+  suffix?: string;
+  step?: string;
+  min?: number;
+}) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <div className="with-suffix">
-        <input id={id} type="number" step={step} min={min} value={value ?? ''} onChange={e => onChange(e.target.value === '' ? NaN : Number(e.target.value))} />
+        <input
+          id={id}
+          type="number"
+          step={step}
+          min={min}
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? NaN : Number(e.target.value))}
+        />
         {suffix && <span className="suffix">{suffix}</span>}
       </div>
       {hint && <span className="hint">{hint}</span>}
@@ -67,7 +165,8 @@ export default function IssueWizard() {
   // same step.
   const linked = search.get('product') as Kind | null;
   const ready = search.get('ready');
-  const kind: Kind | null = linked && (linked === 'worst-of' || EXAMPLE_PRODUCTS[linked as ProductType]) ? linked : null;
+  const kind: Kind | null =
+    linked && (linked === 'worst-of' || EXAMPLE_PRODUCTS[linked as ProductType]) ? linked : null;
   const step = kind ? Math.min(4, Math.max(0, Number(search.get('step')) || 0)) : 0;
   const key = kind ? (ready ? `r:${ready}` : `k:${kind}`) : null;
   // ?demo=tsla: the recorded demo's terms, every field filled in (a TSLA reverse convertible on Arbitrum, collateral TSLA
@@ -87,7 +186,10 @@ export default function IssueWizard() {
   const [p, setPRaw] = useState<ProductParams>(() => toIssuanceTerms(init.p));
   const [moved, setMoved] = useState(() => toIssuanceTerms(init.p) !== init.p);
   const setP = (next: ProductParams | ((prev: ProductParams) => ProductParams)) => {
-    if (typeof next === 'function') { setPRaw(prev => toIssuanceTerms(next(prev))); return; }
+    if (typeof next === 'function') {
+      setPRaw((prev) => toIssuanceTerms(next(prev)));
+      return;
+    }
     const q = toIssuanceTerms(next); // terms loaded from elsewhere
     setMoved(q !== next);
     setPRaw(q);
@@ -99,13 +201,20 @@ export default function IssueWizard() {
   // The network: Arbitrum Sepolia, always (left implicit in the terms so its definitions stay as they were). Robinhood
   // Chain is a collateral chain only: stock collateral is locked there (step 4), no note is issued there.
   const issuable = issueChains(config);
-  const chainKey = issuable.find(c => c.key === PREFERRED_CHAIN)?.key ?? issuable[0]?.key ?? '';
-  const [size, setSize] = useState(demoTsla ? 20 : init.ai?.schedule?.size ?? 10_000);
+  const chainKey = issuable.find((c) => c.key === PREFERRED_CHAIN)?.key ?? issuable[0]?.key ?? '';
+  const [size, setSize] = useState(demoTsla ? 20 : (init.ai?.schedule?.size ?? 10_000));
   const [strikeIn, setStrikeIn] = useState(5);
-  const [every, setEvery] = useState<{ n: number; unit: 'minutes' | 'days' | 'months' }>(init.ai?.schedule ? { n: init.ai.schedule.every, unit: init.ai.schedule.unit } : { n: 3, unit: 'minutes' });
+  const [every, setEvery] = useState<{ n: number; unit: 'minutes' | 'days' | 'months' }>(
+    init.ai?.schedule ? { n: init.ai.schedule.every, unit: init.ai.schedule.unit } : { n: 3, unit: 'minutes' },
+  );
   const applyAi = (r: AiReading) => {
-    setP(r.params); setFrom(null); setAiNotes(r.notes ?? []);
-    if (r.schedule) { setEvery({ n: r.schedule.every, unit: r.schedule.unit }); if (r.schedule.size) setSize(r.schedule.size); }
+    setP(r.params);
+    setFrom(null);
+    setAiNotes(r.notes ?? []);
+    if (r.schedule) {
+      setEvery({ n: r.schedule.every, unit: r.schedule.unit });
+      if (r.schedule.size) setSize(r.schedule.size);
+    }
   };
   useEffect(() => {
     // Arriving somewhere else (a link, or Back/Forward to the chooser and out again) loads what that address names:
@@ -113,28 +222,54 @@ export default function IssueWizard() {
     if (!key || key === shown) return;
     let live = true;
     setLost('');
-    if (!ready) { setP(start(kind!)); setFrom(null); setAiNotes([]); setShown(key); return; }
+    if (!ready) {
+      setP(start(kind!));
+      setFrom(null);
+      setAiNotes([]);
+      setShown(key);
+      return;
+    }
     if (ready === 'ai') {
       const r = loadAiReading();
-      if (r) { applyAi(r); setShown(key); } else setLost('What the AI read is no longer here: describe the note again.');
+      if (r) {
+        applyAi(r);
+        setShown(key);
+      } else setLost('What the AI read is no longer here: describe the note again.');
       return;
     }
     const hit = readyMade(ready);
     const use = (r: ReadyMade | null) => {
       if (!live) return;
-      if (!r) { setLost('That ready-made note could not be found.'); return; }
-      if (r.custom) { nav(`/issue/advanced?template=${r.id}`, { replace: true }); return; }
-      setP(r.params); setFrom(r); setAiNotes([]); setShown(key);
+      if (!r) {
+        setLost('That ready-made note could not be found.');
+        return;
+      }
+      if (r.custom) {
+        nav(`/issue/advanced?template=${r.id}`, { replace: true });
+        return;
+      }
+      setP(r.params);
+      setFrom(r);
+      setAiNotes([]);
+      setShown(key);
     };
-    if (hit instanceof Promise) hit.then(use); else use(hit);
-    return () => { live = false; };
+    if (hit instanceof Promise) hit.then(use);
+    else use(hit);
+    return () => {
+      live = false;
+    };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const go = (k: Kind | null, s = 0) => setSearch(k ? { ...(ready ? { ready } : {}), product: k, step: String(s) } : {});
+  const go = (k: Kind | null, s = 0) =>
+    setSearch(k ? { ...(ready ? { ready } : {}), product: k, step: String(s) } : {});
   const setStep = (s: number) => go(kind, s);
-  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(demoTsla ? { lag: 60, grace: 120 } : null);
-  const set = (patch: Partial<ProductParams>) => setP(prev => ({ ...prev, ...patch }));
+  const [timing, setTiming] = useState<{ lag: number; grace: number } | null>(
+    demoTsla ? { lag: 60, grace: 120 } : null,
+  );
+  const set = (patch: Partial<ProductParams>) => setP((prev) => ({ ...prev, ...patch }));
 
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [step, kind]);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step, kind]);
   // What the issue panel publishes: the product's workflow, compiled as the engine will run it.
   const built = useMemo<Built | null>(() => {
     if (step !== 4 || validateProductParams(p).length) return null;
@@ -143,81 +278,159 @@ export default function IssueWizard() {
       const ir = parseBpmn(prod.bpmnXml, prod.assets);
       if (check(ir).errors.length) return null;
       return { ir, c: compileTemplate({ product: p }), source: { product: p } };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [step, p]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A template link belongs to the studio.
   if (search.get('template')) return <Navigate to={`/issue/advanced?${search.toString()}`} replace />;
 
-  const choose = (k: Kind) => { setP(start(k)); setFrom(null); setAiNotes([]); setShown(`k:${k}`); setSearch({ product: k, step: '0' }); };
-  const pick = (r: ReadyMade) => { setP(r.params); setFrom(r); setAiNotes([]); setShown(`r:${r.id}`); setSearch({ ready: r.id, product: kindOf(r.params), step: '2' }); };
-  const fromAi = (r: AiReading) => { saveAiReading(r); applyAi(r); setShown('r:ai'); setSearch({ ready: 'ai', product: kindOf(r.params), step: '1' }); };
-  const aiWorkflow = (xml: string) => { try { sessionStorage.setItem(AI_DRAFT_KEY, xml); } catch { /* storage blocked */ } nav('/issue/advanced?draft=ai&ai=1'); };
+  const choose = (k: Kind) => {
+    setP(start(k));
+    setFrom(null);
+    setAiNotes([]);
+    setShown(`k:${k}`);
+    setSearch({ product: k, step: '0' });
+  };
+  const pick = (r: ReadyMade) => {
+    setP(r.params);
+    setFrom(r);
+    setAiNotes([]);
+    setShown(`r:${r.id}`);
+    setSearch({ ready: r.id, product: kindOf(r.params), step: '2' });
+  };
+  const fromAi = (r: AiReading) => {
+    saveAiReading(r);
+    applyAi(r);
+    setShown('r:ai');
+    setSearch({ ready: 'ai', product: kindOf(r.params), step: '1' });
+  };
+  const aiWorkflow = (xml: string) => {
+    try {
+      sessionStorage.setItem(AI_DRAFT_KEY, xml);
+    } catch {
+      /* storage blocked */
+    }
+    nav('/issue/advanced?draft=ai&ai=1');
+  };
   // The studio opens these exact terms (?params=), or the saved note itself when they are unchanged.
-  const customise = () => nav(from && !from.custom && JSON.stringify(from.params) === JSON.stringify(p) && from.author
-    ? `/issue/advanced?template=${from.id}` : `/issue/advanced?params=${encodeURIComponent(JSON.stringify(p))}`);
+  const customise = () =>
+    nav(
+      from && !from.custom && JSON.stringify(from.params) === JSON.stringify(p) && from.author
+        ? `/issue/advanced?template=${from.id}`
+        : `/issue/advanced?params=${encodeURIComponent(JSON.stringify(p))}`,
+    );
   const eco = economicsOf(p);
   const use = productUses(p.productType);
   const errors = validateProductParams(p);
-  const syms = p.underlyings.map(u => u.symbol);
+  const syms = p.underlyings.map((u) => u.symbol);
   const remote = p.collateralChain === 'robinhood';
-  const chainCfg = config.chains.find(c => c.key === chainKey);
+  const chainCfg = config.chains.find((c) => c.key === chainKey);
   const colToken = (c: CollateralSymbol) => collateralTokenOf(p, c)?.token ?? null;
   /** A receipt (TSLA.rh…) is offered only when the chain's config lists it (the gateway registered it). */
   const colLive = (tok: string | null) => !!tok && (!tok.endsWith('.rh') || !!chainCfg?.tokens?.[tok]);
   const delivered = (s: string) => deliverableToken(p, s)?.token ?? null;
-  const physicalOk = syms.every(s => !!delivered(s));
-  const colSyms = eco.collateral.map(c => c.symbol);
-  const sym = config.chains.find(c => c.key === chainKey)?.stablecoin.symbol ?? 'USDG';
+  const physicalOk = syms.every((s) => !!delivered(s));
+  const colSyms = eco.collateral.map((c) => c.symbol);
+  const sym = config.chains.find((c) => c.key === chainKey)?.stablecoin.symbol ?? 'USDG';
 
   // Payment timing: per issuance. A schedule minutes apart (a demo) gets seconds; a real one, days.
-  const stepSec = every.unit === 'minutes' ? every.n * 60 : every.unit === 'days' ? every.n * 86400 : every.n * 30 * 86400;
+  const stepSec =
+    every.unit === 'minutes' ? every.n * 60 : every.unit === 'days' ? every.n * 86400 : every.n * 30 * 86400;
   const demo = every.unit === 'minutes';
-  const t = timing ?? (demo ? { lag: Math.min(30, Math.floor(stepSec / 4)), grace: Math.min(60, Math.floor(stepSec / 3)) } : { lag: eco.settlementLagDays * 86400, grace: eco.gracePeriodDays * 86400 });
-  const timingBad = t.lag + t.grace > stepSec ? 'The payment date plus grace must fall before the next observation.' : t.grace > MAX_GRACE_DAYS * 86400 ? `Grace is at most ${MAX_GRACE_DAYS} days.` : '';
+  const t =
+    timing ??
+    (demo
+      ? { lag: Math.min(30, Math.floor(stepSec / 4)), grace: Math.min(60, Math.floor(stepSec / 3)) }
+      : { lag: eco.settlementLagDays * 86400, grace: eco.gracePeriodDays * 86400 });
+  const timingBad =
+    t.lag + t.grace > stepSec
+      ? 'The payment date plus grace must fall before the next observation.'
+      : t.grace > MAX_GRACE_DAYS * 86400
+        ? `Grace is at most ${MAX_GRACE_DAYS} days.`
+        : '';
   const strikeAt = Math.floor(Date.now() / 60000) * 60 + strikeIn * 60;
   const dateOf = (k: number) => {
-    if (every.unit === 'months') { const d = new Date(strikeAt * 1000); d.setUTCMonth(d.getUTCMonth() + every.n * k); return Math.floor(d.getTime() / 1000); }
+    if (every.unit === 'months') {
+      const d = new Date(strikeAt * 1000);
+      d.setUTCMonth(d.getUTCMonth() + every.n * k);
+      return Math.floor(d.getTime() / 1000);
+    }
     return strikeAt + k * every.n * (every.unit === 'days' ? 86400 : 60);
   };
-  const fmtT = (s: number) => (demo ? new Date(s * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(s * 1000).toLocaleDateString([], { dateStyle: 'medium' }));
+  const fmtT = (s: number) =>
+    demo
+      ? new Date(s * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : new Date(s * 1000).toLocaleDateString([], { dateStyle: 'medium' });
   const dur = (s: number) => (demo ? `${s}s` : `${+(s / 86400).toFixed(2)} days`);
 
   const toggleUnd = (k: keyof typeof FEEDS) => {
-    if (syms.includes(k)) { if (syms.length > 1) set({ underlyings: p.underlyings.filter(u => u.symbol !== k) }); }
-    else if (kind !== 'worst-of') set({ underlyings: [FEEDS[k]] });
+    if (syms.includes(k)) {
+      if (syms.length > 1) set({ underlyings: p.underlyings.filter((u) => u.symbol !== k) });
+    } else if (kind !== 'worst-of') set({ underlyings: [FEEDS[k]] });
     else if (syms.length < MAX_UNDERLYINGS) set({ underlyings: [...p.underlyings, FEEDS[k]] });
   };
   /** The collateral that stays pledgeable under other terms (the stablecoin when nothing does). */
   const keepCol = (q: ProductParams) => {
-    const kept = eco.collateral.filter(c => !!collateralTokenOf(q, c.symbol));
+    const kept = eco.collateral.filter((c) => !!collateralTokenOf(q, c.symbol));
     return kept.length ? kept : [{ symbol: 'USD' as const, haircutPct: 100 }];
   };
   const toggleCol = (c: CollateralSymbol) => {
-    if (colSyms.includes(c)) { if (colSyms.length > 1) set({ collateral: eco.collateral.filter(x => x.symbol !== c) }); }
-    else if (colSyms.length < MAX_COLLATERAL) set({ collateral: [...eco.collateral, { symbol: c, haircutPct: DEFAULT_HAIRCUT[c] }] });
+    if (colSyms.includes(c)) {
+      if (colSyms.length > 1) set({ collateral: eco.collateral.filter((x) => x.symbol !== c) });
+    } else if (colSyms.length < MAX_COLLATERAL)
+      set({ collateral: [...eco.collateral, { symbol: c, haircutPct: DEFAULT_HAIRCUT[c] }] });
   };
 
-  const doc: DocInfo = { name: p.name, origin: 'product', basis: p, edited: false, template: from?.summary && JSON.stringify(from.params) === JSON.stringify(p) ? from.summary : undefined };
-  const preset: IssuePreset = { chainKey, size, strikeIn, every, ratioPct: eco.collateralRatioPct, haircuts: Object.fromEntries(eco.collateral.map(c => [c.symbol, c.haircutPct])), timing: t };
+  const doc: DocInfo = {
+    name: p.name,
+    origin: 'product',
+    basis: p,
+    edited: false,
+    template: from?.summary && JSON.stringify(from.params) === JSON.stringify(p) ? from.summary : undefined,
+  };
+  const preset: IssuePreset = {
+    chainKey,
+    size,
+    strikeIn,
+    every,
+    ratioPct: eco.collateralRatioPct,
+    haircuts: Object.fromEntries(eco.collateral.map((c) => [c.symbol, c.haircutPct])),
+    timing: t,
+  };
 
   // ---- the chooser: three ways in --------------------------------------------------------------------------------
   if (!kind) {
     return (
       <main className="page iw">
         <div className="page-head">
-          <div><h1>Issue a note</h1><p>Start from a ready-made note, build your own, or describe it. Either way you set the schedule and collateral one step at a time, then review everything before it goes on-chain.</p></div>
+          <div>
+            <h1>Issue a note</h1>
+            <p>
+              Start from a ready-made note, build your own, or describe it. Either way you set the schedule and
+              collateral one step at a time, then review everything before it goes on-chain.
+            </p>
+          </div>
         </div>
         <section className="iw-door" aria-labelledby="door-ready">
-          <div className="iw-door-h"><h2 id="door-ready">Start from a ready-made note</h2><span className="small muted">Terms filled in: pick the schedule and collateral, then issue.</span></div>
+          <div className="iw-door-h">
+            <h2 id="door-ready">Start from a ready-made note</h2>
+            <span className="small muted">Terms filled in: pick the schedule and collateral, then issue.</span>
+          </div>
           <ReadyMadeList onPick={pick} />
         </section>
         <section className="iw-door" aria-labelledby="door-own">
-          <div className="iw-door-h"><h2 id="door-own">Build your own</h2><span className="small muted">Pick a note type and set every term yourself.</span></div>
+          <div className="iw-door-h">
+            <h2 id="door-own">Build your own</h2>
+            <span className="small muted">Pick a note type and set every term yourself.</span>
+          </div>
           <div className="iw-grid">
-            {PRODUCTS.map(x => (
+            {PRODUCTS.map((x) => (
               <button key={x.kind} className="iw-card" data-product={x.kind} onClick={() => choose(x.kind)}>
-                <span className="iw-ic" aria-hidden="true">{x.icon}</span>
+                <span className="iw-ic" aria-hidden="true">
+                  {x.icon}
+                </span>
                 <span className="iw-t">{x.title}</span>
                 <span className="iw-d">{x.line}</span>
               </button>
@@ -225,10 +438,20 @@ export default function IssueWizard() {
           </div>
         </section>
         <section className="iw-door" aria-labelledby="door-ai">
-          <div className="iw-door-h"><h2 id="door-ai">Describe it</h2><span className="small muted">The AI fills in the note type and terms; anything missing comes back as a question.</span></div>
+          <div className="iw-door-h">
+            <h2 id="door-ai">Describe it</h2>
+            <span className="small muted">
+              The AI fills in the note type and terms; anything missing comes back as a question.
+            </span>
+          </div>
           <DescribeIt onProduct={fromAi} onWorkflow={aiWorkflow} />
         </section>
-        <p className="iw-adv"><Link to="/issue/advanced"><Workflow className="i" />Advanced: edit the workflow on the BPMN canvas</Link></p>
+        <p className="iw-adv">
+          <Link to="/issue/advanced">
+            <Workflow className="i" />
+            Advanced: edit the workflow on the BPMN canvas
+          </Link>
+        </p>
       </main>
     );
   }
@@ -236,63 +459,151 @@ export default function IssueWizard() {
   if (key !== shown) {
     return (
       <main className="page iw">
-        <nav className="crumbs" aria-label="Breadcrumb"><Link to="/issue">Issue</Link></nav>
-        {lost ? <div className="notice warn" role="alert">{lost} <Link to="/issue">Back to Issue</Link></div> : <p className="muted">Loading the ready-made note…</p>}
+        <nav className="crumbs" aria-label="Breadcrumb">
+          <Link to="/issue">Issue</Link>
+        </nav>
+        {lost ? (
+          <div className="notice warn" role="alert">
+            {lost} <Link to="/issue">Back to Issue</Link>
+          </div>
+        ) : (
+          <p className="muted">Loading the ready-made note…</p>
+        )}
       </main>
     );
   }
 
-  const canNext = step === 1 || step === 3 ? errors.length === 0 && (step !== 3 || !timingBad) : step === 2 ? size > 0 && strikeIn >= 2 && every.n > 0 : true;
+  const canNext =
+    step === 1 || step === 3
+      ? errors.length === 0 && (step !== 3 || !timingBad)
+      : step === 2
+        ? size > 0 && strikeIn >= 2 && every.n > 0
+        : true;
 
   return (
     <main className="page iw">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to="/issue">Issue</Link><span aria-hidden="true">/</span>
-        <span>{from ? from.name : PRODUCTS.find(x => x.kind === kind)?.title ?? PRODUCT_LABELS[p.productType]}</span><span aria-hidden="true">/</span>
+        <Link to="/issue">Issue</Link>
+        <span aria-hidden="true">/</span>
+        <span>
+          {from ? from.name : (PRODUCTS.find((x) => x.kind === kind)?.title ?? PRODUCT_LABELS[p.productType])}
+        </span>
+        <span aria-hidden="true">/</span>
         <span aria-current="page">{STEPS[step]}</span>
       </nav>
       <ol className="iw-progress" aria-label="Steps">
         {STEPS.map((s, i) => (
-          <li key={s} className={i < step ? 'done' : i === step ? 'now' : ''} aria-current={i === step ? 'step' : undefined}>
-            <button disabled={i > step} onClick={() => setStep(i)}><span className="n">{i < step ? <Check className="i" /> : i + 1}</span>{s}</button>
+          <li
+            key={s}
+            className={i < step ? 'done' : i === step ? 'now' : ''}
+            aria-current={i === step ? 'step' : undefined}
+          >
+            <button disabled={i > step} onClick={() => setStep(i)}>
+              <span className="n">{i < step ? <Check className="i" /> : i + 1}</span>
+              {s}
+            </button>
           </li>
         ))}
       </ol>
 
-      {from && step < 4 && <div className="notice info iw-from">Started from the ready-made note <strong>{from.name}</strong>{from.author ? '' : ' by notes.markets'}: its terms are filled in. Change anything on the earlier steps.</div>}
-      {ready === 'ai' && step < 4 && <div className="notice info iw-from">Filled in by the AI from your description. Check every term{aiNotes.length ? ':' : '.'}{aiNotes.length > 0 && <ul>{aiNotes.map(n => <li key={n}>{n}</li>)}</ul>}</div>}
+      {from && step < 4 && (
+        <div className="notice info iw-from">
+          Started from the ready-made note <strong>{from.name}</strong>
+          {from.author ? '' : ' by notes.markets'}: its terms are filled in. Change anything on the earlier steps.
+        </div>
+      )}
+      {ready === 'ai' && step < 4 && (
+        <div className="notice info iw-from">
+          Filled in by the AI from your description. Check every term{aiNotes.length ? ':' : '.'}
+          {aiNotes.length > 0 && (
+            <ul>
+              {aiNotes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className={`iw-body ${step === 1 || step === 4 ? 'with-side' : ''}`}>
         <section className="card iw-step">
           {step === 0 && (
             <>
-              <h2><span className="iw-ic sm" aria-hidden="true">{PRODUCTS.find(x => x.kind === kind)?.icon}</span>{PRODUCT_LABELS[p.productType]}{kind === 'worst-of' ? ' on a basket' : ''}</h2>
+              <h2>
+                <span className="iw-ic sm" aria-hidden="true">
+                  {PRODUCTS.find((x) => x.kind === kind)?.icon}
+                </span>
+                {PRODUCT_LABELS[p.productType]}
+                {kind === 'worst-of' ? ' on a basket' : ''}
+              </h2>
               <div className="field">
-                <span className="lbl">{kind === 'worst-of' ? `Underlyings (2–${MAX_UNDERLYINGS}): the weakest decides` : 'Underlying'}</span>
+                <span className="lbl">
+                  {kind === 'worst-of' ? `Underlyings (2–${MAX_UNDERLYINGS}): the weakest decides` : 'Underlying'}
+                </span>
                 <div className="row iw-unds" role="group" aria-label="Underlyings">
-                  {(Object.keys(FEEDS) as Array<keyof typeof FEEDS>).map(k => (
-                    <button key={k} type="button" className={`chip ${syms.includes(k) ? 'on' : ''}`} aria-pressed={syms.includes(k)} onClick={() => toggleUnd(k)}>
-                      <AssetIcon sym={k} size={18} />{k}
+                  {(Object.keys(FEEDS) as Array<keyof typeof FEEDS>).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={`chip ${syms.includes(k) ? 'on' : ''}`}
+                      aria-pressed={syms.includes(k)}
+                      onClick={() => toggleUnd(k)}
+                    >
+                      <AssetIcon sym={k} size={18} />
+                      {k}
                     </button>
                   ))}
-                  {UNPRICED_STOCKS.map(k => (
-                    <button key={k} type="button" className="chip" disabled title={`${k}: a Robinhood Chain stock token you can hold, with no Chainlink price yet`}>
-                      <AssetIcon sym={k} size={18} />{k}
+                  {UNPRICED_STOCKS.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className="chip"
+                      disabled
+                      title={`${k}: a Robinhood Chain stock token you can hold, with no Chainlink price yet`}
+                    >
+                      <AssetIcon sym={k} size={18} />
+                      {k}
                     </button>
                   ))}
                 </div>
-                <span className="hint">Fixed by Chainlink on each asset's own chain: crypto on Ethereum, stocks on Robinhood Chain. {UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet.</span>
+                <span className="hint">
+                  Fixed by Chainlink on each asset's own chain: crypto on Ethereum, stocks on Robinhood Chain.{' '}
+                  {UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet.
+                </span>
               </div>
               <div className="field" data-issue-network>
                 <span className="lbl">Network</span>
                 <strong>{chainCfg?.name ?? 'Arbitrum Sepolia'}</strong>
-                <span className="hint">Every note is issued and paid on Arbitrum. It can deliver WETH; stocks and BTC settle in cash. Stock collateral (TSLA, AMZN, AMD, PLTR) is locked on Robinhood Chain in the Collateral step.</span>
+                <span className="hint">
+                  Every note is issued and paid on Arbitrum. It can deliver WETH; stocks and BTC settle in cash. Stock
+                  collateral (TSLA, AMZN, AMD, PLTR) is locked on Robinhood Chain in the Collateral step.
+                </span>
               </div>
-              {moved && <div className="notice info" role="note" data-moved-to-arbitrum>These terms named Robinhood Chain or delivered a stock. Notes are now issued on Arbitrum only, so they were moved there: stock settles in cash, and stock collateral is locked on Robinhood Chain.</div>}
+              {moved && (
+                <div className="notice info" role="note" data-moved-to-arbitrum>
+                  These terms named Robinhood Chain or delivered a stock. Notes are now issued on Arbitrum only, so they
+                  were moved there: stock settles in cash, and stock collateral is locked on Robinhood Chain.
+                </div>
+              )}
               {kind === 'worst-of' && (
                 <div className="field">
                   <label htmlFor="iw-base">Payoff</label>
-                  <select id="iw-base" value={p.productType} onChange={e => set({ ...EXAMPLE_PRODUCTS[e.target.value as ProductType], name: p.name, underlyings: p.underlyings, collateralChain: p.collateralChain })}>
-                    {(Object.keys(PRODUCT_LABELS) as ProductType[]).map(x => <option key={x} value={x}>{PRODUCT_LABELS[x]}</option>)}
+                  <select
+                    id="iw-base"
+                    value={p.productType}
+                    onChange={(e) =>
+                      set({
+                        ...EXAMPLE_PRODUCTS[e.target.value as ProductType],
+                        name: p.name,
+                        underlyings: p.underlyings,
+                        collateralChain: p.collateralChain,
+                      })
+                    }
+                  >
+                    {(Object.keys(PRODUCT_LABELS) as ProductType[]).map((x) => (
+                      <option key={x} value={x}>
+                        {PRODUCT_LABELS[x]}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
@@ -300,23 +611,58 @@ export default function IssueWizard() {
                 <div className="field">
                   <span className="lbl">If the price falls through the knock-in barrier, holders get</span>
                   <div className="seg" role="radiogroup" aria-label="Settlement">
-                    <button role="radio" aria-checked={(p.settlement ?? 'cash') === 'cash'} className={(p.settlement ?? 'cash') === 'cash' ? 'active' : ''} onClick={() => set({ settlement: 'cash' })}><Asset sym="USDG" size={16} />Cash</button>
-                    <button role="radio" aria-checked={p.settlement === 'physical'} className={p.settlement === 'physical' ? 'active' : ''} disabled={!physicalOk && p.settlement !== 'physical'} title={physicalOk ? undefined : `No ${syms.filter(s => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'this network'}`} onClick={() => set({ settlement: 'physical' })}><AssetStack syms={syms} size={16} label={false} />The asset itself</button>
+                    <button
+                      role="radio"
+                      aria-checked={(p.settlement ?? 'cash') === 'cash'}
+                      className={(p.settlement ?? 'cash') === 'cash' ? 'active' : ''}
+                      onClick={() => set({ settlement: 'cash' })}
+                    >
+                      <Asset sym="USDG" size={16} />
+                      Cash
+                    </button>
+                    <button
+                      role="radio"
+                      aria-checked={p.settlement === 'physical'}
+                      className={p.settlement === 'physical' ? 'active' : ''}
+                      disabled={!physicalOk && p.settlement !== 'physical'}
+                      title={
+                        physicalOk
+                          ? undefined
+                          : `No ${syms.filter((s) => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'this network'}`
+                      }
+                      onClick={() => set({ settlement: 'physical' })}
+                    >
+                      <AssetStack syms={syms} size={16} label={false} />
+                      The asset itself
+                    </button>
                   </div>
-                  <span className="hint">{physicalOk
-                    ? `The asset itself: ${syms.map(s => delivered(s)).join(', ')} on ${chainCfg?.name ?? 'the note\'s network'}.`
-                    : `No ${syms.filter(s => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'Arbitrum'}: cash only (stocks stay on Robinhood Chain).`}</span>
-                  {p.settlement === 'physical' && !physicalOk && <div className="notice warn">This network has no token to deliver for {syms.filter(s => !delivered(s)).join(', ')}: settle in cash (stock notes are cash-settled), or pick another underlying.</div>}
+                  <span className="hint">
+                    {physicalOk
+                      ? `The asset itself: ${syms.map((s) => delivered(s)).join(', ')} on ${chainCfg?.name ?? "the note's network"}.`
+                      : `No ${syms.filter((s) => !delivered(s)).join(', ')} token on ${chainCfg?.name ?? 'Arbitrum'}: cash only (stocks stay on Robinhood Chain).`}
+                  </span>
+                  {p.settlement === 'physical' && !physicalOk && (
+                    <div className="notice warn">
+                      This network has no token to deliver for {syms.filter((s) => !delivered(s)).join(', ')}: settle in
+                      cash (stock notes are cash-settled), or pick another underlying.
+                    </div>
+                  )}
                 </div>
               )}
               <div className="field">
                 <label htmlFor="iw-name">Name</label>
-                <input id="iw-name" value={p.name} onChange={e => set({ name: e.target.value })} />
+                <input id="iw-name" value={p.name} onChange={(e) => set({ name: e.target.value })} />
               </div>
               <details className="adv">
                 <summary>More options</summary>
                 <div className="adv-body form-grid">
-                  <Num id="iw-price" label="Issue price" suffix="%" value={p.issuePricePct} onChange={v => set({ issuePricePct: v })} />
+                  <Num
+                    id="iw-price"
+                    label="Issue price"
+                    suffix="%"
+                    value={p.issuePricePct}
+                    onChange={(v) => set({ issuePricePct: v })}
+                  />
                 </div>
               </details>
             </>
@@ -326,28 +672,120 @@ export default function IssueWizard() {
             <>
               <h2>Terms</h2>
               <div className="form-grid">
-                <Num id="iw-obs" label="Observations" value={p.observations} step="1" min={1} onChange={v => set({ observations: v, ...(p.autocallFromPeriod && p.autocallFromPeriod > v ? { autocallFromPeriod: 1 } : {}) })} hint="The last one is maturity." />
-                {use.coupon && <Num id="iw-cpn" label={p.productType === 'snowball' ? 'Coupon added each period' : 'Coupon each period'} suffix="%" value={p.couponRatePct} onChange={v => set({ couponRatePct: v })} hint="Paid in USDG." />}
-                {use.couponBarrier && <Num id="iw-cb" label="Coupon barrier (of strike)" suffix="%" value={p.couponBarrierPct} onChange={v => set({ couponBarrierPct: v })} />}
-                {use.autocall && <Num id="iw-ac" label="Early repayment at (of strike)" suffix="%" value={p.autocallLevelPct} onChange={v => set({ autocallLevelPct: v })} />}
-                {use.knockIn && <Num id="iw-ki" label="Knock-in barrier (of strike)" suffix="%" value={p.knockInBarrierPct} onChange={v => set({ knockInBarrierPct: v })} hint={p.settlement === 'physical' ? 'Below it at maturity: the stock.' : 'Below it at maturity: final ÷ strike in USDG.'} />}
-                {use.protection && <Num id="iw-prot" label="Protected" suffix="%" value={p.protectionPct} onChange={v => set({ protectionPct: v })} />}
-                {use.protection && <Num id="iw-part" label="Share of the upside" suffix="%" value={p.participationPct} onChange={v => set({ participationPct: v })} />}
+                <Num
+                  id="iw-obs"
+                  label="Observations"
+                  value={p.observations}
+                  step="1"
+                  min={1}
+                  onChange={(v) =>
+                    set({
+                      observations: v,
+                      ...(p.autocallFromPeriod && p.autocallFromPeriod > v ? { autocallFromPeriod: 1 } : {}),
+                    })
+                  }
+                  hint="The last one is maturity."
+                />
+                {use.coupon && (
+                  <Num
+                    id="iw-cpn"
+                    label={p.productType === 'snowball' ? 'Coupon added each period' : 'Coupon each period'}
+                    suffix="%"
+                    value={p.couponRatePct}
+                    onChange={(v) => set({ couponRatePct: v })}
+                    hint="Paid in USDG."
+                  />
+                )}
+                {use.couponBarrier && (
+                  <Num
+                    id="iw-cb"
+                    label="Coupon barrier (of strike)"
+                    suffix="%"
+                    value={p.couponBarrierPct}
+                    onChange={(v) => set({ couponBarrierPct: v })}
+                  />
+                )}
+                {use.autocall && (
+                  <Num
+                    id="iw-ac"
+                    label="Early repayment at (of strike)"
+                    suffix="%"
+                    value={p.autocallLevelPct}
+                    onChange={(v) => set({ autocallLevelPct: v })}
+                  />
+                )}
+                {use.knockIn && (
+                  <Num
+                    id="iw-ki"
+                    label="Knock-in barrier (of strike)"
+                    suffix="%"
+                    value={p.knockInBarrierPct}
+                    onChange={(v) => set({ knockInBarrierPct: v })}
+                    hint={
+                      p.settlement === 'physical'
+                        ? 'Below it at maturity: the stock.'
+                        : 'Below it at maturity: final ÷ strike in USDG.'
+                    }
+                  />
+                )}
+                {use.protection && (
+                  <Num
+                    id="iw-prot"
+                    label="Protected"
+                    suffix="%"
+                    value={p.protectionPct}
+                    onChange={(v) => set({ protectionPct: v })}
+                  />
+                )}
+                {use.protection && (
+                  <Num
+                    id="iw-part"
+                    label="Share of the upside"
+                    suffix="%"
+                    value={p.participationPct}
+                    onChange={(v) => set({ participationPct: v })}
+                  />
+                )}
               </div>
               {(use.couponBarrier || use.autocall) && (
                 <details className="adv">
                   <summary>More options</summary>
                   <div className="adv-body form-grid">
                     {use.couponBarrier && (
-                      <div className="field"><label htmlFor="iw-mem">Missed coupons paid later (memory)</label>
-                        <select id="iw-mem" value={p.memory ? 'yes' : 'no'} onChange={e => set({ memory: e.target.value === 'yes' })}><option value="yes">Yes</option><option value="no">No</option></select>
+                      <div className="field">
+                        <label htmlFor="iw-mem">Missed coupons paid later (memory)</label>
+                        <select
+                          id="iw-mem"
+                          value={p.memory ? 'yes' : 'no'}
+                          onChange={(e) => set({ memory: e.target.value === 'yes' })}
+                        >
+                          <option value="yes">Yes</option>
+                          <option value="no">No</option>
+                        </select>
                       </div>
                     )}
-                    {use.autocall && <Num id="iw-acf" label="Early repayment from observation" step="1" min={1} value={p.autocallFromPeriod ?? 1} onChange={v => set({ autocallFromPeriod: v })} />}
+                    {use.autocall && (
+                      <Num
+                        id="iw-acf"
+                        label="Early repayment from observation"
+                        step="1"
+                        min={1}
+                        value={p.autocallFromPeriod ?? 1}
+                        onChange={(v) => set({ autocallFromPeriod: v })}
+                      />
+                    )}
                   </div>
                 </details>
               )}
-              {errors.length > 0 && <ul className="issues">{errors.map(e => <li key={e} className="err">{e}</li>)}</ul>}
+              {errors.length > 0 && (
+                <ul className="issues">
+                  {errors.map((e) => (
+                    <li key={e} className="err">
+                      {e}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </>
           )}
 
@@ -355,87 +793,232 @@ export default function IssueWizard() {
             <>
               <h2>Schedule</h2>
               <div className="form-grid">
-                <Num id="is-size" label="Size" suffix={sym} value={size} min={1} onChange={v => setSize(v)} hint="Units on offer, one unit per 1 USDG of face value." />
-                <Num id="is-strike" label="Book closes in" suffix="minutes" value={strikeIn} min={2} onChange={v => setStrikeIn(Math.max(2, v || 2))} hint="The strike is fixed then." />
+                <Num
+                  id="is-size"
+                  label="Size"
+                  suffix={sym}
+                  value={size}
+                  min={1}
+                  onChange={(v) => setSize(v)}
+                  hint="Units on offer, one unit per 1 USDG of face value."
+                />
+                <Num
+                  id="is-strike"
+                  label="Book closes in"
+                  suffix="minutes"
+                  value={strikeIn}
+                  min={2}
+                  onChange={(v) => setStrikeIn(Math.max(2, v || 2))}
+                  hint="The strike is fixed then."
+                />
                 <div className="field">
                   <label htmlFor="is-every">Observe every</label>
                   <div className="row" style={{ flexWrap: 'nowrap' }}>
-                    <input id="is-every" type="number" min={1} value={every.n} onChange={e => { setEvery({ ...every, n: Number(e.target.value) || 1 }); setTiming(null); }} style={{ width: 64 }} />
-                    <select aria-label="Interval unit" value={every.unit} onChange={e => { setEvery({ ...every, unit: e.target.value as typeof every.unit }); setTiming(null); }}>
-                      <option value="minutes">minutes (demo)</option><option value="days">days</option><option value="months">months</option>
+                    <input
+                      id="is-every"
+                      type="number"
+                      min={1}
+                      value={every.n}
+                      onChange={(e) => {
+                        setEvery({ ...every, n: Number(e.target.value) || 1 });
+                        setTiming(null);
+                      }}
+                      style={{ width: 64 }}
+                    />
+                    <select
+                      aria-label="Interval unit"
+                      value={every.unit}
+                      onChange={(e) => {
+                        setEvery({ ...every, unit: e.target.value as typeof every.unit });
+                        setTiming(null);
+                      }}
+                    >
+                      <option value="minutes">minutes (demo)</option>
+                      <option value="days">days</option>
+                      <option value="months">months</option>
                     </select>
                   </div>
                 </div>
               </div>
-              <p className="small muted">On {chainCfg?.name ?? chainKey}, where every note is issued. Strike {fmtT(strikeAt)}, then {Array.from({ length: p.observations }, (_, i) => fmtT(dateOf(i + 1))).join(' · ')}.{demo ? ' Minutes apart runs a whole lifecycle while you watch.' : ''}</p>
+              <p className="small muted">
+                On {chainCfg?.name ?? chainKey}, where every note is issued. Strike {fmtT(strikeAt)}, then{' '}
+                {Array.from({ length: p.observations }, (_, i) => fmtT(dateOf(i + 1))).join(' · ')}.
+                {demo ? ' Minutes apart runs a whole lifecycle while you watch.' : ''}
+              </p>
             </>
           )}
 
           {step === 3 && (
             <>
               <h2>Collateral</h2>
-              <p className="small muted">You lock collateral for the note's whole life. Investors' USDG comes to you; if you miss a payment, holders take what they're owed from the collateral.</p>
+              <p className="small muted">
+                You lock collateral for the note's whole life. Investors' USDG comes to you; if you miss a payment,
+                holders take what they're owed from the collateral.
+              </p>
               <div className="field">
                 <span className="lbl">Held on</span>
                 <div className="seg" role="radiogroup" aria-label="Collateral held on">
-                  <button role="radio" aria-checked={!remote} className={!remote ? 'active' : ''} onClick={() => set({ collateralChain: 'note', collateral: keepCol({ ...p, collateralChain: 'note' }) })}>Arbitrum (the note's chain)</button>
-                  <button role="radio" aria-checked={remote} className={remote ? 'active' : ''} onClick={() => set({ collateralChain: 'robinhood', collateral: keepCol({ ...p, collateralChain: 'robinhood' }) })}>
-                    <img src={`${import.meta.env.BASE_URL}assets/robinhood-feather.svg`} alt="" width={14} height={14} />Robinhood Chain
+                  <button
+                    role="radio"
+                    aria-checked={!remote}
+                    className={!remote ? 'active' : ''}
+                    onClick={() =>
+                      set({ collateralChain: 'note', collateral: keepCol({ ...p, collateralChain: 'note' }) })
+                    }
+                  >
+                    Arbitrum (the note's chain)
+                  </button>
+                  <button
+                    role="radio"
+                    aria-checked={remote}
+                    className={remote ? 'active' : ''}
+                    onClick={() =>
+                      set({ collateralChain: 'robinhood', collateral: keepCol({ ...p, collateralChain: 'robinhood' }) })
+                    }
+                  >
+                    <img
+                      src={`${import.meta.env.BASE_URL}assets/robinhood-feather.svg`}
+                      alt=""
+                      width={14}
+                      height={14}
+                    />
+                    Robinhood Chain
                   </button>
                 </div>
-                <span className="hint">{remote
-                  ? 'USDG, TSLA, AMZN, AMD or PLTR stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes), and the note sends them back there when it lets them go. Nothing is bridged.'
-                  : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA, AMZN, AMD or PLTR, lock them on Robinhood Chain.'}</span>
+                <span className="hint">
+                  {remote
+                    ? 'USDG, TSLA, AMZN, AMD or PLTR stay locked in the vault on Robinhood Chain; Chainlink CCIP tells the note (about 15–25 minutes), and the note sends them back there when it lets them go. Nothing is bridged.'
+                    : 'USDG or WETH, pledged into the note on Arbitrum. To pledge TSLA, AMZN, AMD or PLTR, lock them on Robinhood Chain.'}
+                </span>
               </div>
               <div className="field">
                 <span className="lbl">Assets you lock (up to {MAX_COLLATERAL})</span>
                 <div className="row iw-unds" role="group" aria-label="Collateral">
-                  {COLLATERAL_SYMBOLS.filter(c => !!colToken(c)).map(c => {
+                  {COLLATERAL_SYMBOLS.filter((c) => !!colToken(c)).map((c) => {
                     const tok = colToken(c)!;
                     const live = colLive(tok);
                     return (
-                      <button key={c} type="button" className={`chip ${colSyms.includes(c) ? 'on' : ''}`} aria-pressed={colSyms.includes(c)} onClick={() => toggleCol(c)}
-                        disabled={!colSyms.includes(c) && (colSyms.length >= MAX_COLLATERAL || !live)} title={live ? undefined : `${tok} is not registered on the gateway yet`}>
-                        <AssetIcon sym={tok} size={18} />{lockedAsset(tok)}
+                      <button
+                        key={c}
+                        type="button"
+                        className={`chip ${colSyms.includes(c) ? 'on' : ''}`}
+                        aria-pressed={colSyms.includes(c)}
+                        onClick={() => toggleCol(c)}
+                        disabled={!colSyms.includes(c) && (colSyms.length >= MAX_COLLATERAL || !live)}
+                        title={live ? undefined : `${tok} is not registered on the gateway yet`}
+                      >
+                        <AssetIcon sym={tok} size={18} />
+                        {lockedAsset(tok)}
                       </button>
                     );
                   })}
-                  {remote && UNPRICED_STOCKS.map(k => (
-                    <button key={k} type="button" className="chip" disabled title={`${k}: held on Robinhood Chain, no Chainlink price yet`}><AssetIcon sym={k} size={18} />{k}</button>
-                  ))}
+                  {remote &&
+                    UNPRICED_STOCKS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className="chip"
+                        disabled
+                        title={`${k}: held on Robinhood Chain, no Chainlink price yet`}
+                      >
+                        <AssetIcon sym={k} size={18} />
+                        {k}
+                      </button>
+                    ))}
                 </div>
-                {remote && <span className="hint">{UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet, so they can't be pledged.</span>}
+                {remote && (
+                  <span className="hint">
+                    {UNPRICED_STOCKS.join(', ')}: held on Robinhood Chain, no Chainlink price yet, so they can't be
+                    pledged.
+                  </span>
+                )}
               </div>
               <div className="form-grid">
-                <Num id="iw-ratio" label="Collateral ratio (of size)" suffix="%" value={eco.collateralRatioPct} onChange={v => set({ collateralRatioPct: v })} hint={`${fmtMoney((eco.collateralRatioPct / 100) * size)} ${sym} of value required.`} />
-                <Num id="is-lag" label={`Pay holders within (${demo ? 'seconds' : 'days'})`} value={demo ? t.lag : t.lag / 86400} min={0} onChange={v => setTiming({ ...t, lag: Math.max(0, v || 0) * (demo ? 1 : 86400) })} hint="After each observation." />
-                <Num id="is-grace" label={`Grace period (${demo ? 'seconds' : 'days'})`} value={demo ? t.grace : t.grace / 86400} min={0} onChange={v => setTiming({ ...t, grace: Math.max(0, v || 0) * (demo ? 1 : 86400) })} hint={`Up to ${MAX_GRACE_DAYS} days, then default.`} />
+                <Num
+                  id="iw-ratio"
+                  label="Collateral ratio (of size)"
+                  suffix="%"
+                  value={eco.collateralRatioPct}
+                  onChange={(v) => set({ collateralRatioPct: v })}
+                  hint={`${fmtMoney((eco.collateralRatioPct / 100) * size)} ${sym} of value required.`}
+                />
+                <Num
+                  id="is-lag"
+                  label={`Pay holders within (${demo ? 'seconds' : 'days'})`}
+                  value={demo ? t.lag : t.lag / 86400}
+                  min={0}
+                  onChange={(v) => setTiming({ ...t, lag: Math.max(0, v || 0) * (demo ? 1 : 86400) })}
+                  hint="After each observation."
+                />
+                <Num
+                  id="is-grace"
+                  label={`Grace period (${demo ? 'seconds' : 'days'})`}
+                  value={demo ? t.grace : t.grace / 86400}
+                  min={0}
+                  onChange={(v) => setTiming({ ...t, grace: Math.max(0, v || 0) * (demo ? 1 : 86400) })}
+                  hint={`Up to ${MAX_GRACE_DAYS} days, then default.`}
+                />
               </div>
               {timingBad && <div className="notice warn">{timingBad}</div>}
               <details className="adv">
                 <summary>More options: haircuts, the default rule and how holders get paid</summary>
                 <div className="adv-body form-grid">
-                  {eco.collateral.filter(c => c.symbol !== 'USD').map(c => (
-                    <Num key={c.symbol} id={`iw-hc-${c.symbol}`} label={`${lockedAsset(colToken(c.symbol) ?? c.symbol)} counted at (of value)`} suffix="%" value={c.haircutPct} onChange={v => set({ collateral: eco.collateral.map(x => (x.symbol === c.symbol ? { ...x, haircutPct: v } : x)) })} />
-                  ))}
+                  {eco.collateral
+                    .filter((c) => c.symbol !== 'USD')
+                    .map((c) => (
+                      <Num
+                        key={c.symbol}
+                        id={`iw-hc-${c.symbol}`}
+                        label={`${lockedAsset(colToken(c.symbol) ?? c.symbol)} counted at (of value)`}
+                        suffix="%"
+                        value={c.haircutPct}
+                        onChange={(v) =>
+                          set({
+                            collateral: eco.collateral.map((x) =>
+                              x.symbol === c.symbol ? { ...x, haircutPct: v } : x,
+                            ),
+                          })
+                        }
+                      />
+                    ))}
                   <div className="field">
                     <label htmlFor="iw-default">On a default, holders get</label>
-                    <select id="iw-default" value={eco.defaultRule} onChange={e => set({ defaultRule: e.target.value as DefaultRule })}>
+                    <select
+                      id="iw-default"
+                      value={eco.defaultRule}
+                      onChange={(e) => set({ defaultRule: e.target.value as DefaultRule })}
+                    >
                       <option value="cap-at-owed">What they're owed; the rest back to you</option>
                       <option value="all-to-holders">Everything in escrow</option>
                     </select>
                   </div>
                   <div className="field">
                     <label htmlFor="iw-payouts">Holders get their payouts</label>
-                    <select id="iw-payouts" value={p.payouts ?? 'claim'} onChange={e => set({ payouts: e.target.value === 'push' ? 'push' : undefined })}>
+                    <select
+                      id="iw-payouts"
+                      value={p.payouts ?? 'claim'}
+                      onChange={(e) => set({ payouts: e.target.value === 'push' ? 'push' : undefined })}
+                    >
                       <option value="claim">By claiming them, any time (they pay their own gas)</option>
                       <option value="push">Sent to their wallets automatically (you pay the gas)</option>
                     </select>
-                    <span className="hint">{p.payouts === 'push' ? 'Your bot sends every payment to every holder: about 55,000 gas per holder per payment, paid by you.' : 'Payments wait in the note until each holder claims; one claim collects everything, with a receipt.'}</span>
+                    <span className="hint">
+                      {p.payouts === 'push'
+                        ? 'Your bot sends every payment to every holder: about 55,000 gas per holder per payment, paid by you.'
+                        : 'Payments wait in the note until each holder claims; one claim collects everything, with a receipt.'}
+                    </span>
                   </div>
                 </div>
               </details>
-              {errors.length > 0 && <ul className="issues">{errors.map(e => <li key={e} className="err">{e}</li>)}</ul>}
+              {errors.length > 0 && (
+                <ul className="issues">
+                  {errors.map((e) => (
+                    <li key={e} className="err">
+                      {e}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </>
           )}
 
@@ -443,37 +1026,96 @@ export default function IssueWizard() {
             <>
               <h2>Review & issue</h2>
               <dl className="iw-review">
-                <dt>Note</dt><dd><strong>{p.name}</strong> · {PRODUCT_LABELS[p.productType]} on <AssetStack syms={syms} size={16} /></dd>
-                <dt>Size</dt><dd>{fmtMoney(size, 0)} {sym}, book open until {fmtT(strikeAt)}; {p.observations} observations every {every.n} {every.unit}.</dd>
-                <dt>Investors get</dt><dd>{p.couponRatePct ? `${p.couponRatePct}% ${p.productType === 'snowball' ? 'added each period, paid when called' : 'coupon each period'} in USDG${p.couponBarrierPct ? ` while the worst price is at least ${p.couponBarrierPct}% of strike` : ''}. ` : ''}{p.autocallLevelPct ? `Repaid early at ${p.autocallLevelPct}% or more. ` : ''}{p.protectionPct ? `${p.protectionPct}% back at maturity plus ${p.participationPct}% of any rise. ` : ''}{p.knockInBarrierPct ? `Below ${p.knockInBarrierPct}% at maturity: ${p.settlement === 'physical' ? 'the stock instead of cash' : 'final ÷ strike in USDG'}.` : ''}</dd>
-                <dt>Payouts</dt><dd>{p.payouts === 'push' ? 'Paid to holders\' wallets automatically; you cover the gas.' : 'Holders claim any time from their portfolio; they pay their own gas.'}</dd>
+                <dt>Note</dt>
+                <dd>
+                  <strong>{p.name}</strong> · {PRODUCT_LABELS[p.productType]} on <AssetStack syms={syms} size={16} />
+                </dd>
+                <dt>Size</dt>
+                <dd>
+                  {fmtMoney(size, 0)} {sym}, book open until {fmtT(strikeAt)}; {p.observations} observations every{' '}
+                  {every.n} {every.unit}.
+                </dd>
+                <dt>Investors get</dt>
+                <dd>
+                  {p.couponRatePct
+                    ? `${p.couponRatePct}% ${p.productType === 'snowball' ? 'added each period, paid when called' : 'coupon each period'} in USDG${p.couponBarrierPct ? ` while the worst price is at least ${p.couponBarrierPct}% of strike` : ''}. `
+                    : ''}
+                  {p.autocallLevelPct ? `Repaid early at ${p.autocallLevelPct}% or more. ` : ''}
+                  {p.protectionPct
+                    ? `${p.protectionPct}% back at maturity plus ${p.participationPct}% of any rise. `
+                    : ''}
+                  {p.knockInBarrierPct
+                    ? `Below ${p.knockInBarrierPct}% at maturity: ${p.settlement === 'physical' ? 'the stock instead of cash' : 'final ÷ strike in USDG'}.`
+                    : ''}
+                </dd>
+                <dt>Payouts</dt>
+                <dd>
+                  {p.payouts === 'push'
+                    ? "Paid to holders' wallets automatically; you cover the gas."
+                    : 'Holders claim any time from their portfolio; they pay their own gas.'}
+                </dd>
                 <dt>You commit to</dt>
                 <dd>
                   <ul className="iw-list">
-                    <li>Lock {eco.collateral.map(c => lockedAsset(colToken(c.symbol) ?? c.symbol)).join(' + ')} worth at least {eco.collateralRatioPct}% of what's sold{remote ? ', on Robinhood Chain' : ''}, until the last payment.</li>
-                    <li>Fund each payment within {dur(t.lag)} of its observation; a {dur(t.grace)} grace period follows.</li>
-                    <li>If a payment is still missing, holders take {eco.defaultRule === 'cap-at-owed' ? "what they're owed" : 'everything in escrow'} from the collateral.</li>
-                    {p.payouts === 'push' && <li>Send each payment to every holder's wallet and pay the gas (run the issuer bot).</li>}
+                    <li>
+                      Lock {eco.collateral.map((c) => lockedAsset(colToken(c.symbol) ?? c.symbol)).join(' + ')} worth at
+                      least {eco.collateralRatioPct}% of what's sold{remote ? ', on Robinhood Chain' : ''}, until the
+                      last payment.
+                    </li>
+                    <li>
+                      Fund each payment within {dur(t.lag)} of its observation; a {dur(t.grace)} grace period follows.
+                    </li>
+                    <li>
+                      If a payment is still missing, holders take{' '}
+                      {eco.defaultRule === 'cap-at-owed' ? "what they're owed" : 'everything in escrow'} from the
+                      collateral.
+                    </li>
+                    {p.payouts === 'push' && (
+                      <li>Send each payment to every holder's wallet and pay the gas (run the issuer bot).</li>
+                    )}
                   </ul>
                 </dd>
               </dl>
-              {built ? <IssuePanel key={JSON.stringify(preset) + p.name} doc={doc} built={built} preset={preset} compact />
-                : <div className="notice err">This note doesn't compile: go back and check its terms.</div>}
+              {built ? (
+                <IssuePanel key={JSON.stringify(preset) + p.name} doc={doc} built={built} preset={preset} compact />
+              ) : (
+                <div className="notice err">This note doesn't compile: go back and check its terms.</div>
+              )}
               {built && (
                 <details className="adv iw-save">
                   <summary>Save as a ready-made note</summary>
-                  <div className="adv-body"><TemplatePanel key={p.name} doc={doc} build={async () => built} onSaved={() => {}} bare /></div>
+                  <div className="adv-body">
+                    <TemplatePanel key={p.name} doc={doc} build={async () => built} onSaved={() => {}} bare />
+                  </div>
                 </details>
               )}
             </>
           )}
 
           <div className="iw-nav">
-            {step > 0
-              ? <button className="btn" onClick={() => setStep(step - 1)}><ArrowLeft className="i" />Back</button>
-              : <button className="btn" onClick={() => go(null)}><ArrowLeft className="i" />Back to Issue</button>}
-            {step < 4 && <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue: {STEPS[step + 1]}<ArrowRight className="i" /></button>}
-            {step === 4 && <button className="btn" onClick={customise}><Workflow className="i" />Customise the workflow</button>}
+            {step > 0 ? (
+              <button className="btn" onClick={() => setStep(step - 1)}>
+                <ArrowLeft className="i" />
+                Back
+              </button>
+            ) : (
+              <button className="btn" onClick={() => go(null)}>
+                <ArrowLeft className="i" />
+                Back to Issue
+              </button>
+            )}
+            {step < 4 && (
+              <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
+                Continue: {STEPS[step + 1]}
+                <ArrowRight className="i" />
+              </button>
+            )}
+            {step === 4 && (
+              <button className="btn" onClick={customise}>
+                <Workflow className="i" />
+                Customise the workflow
+              </button>
+            )}
           </div>
         </section>
 

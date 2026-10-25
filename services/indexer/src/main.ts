@@ -23,7 +23,7 @@ await migrate(db);
 
 const log = (chain: string, msg: string) => console.log(`${new Date().toISOString()} [${chain}] ${msg}`);
 let stopping = false;
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function run(c: ChainConfig) {
   const ing = new Ingestor(db, c, evmSource(c.rpc, c.engine));
@@ -33,7 +33,8 @@ async function run(c: ChainConfig) {
     try {
       await ing.init();
       const r = await ing.step();
-      if (r.reorgedTo !== undefined) log(c.key, `reorg: rewound to block ${r.reorgedTo}, rebuilt ${r.notes.length} note(s)`);
+      if (r.reorgedTo !== undefined)
+        log(c.key, `reorg: rewound to block ${r.reorgedTo}, rebuilt ${r.notes.length} note(s)`);
       else if (!r.idle) log(c.key, `blocks ${r.from}-${r.to}: ${r.events} event(s), ${r.notes.length} note(s) updated`);
       backoff = 1000;
       if (r.idle) await sleep(c.pollMs ?? 2000);
@@ -45,6 +46,10 @@ async function run(c: ChainConfig) {
   }
 }
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { stopping = true; setTimeout(() => db.close().finally(() => process.exit(0)), 500); });
-log('indexer', `indexing ${cfg.chains.map(c => c.key).join(', ')}`);
+for (const sig of ['SIGINT', 'SIGTERM'] as const)
+  process.on(sig, () => {
+    stopping = true;
+    setTimeout(() => db.close().finally(() => process.exit(0)), 500);
+  });
+log('indexer', `indexing ${cfg.chains.map((c) => c.key).join(', ')}`);
 await Promise.all(cfg.chains.map(run));

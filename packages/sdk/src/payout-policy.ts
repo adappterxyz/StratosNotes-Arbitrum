@@ -33,7 +33,13 @@ export function pushPolicyFromEnv(env: Record<string, string | undefined>): Push
   const mode: PushMode = env.PUSH === '1' ? 'all' : env.PUSH === '0' ? 'off' : 'opt-in';
   const min = env.PUSH_MIN ? dec(env.PUSH_MIN) : 0n;
   if (min < 0n) throw new Error('PUSH_MIN must be zero or positive');
-  const assets = env.PUSH_ASSETS ? new Set(env.PUSH_ASSETS.split(',').map(s => s.trim()).filter(Boolean)) : null;
+  const assets = env.PUSH_ASSETS
+    ? new Set(
+        env.PUSH_ASSETS.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )
+    : null;
   const batch = BigInt(env.PUSH_BATCH ?? '100');
   if (batch <= 0n) throw new Error('PUSH_BATCH must be positive');
   return { mode, min, assets, batch };

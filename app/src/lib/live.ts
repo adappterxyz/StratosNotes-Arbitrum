@@ -23,20 +23,24 @@ async function pollUpdates() {
     if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
       const r = await fetch(seq === null ? '/api/updates' : `/api/updates?since=${seq}`, { cache: 'no-store' });
       if (r.ok) {
-        const u = await r.json() as { seq: number; changes: Change[] };
+        const u = (await r.json()) as { seq: number; changes: Change[] };
         const first = seq === null;
         seq = u.seq;
         if (!first && u.changes.length) for (const l of listeners) l(u.changes);
       }
     }
-  } catch { /* offline: try again next tick */ }
+  } catch {
+    /* offline: try again next tick */
+  }
   if (listeners.size && !timer) timer = setTimeout(pollUpdates, UPDATES_POLL_MS);
 }
 
 function subscribe(l: (changes: Change[]) => void) {
   listeners.add(l);
   if (!timer) timer = setTimeout(pollUpdates, 0);
-  return () => { listeners.delete(l); };
+  return () => {
+    listeners.delete(l);
+  };
 }
 
 /** A counter that bumps when a change matching `query` is reported (debounced), or on the fallback poll.
@@ -49,15 +53,19 @@ function useLiveTick(query: string | null) {
     const want = new URLSearchParams(query).get('notes');
     const bump = () => {
       if (debounce.current) clearTimeout(debounce.current);
-      debounce.current = setTimeout(() => setTick(x => x + 1), 250);
+      debounce.current = setTimeout(() => setTick((x) => x + 1), 250);
     };
-    const stop = subscribe(changes => {
-      if (!want || changes.some(c => c.notes === null || c.notes.includes(want))) bump();
+    const stop = subscribe((changes) => {
+      if (!want || changes.some((c) => c.notes === null || c.notes.includes(want))) bump();
     });
-    const poll = setInterval(() => setTick(x => x + 1), FALLBACK_POLL_MS);
-    return () => { stop(); clearInterval(poll); if (debounce.current) clearTimeout(debounce.current); };
+    const poll = setInterval(() => setTick((x) => x + 1), FALLBACK_POLL_MS);
+    return () => {
+      stop();
+      clearInterval(poll);
+      if (debounce.current) clearTimeout(debounce.current);
+    };
   }, [query]);
-  return [tick, useCallback(() => setTick(x => x + 1), [])] as const;
+  return [tick, useCallback(() => setTick((x) => x + 1), [])] as const;
 }
 
 export function useNotes(f: NoteFilters) {
@@ -67,10 +75,20 @@ export function useNotes(f: NoteFilters) {
   const [error, setError] = useState('');
   useEffect(() => {
     let live = true;
-    api.notes({ limit: 100, ...f })
-      .then(r => { if (live) { setNotes(r.notes); setError(''); } })
-      .catch(e => { if (live) setError(e instanceof Error ? e.message : String(e)); });
-    return () => { live = false; };
+    api
+      .notes({ limit: 100, ...f })
+      .then((r) => {
+        if (live) {
+          setNotes(r.notes);
+          setError('');
+        }
+      })
+      .catch((e) => {
+        if (live) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      live = false;
+    };
   }, [key, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   return { notes, error, refresh };
 }
@@ -81,12 +99,25 @@ export function useNote(id: string | undefined) {
   const [note, setNote] = useState<NoteDetail | null | undefined>(undefined);
   const [updatedAt, setUpdatedAt] = useState(0);
   useEffect(() => {
-    if (!id) { setNote(null); return; }
+    if (!id) {
+      setNote(null);
+      return;
+    }
     let live = true;
-    api.note(id)
-      .then(n => { if (live) { setNote(n); setUpdatedAt(Date.now()); } })
-      .catch(() => { if (live) setNote(prev => (prev === undefined ? null : prev)); });
-    return () => { live = false; };
+    api
+      .note(id)
+      .then((n) => {
+        if (live) {
+          setNote(n);
+          setUpdatedAt(Date.now());
+        }
+      })
+      .catch(() => {
+        if (live) setNote((prev) => (prev === undefined ? null : prev));
+      });
+    return () => {
+      live = false;
+    };
   }, [id, tick]);
   return { note, refresh, updatedAt };
 }
@@ -96,12 +127,29 @@ export function usePortfolio(address: string | undefined) {
   const [positions, setPositions] = useState<PortfolioItem[] | undefined>(undefined);
   const [payouts, setPayouts] = useState<PayoutItem[] | undefined>(undefined);
   useEffect(() => {
-    if (!address) { setPositions(undefined); setPayouts(undefined); return; }
+    if (!address) {
+      setPositions(undefined);
+      setPayouts(undefined);
+      return;
+    }
     let live = true;
-    api.portfolio(address)
-      .then(r => { if (live) { setPositions(r.positions); setPayouts(r.payouts ?? []); } })
-      .catch(() => { if (live) { setPositions([]); setPayouts([]); } });
-    return () => { live = false; };
+    api
+      .portfolio(address)
+      .then((r) => {
+        if (live) {
+          setPositions(r.positions);
+          setPayouts(r.payouts ?? []);
+        }
+      })
+      .catch(() => {
+        if (live) {
+          setPositions([]);
+          setPayouts([]);
+        }
+      });
+    return () => {
+      live = false;
+    };
   }, [address, tick]);
   return { positions, payouts, refresh };
 }
@@ -109,7 +157,10 @@ export function usePortfolio(address: string | undefined) {
 /** The current time (unix seconds), re-rendered every `ms`. */
 export function useNow(ms = 5000) {
   const [now, setNow] = useState(() => Date.now() / 1000);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), ms); return () => clearInterval(t); }, [ms]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now() / 1000), ms);
+    return () => clearInterval(t);
+  }, [ms]);
   return now;
 }
 
@@ -122,12 +173,22 @@ export function useDefinition(chain: string | undefined, id: string | undefined)
     if (!chain || !id) return;
     const key = `${chain}:${id}`;
     if (!defs.has(key)) {
-      defs.set(key, api.definition(chain, id).then(d => decodeEvmDef(hexToBytes(d.bytes))));
+      defs.set(
+        key,
+        api.definition(chain, id).then((d) => decodeEvmDef(hexToBytes(d.bytes))),
+      );
       defs.get(key)!.catch(() => defs.delete(key));
     }
     let live = true;
-    defs.get(key)!.then(d => { if (live) setDef(d); }).catch(() => {});
-    return () => { live = false; };
+    defs
+      .get(key)!
+      .then((d) => {
+        if (live) setDef(d);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, [chain, id]);
   return def;
 }

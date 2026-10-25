@@ -18,11 +18,20 @@ function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
-    try { localStorage.setItem('nm-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
+    try {
+      localStorage.setItem('nm-theme', dark ? 'dark' : 'light');
+    } catch {
+      /* private mode */
+    }
     window.dispatchEvent(new Event('sn-theme'));
   }, [dark]);
   return (
-    <button className="btn" onClick={() => setDark(d => !d)} aria-label={dark ? 'Switch to the light theme' : 'Switch to the dark theme'} title={dark ? 'Light theme' : 'Dark theme'}>
+    <button
+      className="btn"
+      onClick={() => setDark((d) => !d)}
+      aria-label={dark ? 'Switch to the light theme' : 'Switch to the dark theme'}
+      title={dark ? 'Light theme' : 'Dark theme'}
+    >
       {dark ? <Sun className="i" /> : <Moon className="i" />}
     </button>
   );
@@ -52,8 +61,17 @@ function Wordmark() {
   }, []);
   return (
     <span className="wordmark" aria-label="notes.markets">
-      <img className="wm-mark" src={`${import.meta.env.BASE_URL}brand/${dark ? 'mark-reversed' : 'mark'}.svg`} alt="" aria-hidden="true" />
-      <span className="wm-text" aria-hidden="true"><b>notes</b><i /><span>markets</span></span>
+      <img
+        className="wm-mark"
+        src={`${import.meta.env.BASE_URL}brand/${dark ? 'mark-reversed' : 'mark'}.svg`}
+        alt=""
+        aria-hidden="true"
+      />
+      <span className="wm-text" aria-hidden="true">
+        <b>notes</b>
+        <i />
+        <span>markets</span>
+      </span>
     </span>
   );
 }
@@ -63,13 +81,18 @@ export default function App() {
   const { config } = useChains();
   const narrow = useNarrow();
   const [menu, setMenu] = useState(false);
-  useEffect(() => { setMenu(false); }, [pathname, narrow]);
+  useEffect(() => {
+    setMenu(false);
+  }, [pathname, narrow]);
   useEffect(() => watchTables(), []);
-  const networks = config.chains.map(c => c.name).join(' · ');
+  const networks = config.chains.map((c) => c.name).join(' · ');
   const workspace = pathname.startsWith('/issue');
   const extras = (
     <>
-      <span className="pill plain" title="Networks this deployment serves"><span className="dot" style={{ color: 'hsl(var(--success))' }} />{networks}</span>
+      <span className="pill plain" title="Networks this deployment serves">
+        <span className="dot" style={{ color: 'hsl(var(--success))' }} />
+        {networks}
+      </span>
       <FaucetButton />
       <RoleSwitch />
       <ThemeToggle />
@@ -80,24 +103,48 @@ export default function App() {
       <NewVersion />
       <header className={`appbar${menu ? ' open' : ''}`}>
         <div className="appbar-row">
-          <Link to="/" className="brand" aria-label="notes.markets marketplace"><Wordmark /></Link>
+          <Link to="/" className="brand" aria-label="notes.markets marketplace">
+            <Wordmark />
+          </Link>
           <nav className="seg main-nav" aria-label="Sections">
-            <NavLink to="/" end><LayoutGrid className="i" />Marketplace</NavLink>
-            <NavLink to="/issue"><PenTool className="i" />Issue</NavLink>
-            <NavLink to="/portfolio"><Briefcase className="i" />Portfolio</NavLink>
-            <NavLink to="/alerts"><Mail className="i" />Alerts</NavLink>
+            <NavLink to="/" end>
+              <LayoutGrid className="i" />
+              Marketplace
+            </NavLink>
+            <NavLink to="/issue">
+              <PenTool className="i" />
+              Issue
+            </NavLink>
+            <NavLink to="/portfolio">
+              <Briefcase className="i" />
+              Portfolio
+            </NavLink>
+            <NavLink to="/alerts">
+              <Mail className="i" />
+              Alerts
+            </NavLink>
           </nav>
           <div className="right">
             {!narrow && extras}
             <ConnectButton chainStatus="icon" accountStatus={narrow ? 'avatar' : 'address'} showBalance={false} />
             {narrow && (
-              <button className="btn menu-btn" aria-label={menu ? 'Close menu' : 'Open menu'} aria-expanded={menu} aria-controls="appbar-sheet" onClick={() => setMenu(m => !m)}>
+              <button
+                className="btn menu-btn"
+                aria-label={menu ? 'Close menu' : 'Open menu'}
+                aria-expanded={menu}
+                aria-controls="appbar-sheet"
+                onClick={() => setMenu((m) => !m)}
+              >
                 {menu ? <X className="i" /> : <Menu className="i" />}
               </button>
             )}
           </div>
         </div>
-        {narrow && menu && <div id="appbar-sheet" className="appbar-sheet">{extras}</div>}
+        {narrow && menu && (
+          <div id="appbar-sheet" className="appbar-sheet">
+            {extras}
+          </div>
+        )}
       </header>
       <Routes>
         <Route path="/" element={<Marketplace />} />
@@ -113,8 +160,17 @@ export default function App() {
       </Routes>
       {!workspace && (
         <footer className="foot">
-          <span>notes.markets · testnet. Each note is a workflow run by one contract; Chainlink CRE writes the strikes and observations.</span>
-          {config.chains.filter(c => c.explorer).map(c => <a key={c.key} href={`${c.explorer}/address/${c.engine}`} target="_blank" rel="noreferrer">Engine on {c.name}</a>)}
+          <span>
+            notes.markets · testnet. Each note is a workflow run by one contract; Chainlink CRE writes the strikes and
+            observations.
+          </span>
+          {config.chains
+            .filter((c) => c.explorer)
+            .map((c) => (
+              <a key={c.key} href={`${c.explorer}/address/${c.engine}`} target="_blank" rel="noreferrer">
+                Engine on {c.name}
+              </a>
+            ))}
         </footer>
       )}
     </>
@@ -122,7 +178,9 @@ export default function App() {
 }
 
 /** The app's own bundle, as named in the page that loaded it. */
-const loadedBundle = () => document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.getAttribute('src') ?? null;
+const loadedBundle = () =>
+  document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.getAttribute('src') ??
+  null;
 
 /**
  * A tab opened before a deploy keeps running the code it loaded. Every few minutes (and when the tab comes back into
@@ -139,17 +197,28 @@ function NewVersion() {
         const html = await (await fetch(`${import.meta.env.BASE_URL}?v=${Date.now()}`, { cache: 'no-store' })).text();
         const live = /src="([^"]*\/assets\/index-[^"]+\.js)"/.exec(html)?.[1];
         if (!off && live && live !== mine) setStale(true);
-      } catch { /* offline: try later */ }
+      } catch {
+        /* offline: try later */
+      }
     };
     const t = setInterval(check, 5 * 60_000);
-    const vis = () => { if (document.visibilityState === 'visible') void check(); };
+    const vis = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
     document.addEventListener('visibilitychange', vis);
-    return () => { off = true; clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+    return () => {
+      off = true;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', vis);
+    };
   }, []);
   if (!stale) return null;
   return (
     <div className="notice ok new-version" role="status">
-      A newer version of notes.markets is live. <button type="button" className="btn sm" onClick={() => window.location.reload()}>Reload</button>
+      A newer version of notes.markets is live.{' '}
+      <button type="button" className="btn sm" onClick={() => window.location.reload()}>
+        Reload
+      </button>
     </div>
   );
 }

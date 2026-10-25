@@ -77,9 +77,19 @@ export class Store {
  * A statement that fails (rolling back its batch) unless `sql` (a scalar subquery) equals `expected`. SQLite's
  * json() raises "malformed JSON" on its argument, which is only evaluated when the condition is false.
  */
-export function guard(store: Store, sql: string, params: unknown[], expected: unknown, reason: string): D1PreparedStatement {
+export function guard(
+  store: Store,
+  sql: string,
+  params: unknown[],
+  expected: unknown,
+  reason: string,
+): D1PreparedStatement {
   const n = params.length + 1;
-  return store.stmt(`SELECT CASE WHEN (${sql}) IS ?${n} THEN 1 ELSE json(?${n + 1}) END AS ok`, [...params, expected, `guard: ${reason}`]);
+  return store.stmt(`SELECT CASE WHEN (${sql}) IS ?${n} THEN 1 ELSE json(?${n + 1}) END AS ok`, [
+    ...params,
+    expected,
+    `guard: ${reason}`,
+  ]);
 }
 
 /** True when an error is a failed `guard` (another writer got there first), not a real failure. */
@@ -115,13 +125,26 @@ export function chunks<T>(xs: T[], size = 90): T[][] {
 
 /** Apply migration files (tests and `wrangler dev` without the CLI): each statement in order, once. */
 export async function applyMigrations(db: D1Database, migrations: Array<{ name: string; sql: string }>) {
-  await db.prepare('CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
-  const done = new Set(((await db.prepare('SELECT name FROM d1_migrations').all<{ name: string }>()).results).map(r => r.name));
+  await db
+    .prepare(
+      'CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)',
+    )
+    .run();
+  const done = new Set(
+    (await db.prepare('SELECT name FROM d1_migrations').all<{ name: string }>()).results.map((r) => r.name),
+  );
   for (const m of migrations) {
     if (done.has(m.name)) continue;
     const stmts = m.sql
-      .split('\n').filter(l => !l.trim().startsWith('--')).join('\n')
-      .split(/;\s*(?:\n|$)/).map(s => s.trim()).filter(Boolean);
-    await db.batch([...stmts.map(s => db.prepare(s)), db.prepare('INSERT INTO d1_migrations (name) VALUES (?1)').bind(m.name)]);
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('--'))
+      .join('\n')
+      .split(/;\s*(?:\n|$)/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    await db.batch([
+      ...stmts.map((s) => db.prepare(s)),
+      db.prepare('INSERT INTO d1_migrations (name) VALUES (?1)').bind(m.name),
+    ]);
   }
 }

@@ -16,13 +16,30 @@ const addr = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 
 /** Cross-chain collateral (docs/CROSS-CHAIN.md), passed to the app as is. */
 const CrossChainCfg = z.object({
-  role: z.enum(['home', 'asset']), router: addr, selector: z.string().regex(/^\d+$/),
-  gateway: addr.optional(), vault: addr.optional(),
+  role: z.enum(['home', 'asset']),
+  router: addr,
+  selector: z.string().regex(/^\d+$/),
+  gateway: addr.optional(),
+  vault: addr.optional(),
   home: z.object({ chain: z.string(), gateway: addr, selector: z.string() }).optional(),
-  remotes: z.array(z.object({
-    chain: z.string(), selector: z.string(), vault: addr,
-    receipts: z.record(z.object({ receipt: addr, token: addr, decimals: z.number().int(), valuedAs: z.string().nullable(), note: z.string().optional() })),
-  })).optional(),
+  remotes: z
+    .array(
+      z.object({
+        chain: z.string(),
+        selector: z.string(),
+        vault: addr,
+        receipts: z.record(
+          z.object({
+            receipt: addr,
+            token: addr,
+            decimals: z.number().int(),
+            valuedAs: z.string().nullable(),
+            note: z.string().optional(),
+          }),
+        ),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -74,12 +91,14 @@ export const ApiConfig = z.object({
   trustProxy: z.boolean().default(false),
   chains: z.array(ChainCfg),
   ai: z.boolean().default(false),
-  limits: z.object({
-    readsPerMinute: z.number().default(600),
-    aiPerHour: z.number().default(60),
-    templatesPerHour: z.number().default(20),
-    faucetPerHour: z.number().default(6),
-    streamsPerIp: z.number().default(10),
-  }).default({}),
+  limits: z
+    .object({
+      readsPerMinute: z.number().default(600),
+      aiPerHour: z.number().default(60),
+      templatesPerHour: z.number().default(20),
+      faucetPerHour: z.number().default(6),
+      streamsPerIp: z.number().default(10),
+    })
+    .default({}),
 });
 export type ApiConfig = z.infer<typeof ApiConfig>;

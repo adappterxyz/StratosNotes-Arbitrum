@@ -14,7 +14,15 @@ const SCALE_BIG = 10_000_000_000n;
 
 export type EngineEvent =
   | { name: 'DefinitionRegistered'; id: string; creator: string; meta: string }
-  | { name: 'ProcessStarted'; pid: string; definition: string; creator: string; ref: string; roles: string[]; assetTokens: string[] }
+  | {
+      name: 'ProcessStarted';
+      pid: string;
+      definition: string;
+      creator: string;
+      ref: string;
+      roles: string[];
+      assetTokens: string[];
+    }
   | { name: 'StepRun'; pid: string; step: number; kind: number; actor: string }
   | { name: 'FieldSet'; pid: string; field: number; value: FieldValue }
   | { name: 'HoldingChanged'; pid: string; asset: number; owner: string; balance: string }
@@ -29,13 +37,34 @@ export type EngineEvent =
    * holder of `holding` units but the payer, O(1) on-chain (an accumulator). The read model credits each holder
    * here; `retire` redeems the units with it. `period` counts this asset's distributions on the note (1-based).
    */
-  | { name: 'DistributionRecorded'; pid: string; asset: number; period: number; holding: number; step: number; payer: string; perUnit: string; total: string; supply: string; retire: boolean; hash: string }
+  | {
+      name: 'DistributionRecorded';
+      pid: string;
+      asset: number;
+      period: number;
+      holding: number;
+      step: number;
+      payer: string;
+      perUnit: string;
+      total: string;
+      supply: string;
+      retire: boolean;
+      hash: string;
+    }
   /** A payout sent to a holder's wallet (the holder's claim, or a push): `amount` in the token's base units; `payoutId` is its receipt id. */
   | { name: 'PayoutPaid'; pid: string; asset: number; period: number; holder: string; amount: string; payoutId: string }
   /** A payment that could not be sent (e.g. a frozen address): it stays claimable. */
   | { name: 'PayoutDeferred'; pid: string; asset: number; period: number; holder: string; amount: string }
   /** A push round reached the last holder (or was superseded): its count, total and rolling hash of payoutIds. */
-  | { name: 'DistributionSettled'; pid: string; asset: number; period: number; paidCount: number; paidTotal: string; rollingHash: string }
+  | {
+      name: 'DistributionSettled';
+      pid: string;
+      asset: number;
+      period: number;
+      paidCount: number;
+      paidTotal: string;
+      rollingHash: string;
+    }
   /** `via`: which agent submitted the report, classified when ingested. */
   | { name: 'ReportProcessed'; pid: string; step: number; values: string[]; reporter: string; via: 'cre' | 'fallback' }
   | { name: 'ProcessCompleted'; pid: string }
@@ -68,11 +97,24 @@ export const normAccount = (a: string) => (/^0x[0-9a-fA-F]{40}$/.test(a) ? a.toL
 export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext): NoteState | null {
   if (e.name === 'ProcessStarted') {
     return {
-      id: noteId(ctx.chain, ctx.engine, e.pid), chain: ctx.chain, engine: ctx.engine.toLowerCase(), pid: e.pid,
-      definition: e.definition, creator: normAccount(e.creator), ref: e.ref,
-      roles: e.roles.map(normAccount), assetTokens: e.assetTokens.map(normAccount),
-      status: 0, tokens: [], stepsRun: 0, values: {}, holdings: [], createdAt: ctx.at, updatedAt: ctx.at,
-      reports: { cre: 0, fallback: 0, last: null }, milestones: [],
+      id: noteId(ctx.chain, ctx.engine, e.pid),
+      chain: ctx.chain,
+      engine: ctx.engine.toLowerCase(),
+      pid: e.pid,
+      definition: e.definition,
+      creator: normAccount(e.creator),
+      ref: e.ref,
+      roles: e.roles.map(normAccount),
+      assetTokens: e.assetTokens.map(normAccount),
+      status: 0,
+      tokens: [],
+      stepsRun: 0,
+      values: {},
+      holdings: [],
+      createdAt: ctx.at,
+      updatedAt: ctx.at,
+      reports: { cre: 0, fallback: 0, last: null },
+      milestones: [],
     };
   }
   if (!s) return null; // an event for a process whose start we have not seen (e.g. before the start block)
@@ -83,7 +125,7 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
       break;
     case 'HoldingChanged': {
       const owner = normAccount(e.owner);
-      const rest = s.holdings.filter(h => !(h.asset === e.asset && h.owner === owner));
+      const rest = s.holdings.filter((h) => !(h.asset === e.asset && h.owner === owner));
       n.holdings = e.balance === '0' ? rest : [...rest, { asset: e.asset, owner, balance: e.balance }];
       n.holdings.sort((a, b) => a.asset - b.asset || a.owner.localeCompare(b.owner));
       break;
@@ -107,15 +149,23 @@ export function applyEvent(s: NoteState | null, e: NoteEvent, ctx: EventContext)
           if (pay > 0n) credit.set(h.owner, pay);
         }
       }
-      let holdings = s.holdings.map(h => (h.asset === e.asset && credit.has(h.owner) ? { ...h, balance: (BigInt(h.balance) + credit.get(h.owner)!).toString() } : h));
-      for (const [owner, pay] of credit) if (!holdings.some(h => h.asset === e.asset && h.owner === owner)) holdings.push({ asset: e.asset, owner, balance: pay.toString() });
+      let holdings = s.holdings.map((h) =>
+        h.asset === e.asset && credit.has(h.owner)
+          ? { ...h, balance: (BigInt(h.balance) + credit.get(h.owner)!).toString() }
+          : h,
+      );
+      for (const [owner, pay] of credit)
+        if (!holdings.some((h) => h.asset === e.asset && h.owner === owner))
+          holdings.push({ asset: e.asset, owner, balance: pay.toString() });
       // Redeemed: the units read zero from now on (the chain retires them in one write, not per holder).
-      if (e.retire) holdings = holdings.filter(h => h.asset !== e.holding);
+      if (e.retire) holdings = holdings.filter((h) => h.asset !== e.holding);
       n.holdings = holdings.sort((a, b) => a.asset - b.asset || a.owner.localeCompare(b.owner));
       break;
     }
     case 'TokensUpdated':
-      n.status = e.status; n.stepsRun = e.stepsRun; n.tokens = [...e.tokens];
+      n.status = e.status;
+      n.stepsRun = e.stepsRun;
+      n.tokens = [...e.tokens];
       break;
     case 'ReportProcessed':
       n.reports = { ...s.reports, [e.via]: s.reports[e.via] + 1, last: e.via };

@@ -19,14 +19,36 @@ const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
 const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });
 const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
-const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
+const field = (n: string) => c.def.fields.findIndex((f) => f.name === n);
 const NOTE = 'local:' + ENGINE + ':1';
 
-const registered: FakeEvent = { eventName: 'DefinitionRegistered', args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) } };
-const started: FakeEvent = { eventName: 'ProcessStarted', args: { pid: 1n, definition: defId, creator: ISSUER, ref: 1n, roles: [ISSUER, ISSUER, ZERO], assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'] } };
-const num = (f: string, v: bigint): FakeEvent => ({ eventName: 'FieldSet', args: { pid: 1n, field: field(f), tag: 1, value: `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` } });
-const hold = (owner: string, asset: number, units: number): FakeEvent => ({ eventName: 'HoldingChanged', args: { pid: 1n, asset, owner, balance: dec(units) } });
-const tokens = (t: number[], status = 0): FakeEvent => ({ eventName: 'TokensUpdated', args: { pid: 1n, status, stepsRun: 1, tokens: t } });
+const registered: FakeEvent = {
+  eventName: 'DefinitionRegistered',
+  args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) },
+};
+const started: FakeEvent = {
+  eventName: 'ProcessStarted',
+  args: {
+    pid: 1n,
+    definition: defId,
+    creator: ISSUER,
+    ref: 1n,
+    roles: [ISSUER, ISSUER, ZERO],
+    assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'],
+  },
+};
+const num = (f: string, v: bigint): FakeEvent => ({
+  eventName: 'FieldSet',
+  args: { pid: 1n, field: field(f), tag: 1, value: `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` },
+});
+const hold = (owner: string, asset: number, units: number): FakeEvent => ({
+  eventName: 'HoldingChanged',
+  args: { pid: 1n, asset, owner, balance: dec(units) },
+});
+const tokens = (t: number[], status = 0): FakeEvent => ({
+  eventName: 'TokensUpdated',
+  args: { pid: 1n, status, stepsRun: 1, tokens: t },
+});
 
 let db: Db;
 let chain: FakeChain;
@@ -41,12 +63,14 @@ beforeEach(async () => {
   ing = new Ingestor(db, cfg, chain);
   await ing.init();
 });
-afterEach(async () => { await db.close(); });
+afterEach(async () => {
+  await db.close();
+});
 
 function issueAndSubscribe() {
-  chain.mine([registered]);                                                       // 1
+  chain.mine([registered]); // 1
   chain.mine([started, num('notional', dec(1000)), hold(ISSUER, 0, 1000), tokens([c.stepIndex.Task_Subscribe])]); // 2
-  chain.mine([hold(ISSUER, 0, 400), hold(ALICE, 0, 600)]);                         // 3
+  chain.mine([hold(ISSUER, 0, 400), hold(ALICE, 0, 600)]); // 3
 }
 
 const state = async () => (await loadNote(db, NOTE)) as NoteState;
@@ -64,9 +88,12 @@ describe('indexer', () => {
     expect(def?.name).toBe(c.def.name);
     const v = noteView(def!, s, 0);
     expect(v.sold).toBe(600);
-    const [row] = await db.query<{ product_type: string; underlyings: string[]; window_open: boolean }>('SELECT product_type, underlyings, window_open FROM notes WHERE id = $1', [NOTE]);
+    const [row] = await db.query<{ product_type: string; underlyings: string[]; window_open: boolean }>(
+      'SELECT product_type, underlyings, window_open FROM notes WHERE id = $1',
+      [NOTE],
+    );
     expect(row).toEqual({ product_type: 'phoenix', underlyings: ['ETH'], window_open: true });
-    const [h] = await db.query<{ owner: string }>("SELECT owner FROM holdings WHERE owner = $1", [ALICE]);
+    const [h] = await db.query<{ owner: string }>('SELECT owner FROM holdings WHERE owner = $1', [ALICE]);
     expect(h.owner).toBe(ALICE);
   });
 
@@ -84,7 +111,7 @@ describe('indexer', () => {
   it('undoes a reorg: orphaned events are removed and the note is rebuilt from the new chain', async () => {
     issueAndSubscribe();
     await ing.catchUp();
-    expect((await state()).holdings.find(h => h.owner === ALICE)).toBeTruthy();
+    expect((await state()).holdings.find((h) => h.owner === ALICE)).toBeTruthy();
     // Block 3 (Alice's subscription) is replaced: Bob subscribed 250 instead, one block later.
     chain.reorg(3n, [[], [hold(ISSUER, 0, 750), hold(BOB, 0, 250)]]);
     const r = await ing.step();
@@ -95,9 +122,9 @@ describe('indexer', () => {
       { asset: 0, owner: BOB, balance: dec(250).toString() },
       { asset: 0, owner: ISSUER, balance: dec(750).toString() },
     ]);
-    expect(await db.query("SELECT owner FROM holdings WHERE owner = $1", [ALICE])).toEqual([]);
+    expect(await db.query('SELECT owner FROM holdings WHERE owner = $1', [ALICE])).toEqual([]);
     const blocks = await db.query<{ block: string }>('SELECT DISTINCT block FROM events ORDER BY block');
-    expect(blocks.map(b => Number(b.block))).toEqual([1, 2, 4]);
+    expect(blocks.map((b) => Number(b.block))).toEqual([1, 2, 4]);
   });
 
   it('undoes a reorg that removes the note itself', async () => {
@@ -119,7 +146,10 @@ describe('indexer', () => {
 
   it('tells CRE reports from fallback ones, by the fallback reporter in force at the time', async () => {
     issueAndSubscribe();
-    const report = (reporter: string): FakeEvent => ({ eventName: 'ReportProcessed', args: { pid: 1n, step: c.stepIndex.Task_FixStrike, values: [dec(2500)], reporter } });
+    const report = (reporter: string): FakeEvent => ({
+      eventName: 'ReportProcessed',
+      args: { pid: 1n, step: c.stepIndex.Task_FixStrike, values: [dec(2500)], reporter },
+    });
     chain.mine([report(FORWARDER)]);
     chain.mine([{ eventName: 'FallbackReporterUpdated', args: { previous: ZERO, next: FALLBACK } }, report(FALLBACK)]);
     await ing.catchUp();
@@ -128,12 +158,12 @@ describe('indexer', () => {
 
   it('notifies listeners with the notes that changed', async () => {
     const got: string[] = [];
-    const stop = await db.listen(NOTIFY_CHANNEL, p => got.push(p));
+    const stop = await db.listen(NOTIFY_CHANNEL, (p) => got.push(p));
     issueAndSubscribe();
     await ing.catchUp();
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
     await stop();
-    expect(got.map(g => JSON.parse(g))).toContainEqual({ chain: 'local', notes: [NOTE] });
+    expect(got.map((g) => JSON.parse(g))).toContainEqual({ chain: 'local', notes: [NOTE] });
   });
 
   it('refuses a definition whose bytes do not hash to its id', async () => {

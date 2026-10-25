@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { EXAMPLE_PRODUCTS, EXAMPLE_WORST_OF, FEEDS, type ProductParams } from '@sn/core';
 import { assetsPhrase, inTime, listingOf, simpleStatus } from './listing';
 
-const DAY = 86400, YEAR = 365.25 * DAY;
+const DAY = 86400,
+  YEAR = 365.25 * DAY;
 // A real schedule: 4 quarterly observations over a year.
-const quarterly = (start = 1_800_000_000) => ({ strikeDate: start, obsDates: [1, 2, 3, 4].map(k => start + (k * YEAR) / 4) });
+const quarterly = (start = 1_800_000_000) => ({
+  strikeDate: start,
+  obsDates: [1, 2, 3, 4].map((k) => start + (k * YEAR) / 4),
+});
 
 describe('listingOf: the annual rate and plain specs', () => {
   it('fixed coupon note: a fixed annual rate', () => {
@@ -19,7 +23,13 @@ describe('listingOf: the annual rate and plain specs', () => {
   });
 
   it('reverse convertible: fixed rate, money back above the barrier, stock below when physical', () => {
-    const p: ProductParams = { ...EXAMPLE_PRODUCTS['reverse-convertible'], underlyings: [FEEDS.TSLA], couponRatePct: 3, knockInBarrierPct: 60, settlement: 'physical' };
+    const p: ProductParams = {
+      ...EXAMPLE_PRODUCTS['reverse-convertible'],
+      underlyings: [FEEDS.TSLA],
+      couponRatePct: 3,
+      knockInBarrierPct: 60,
+      settlement: 'physical',
+    };
     const l = listingOf(p, quarterly());
     expect(l.yield.headline).toBe('12%');
     expect(l.protection).toBe('Your money back if Tesla stays above 60%; below it, you get the stock');
@@ -28,7 +38,16 @@ describe('listingOf: the annual rate and plain specs', () => {
   });
 
   it('phoenix with memory on a basket: "up to", conditional, early repayment in months', () => {
-    const p: ProductParams = { ...EXAMPLE_WORST_OF, underlyings: [FEEDS.TSLA, FEEDS.NVDA], couponRatePct: 2.5, couponBarrierPct: 70, memory: true, autocallLevelPct: 100, autocallFromPeriod: 2, knockInBarrierPct: 60 };
+    const p: ProductParams = {
+      ...EXAMPLE_WORST_OF,
+      underlyings: [FEEDS.TSLA, FEEDS.NVDA],
+      couponRatePct: 2.5,
+      couponBarrierPct: 70,
+      memory: true,
+      autocallLevelPct: 100,
+      autocallFromPeriod: 2,
+      knockInBarrierPct: 60,
+    };
     const l = listingOf(p, quarterly());
     expect(l.yield.headline).toBe('Up to 10%');
     expect(l.yield.qualifier).toBe('if the weaker one stays above 70%');
@@ -55,8 +74,13 @@ describe('listingOf: the annual rate and plain specs', () => {
 
   it('demo schedules annualise from the design and say so', () => {
     const start = 1_800_000_000;
-    const p: ProductParams = { ...EXAMPLE_PRODUCTS.phoenix, name: '12M Phoenix on ETH', couponRatePct: 2.5, observations: 4 };
-    const l = listingOf(p, { strikeDate: start, obsDates: [1, 2, 3, 4].map(k => start + k * DAY) });
+    const p: ProductParams = {
+      ...EXAMPLE_PRODUCTS.phoenix,
+      name: '12M Phoenix on ETH',
+      couponRatePct: 2.5,
+      observations: 4,
+    };
+    const l = listingOf(p, { strikeDate: start, obsDates: [1, 2, 3, 4].map((k) => start + k * DAY) });
     expect(l.yield.headline).toBe('Up to 10%');
     expect(l.demo).toBe(true);
     expect(l.term).toBe('about 4 days (demo schedule)');
@@ -64,7 +88,9 @@ describe('listingOf: the annual rate and plain specs', () => {
   });
 
   it('without dates, the design sets the rate', () => {
-    expect(listingOf({ ...EXAMPLE_PRODUCTS.fcn, name: '6M FCN on BTC', couponRatePct: 1, observations: 6 }).yield.headline).toBe('12%');
+    expect(
+      listingOf({ ...EXAMPLE_PRODUCTS.fcn, name: '6M FCN on BTC', couponRatePct: 1, observations: 6 }).yield.headline,
+    ).toBe('12%');
   });
 });
 
@@ -74,7 +100,13 @@ describe('helpers', () => {
     expect(assetsPhrase(['ETH', 'BTC', 'SOL'])).toBe('Ethereum, Bitcoin & Solana: the weakest counts');
   });
   it('maps phases to simple statuses', () => {
-    expect(['book', 'fixing', 'live', 'redeemed', 'defaulted'].map(simpleStatus)).toEqual(['open', 'running', 'running', 'paid', 'defaulted']);
+    expect(['book', 'fixing', 'live', 'redeemed', 'defaulted'].map(simpleStatus)).toEqual([
+      'open',
+      'running',
+      'running',
+      'paid',
+      'defaulted',
+    ]);
   });
   it('says when, roughly', () => {
     expect(inTime(1000 + 2 * DAY, 1000)).toBe('in 2 days');

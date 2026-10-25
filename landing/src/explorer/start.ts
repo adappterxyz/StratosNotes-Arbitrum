@@ -13,4 +13,10 @@ export interface ExplorerStart {
   physical?: boolean;
 }
 
-export const DEFAULT_START: ExplorerStart = { role: 'investor', goal: 'yield', type: 'phoenix', syms: ['ETH'], preset: 'Dip & recover' };
+export const DEFAULT_START: ExplorerStart = {
+  role: 'investor',
+  goal: 'yield',
+  type: 'phoenix',
+  syms: ['ETH'],
+  preset: 'Dip & recover',
+};

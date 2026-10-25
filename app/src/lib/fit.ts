@@ -3,5 +3,11 @@
 export function fitReadable(canvas: any, min = 0.6) {
   canvas.zoom('fit-viewport');
   const vb = canvas.viewbox();
-  if (vb.scale < min) canvas.viewbox({ x: vb.inner.x - 20, y: vb.inner.y - 20, width: vb.outer.width / min, height: vb.outer.height / min });
+  if (vb.scale < min)
+    canvas.viewbox({
+      x: vb.inner.x - 20,
+      y: vb.inner.y - 20,
+      width: vb.outer.width / min,
+      height: vb.outer.height / min,
+    });
 }

@@ -1,10 +1,12 @@
 import type { NoteView } from '@sn/sdk';
 import { BaseError, ContractFunctionRevertedError } from 'viem';
 
-export const fmtMoney = (x: number, dp = 2) => (Number.isFinite(x) ? x : 0).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+export const fmtMoney = (x: number, dp = 2) =>
+  (Number.isFinite(x) ? x : 0).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
 export const fmtPrice = (x: number) => x.toLocaleString(undefined, { maximumFractionDigits: 2 });
 export const fmtPct = (r: number) => `${(r * 100).toFixed(1)}%`;
-export const fmtDate = (t: number) => (t ? new Date(t * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+export const fmtDate = (t: number) =>
+  t ? new Date(t * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 export const short = (s: string) => `${s.slice(0, 6)}…${s.slice(-4)}`;
 
 /** What happens next, in a few words. */
@@ -13,7 +15,8 @@ export function nextEvent(o: NoteView) {
   if (o.phase === 'defaulted') return 'Defaulted: collateral to holders';
   if (e?.marginCall) return `Margin call: top-up due ${fmtDate(e.marginCall.deadline)}`;
   if (e?.inGrace) return `Payment ${e.inGrace.period} in grace until ${fmtDate(e.inGrace.deadline)}`;
-  if (e?.nextCall) return `Payment ${e.nextCall.period} ${e.nextCall.funded ? 'funded' : 'due'} ${fmtDate(e.nextCall.payDate)}`;
+  if (e?.nextCall)
+    return `Payment ${e.nextCall.period} ${e.nextCall.funded ? 'funded' : 'due'} ${fmtDate(e.nextCall.payDate)}`;
   if (o.phase === 'book') return o.strikeDate ? `Book closes ${fmtDate(o.strikeDate)}` : 'Book open';
   if (o.phase === 'fixing') return 'Waiting for the strike fixing';
   if (o.phase === 'live') {
@@ -35,7 +38,8 @@ export function agentLabel(o: Pick<NoteView, 'reports'>) {
  * Robinhood Chain vault) reads as "TSLA". */
 export const lockedAsset = (token: string) => token.replace(/\.rh$/, '');
 /** "TSLA on Robinhood Chain" for a locked asset, else the token itself. */
-export const lockedAssetWhere = (token: string) => (token.endsWith('.rh') ? `${lockedAsset(token)} on Robinhood Chain` : token);
+export const lockedAssetWhere = (token: string) =>
+  token.endsWith('.rh') ? `${lockedAsset(token)} on Robinhood Chain` : token;
 
 /** What the engine's refusals mean, in the words a person acting on the page would use. */
 const ENGINE_ERRORS: Record<string, string> = {
@@ -57,18 +61,26 @@ const ENGINE_ERRORS: Record<string, string> = {
 /** One readable line for an error: the engine's own reason when it refused, never a cut-off "reason:". */
 export const errText = (e: unknown) => {
   if (e instanceof BaseError) {
-    const r = e.walk(x => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;
+    const r = e.walk((x) => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;
     if (r) {
-      const head = e.message.split('\n')[0].replace(/ with the following (reason|signature):?$/, '').replace(/\.$/, '');
+      const head = e.message
+        .split('\n')[0]
+        .replace(/ with the following (reason|signature):?$/, '')
+        .replace(/\.$/, '');
       const name = r.data?.errorName;
       const args = r.data?.args?.length ? ` (${r.data.args.map(String).join(', ')})` : '';
-      const why = name ? (ENGINE_ERRORS[name] ?? `${name}${args}`) : r.reason ?? (r.signature ? `error ${r.signature}` : 'no reason given');
+      const why = name
+        ? (ENGINE_ERRORS[name] ?? `${name}${args}`)
+        : (r.reason ?? (r.signature ? `error ${r.signature}` : 'no reason given'));
       return `${head}: ${why}.`;
     }
   }
   const m = e instanceof Error ? e.message : String(e);
   if (/User rejected the request/i.test(m)) return 'You rejected the request in your wallet.';
   // viem errors carry long details; the first line says what happened, unless it ends where the details begin.
-  const lines = m.split('\n').map(l => l.trim()).filter(Boolean);
-  return /:$/.test(lines[0] ?? '') && lines[1] ? `${lines[0]} ${lines[1]}` : lines[0] ?? m;
+  const lines = m
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return /:$/.test(lines[0] ?? '') && lines[1] ? `${lines[0]} ${lines[1]}` : (lines[0] ?? m);
 };

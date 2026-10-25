@@ -26,7 +26,12 @@ export interface PayoffResult {
 }
 
 export function simulatePayoff(p: ProductParams, strike: number, prices: number[]): PayoffResult {
-  return run(p, prices.length, (k, lvl) => prices[k - 1] >= strike * lvl / 100, k => prices[k - 1] / strike);
+  return run(
+    p,
+    prices.length,
+    (k, lvl) => prices[k - 1] >= (strike * lvl) / 100,
+    (k) => prices[k - 1] / strike,
+  );
 }
 
 /**
@@ -35,15 +40,28 @@ export function simulatePayoff(p: ProductParams, strike: number, prices: number[
  * (a single underlying gives the same result as simulatePayoff).
  */
 export function simulateWorstOf(p: ProductParams, strikes: number[], paths: number[][]): PayoffResult {
-  return simulatePerf(p, paths.map(row => Math.min(...row.map((o, i) => o / strikes[i]))));
+  return simulatePerf(
+    p,
+    paths.map((row) => Math.min(...row.map((o, i) => o / strikes[i]))),
+  );
 }
 
 /** Payoff from the worst performance at each observation (1 = at strike). */
 export function simulatePerf(p: ProductParams, perfs: number[]): PayoffResult {
-  return run(p, perfs.length, (k, lvl) => perfs[k - 1] >= lvl / 100, k => perfs[k - 1]);
+  return run(
+    p,
+    perfs.length,
+    (k, lvl) => perfs[k - 1] >= lvl / 100,
+    (k) => perfs[k - 1],
+  );
 }
 
-function run(p: ProductParams, len: number, atLeast: (k: number, levelPct: number) => boolean, ratio: (k: number) => number): PayoffResult {
+function run(
+  p: ProductParams,
+  len: number,
+  atLeast: (k: number, levelPct: number) => boolean,
+  ratio: (k: number) => number,
+): PayoffResult {
   const n = p.observations;
   if (len !== n) throw new Error(`need ${n} observations, got ${len}`);
   const rate = (p.couponRatePct ?? 0) / 100;
@@ -54,7 +72,10 @@ function run(p: ProductParams, len: number, atLeast: (k: number, levelPct: numbe
     let c = 0;
     if (p.productType === 'fcn' || p.productType === 'reverse-convertible') c = rate;
     if (p.productType === 'phoenix') {
-      if (atLeast(k, p.couponBarrierPct ?? 0)) { c = rate * (p.memory ? missed + 1 : 1); missed = 0; } else missed += 1;
+      if (atLeast(k, p.couponBarrierPct ?? 0)) {
+        c = rate * (p.memory ? missed + 1 : 1);
+        missed = 0;
+      } else missed += 1;
     }
     coupons.push(c);
     const autocalls = p.productType === 'fcn' || p.productType === 'phoenix' || p.productType === 'snowball';
@@ -67,7 +88,8 @@ function run(p: ProductParams, len: number, atLeast: (k: number, levelPct: numbe
     const up = r > 1 ? ((p.participationPct ?? 0) / 100) * (r - 1) : 0;
     return { coupons, redemptionCash: (p.protectionPct ?? 0) / 100 + up };
   }
-  if (p.productType === 'snowball' && atLeast(n, p.autocallLevelPct ?? 0)) return { coupons, redemptionCash: 1 + rate * n };
+  if (p.productType === 'snowball' && atLeast(n, p.autocallLevelPct ?? 0))
+    return { coupons, redemptionCash: 1 + rate * n };
   if (atLeast(n, p.knockInBarrierPct ?? 0)) return { coupons, redemptionCash: 1 };
   return { coupons, redemptionCash: r };
 }
@@ -152,9 +174,16 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
   const b = s.behaviour ?? {};
   const ref = simulatePerf(p, s.perfs);
   const n = p.observations;
-  const col = s.collateral.map(c => ({ ...c }));
+  const col = s.collateral.map((c) => ({ ...c }));
   const required = s.ratio * s.sold;
-  const out: NoteOutcome = { calls: [], coverage: [], perUnit: { cash: 0, deliver: {}, collateral: {} }, released: {}, leftoverCash: 0, fees: 0 };
+  const out: NoteOutcome = {
+    calls: [],
+    coverage: [],
+    perUnit: { cash: 0, deliver: {}, collateral: {} },
+    released: {},
+    leftoverCash: 0,
+    fees: 0,
+  };
   let escrowCash = 0;
   const value = (k: number) => col.reduce((a, c) => a + c.amount * (c.prices[k] ?? 1) * c.haircut, 0);
   /**
@@ -185,9 +214,15 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
   };
   const margin = (k: number) => {
     const v = value(k);
-    if (v >= required) { out.coverage.push({ period: k, value: v, required, met: true }); return true; }
+    if (v >= required) {
+      out.coverage.push({ period: k, value: v, required, met: true });
+      return true;
+    }
     const call = b.marginCall?.period === k ? b.marginCall : undefined;
-    for (const [sym, amt] of Object.entries(call?.topUp ?? {})) { const c = col.find(x => x.symbol === sym); if (c) c.amount += amt; }
+    for (const [sym, amt] of Object.entries(call?.topUp ?? {})) {
+      const c = col.find((x) => x.symbol === sym);
+      if (c) c.amount += amt;
+    }
     const cured = !!call?.topUp && value(k) >= required;
     out.coverage.push({ period: k, value: v, required, met: false, cured });
     return cured;
@@ -198,7 +233,13 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
     if (!margin(k)) return defaultNow(k, 'margin', 1);
     const final = k === last;
     const coupon = ref.coupons[k - 1] ?? 0;
-    const knocked = final && !ref.calledAt && p.settlement === 'physical' && s.worstAtMaturity && ref.redemptionCash < 1 && p.productType !== 'ppn';
+    const knocked =
+      final &&
+      !ref.calledAt &&
+      p.settlement === 'physical' &&
+      s.worstAtMaturity &&
+      ref.redemptionCash < 1 &&
+      p.productType !== 'ppn';
     let perUnit = coupon;
     let deliver: FundingCall['deliver'];
     if (final) {
@@ -210,10 +251,21 @@ export function simulateNote(p: ProductParams, s: NoteScenario): NoteOutcome {
     const total = perUnit * s.sold + fee;
     const missed = b.missPayment === k;
     const partial = b.partialPayment?.period === k ? b.partialPayment.fraction : undefined;
-    const call: FundingCall = { period: k, perUnit, ...(deliver ? { deliver } : {}), fee, total, final, outcome: missed || partial !== undefined ? 'missed' : b.curePayment === k ? 'cured' : 'paid' };
+    const call: FundingCall = {
+      period: k,
+      perUnit,
+      ...(deliver ? { deliver } : {}),
+      fee,
+      total,
+      final,
+      outcome: missed || partial !== undefined ? 'missed' : b.curePayment === k ? 'cured' : 'paid',
+    };
     out.calls.push(call);
     if (missed) return defaultNow(k, 'payment', perUnit + (final && !deliver ? 0 : 1));
-    if (partial !== undefined) { escrowCash += total * partial; return defaultNow(k, 'payment', perUnit + (final && !deliver ? 0 : 1)); }
+    if (partial !== undefined) {
+      escrowCash += total * partial;
+      return defaultNow(k, 'payment', perUnit + (final && !deliver ? 0 : 1));
+    }
     out.perUnit.cash += perUnit;
     out.fees += fee;
     if (deliver) out.perUnit.deliver[deliver.symbol] = (out.perUnit.deliver[deliver.symbol] ?? 0) + deliver.perUnit;

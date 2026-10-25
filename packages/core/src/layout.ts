@@ -22,12 +22,35 @@
  * always come from the graph, so an edited workflow lays out as cleanly as a generated one.
  */
 
-export interface LayoutNode { id: string; type: string; name: string; rowHint?: number }
-export interface LayoutFlow { id: string; src: string; tgt: string; name?: string }
-export interface LayoutPool { id: string; nodes: LayoutNode[]; flows: LayoutFlow[] }
-export interface LayoutMessage { id: string; src: string; tgt: string }
+export interface LayoutNode {
+  id: string;
+  type: string;
+  name: string;
+  rowHint?: number;
+}
+export interface LayoutFlow {
+  id: string;
+  src: string;
+  tgt: string;
+  name?: string;
+}
+export interface LayoutPool {
+  id: string;
+  nodes: LayoutNode[];
+  flows: LayoutFlow[];
+}
+export interface LayoutMessage {
+  id: string;
+  src: string;
+  tgt: string;
+}
 
-export interface Box { x: number; y: number; w: number; h: number }
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 export type Pt = [number, number];
 export interface Layout {
   pools: Record<string, Box>;
@@ -37,11 +60,25 @@ export interface Layout {
   labels: Record<string, Box>;
 }
 
-const COL_W = 210, ROW_H = 130, X0 = 220, POOL_X = 140, POOL_PAD = 15, POOL_GAP = 20, Y0 = 80, ESCROW_H = 60;
+const COL_W = 210,
+  ROW_H = 130,
+  X0 = 220,
+  POOL_X = 140,
+  POOL_PAD = 15,
+  POOL_GAP = 20,
+  Y0 = 80,
+  ESCROW_H = 60;
 const SIZE: Record<string, [number, number]> = { task: [150, 80], event: [36, 36], gateway: [44, 44] };
-export const kindOf = (t: string) => (t === 'startEvent' || t === 'endEvent' || t === 'intermediateCatchEvent') ? 'event' : t.endsWith('Gateway') ? 'gateway' : 'task';
+export const kindOf = (t: string) =>
+  t === 'startEvent' || t === 'endEvent' || t === 'intermediateCatchEvent'
+    ? 'event'
+    : t.endsWith('Gateway')
+      ? 'gateway'
+      : 'task';
 const LANES = [0, 7, -7, 14, -14, 21, -21];
-const LABEL_LINE = 14, LABEL_MAX_W = 110, CHAR_W = 5.6;
+const LABEL_LINE = 14,
+  LABEL_MAX_W = 110,
+  CHAR_W = 5.6;
 
 /** Width and height a label of `text` takes (bpmn-js external labels: 11px, wrapped). */
 function labelSize(text: string, maxW = LABEL_MAX_W): [number, number] {
@@ -57,23 +94,28 @@ const overlaps = (a: Box, b: Box, pad = 0) =>
 
 /** Does the axis-parallel segment p-q cross the inside of box b (grown by `pad`)? */
 export function segmentHits(p: Pt, q: Pt, b: Box, pad = 2): boolean {
-  const x0 = b.x - pad, x1 = b.x + b.w + pad, y0 = b.y - pad, y1 = b.y + b.h + pad;
+  const x0 = b.x - pad,
+    x1 = b.x + b.w + pad,
+    y0 = b.y - pad,
+    y1 = b.y + b.h + pad;
   if (p[0] === q[0]) {
-    const lo = Math.min(p[1], q[1]), hi = Math.max(p[1], q[1]);
+    const lo = Math.min(p[1], q[1]),
+      hi = Math.max(p[1], q[1]);
     return p[0] > x0 && p[0] < x1 && hi > y0 && lo < y1;
   }
-  const lo = Math.min(p[0], q[0]), hi = Math.max(p[0], q[0]);
+  const lo = Math.min(p[0], q[0]),
+    hi = Math.max(p[0], q[0]);
   return p[1] > y0 && p[1] < y1 && hi > x0 && lo < x1;
 }
 
 export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage[]): Layout {
-  const nodes = pools.flatMap(p => p.nodes);
+  const nodes = pools.flatMap((p) => p.nodes);
   const poolOf = new Map<string, string>();
   for (const p of pools) for (const n of p.nodes) poolOf.set(n.id, p.id);
   const order = new Map(nodes.map((n, i) => [n.id, i]));
-  const node = new Map(nodes.map(n => [n.id, n]));
-  const flows = pools.flatMap(p => p.flows).filter(f => node.has(f.src) && node.has(f.tgt));
-  const msgs = messages.filter(m => node.has(m.src) && node.has(m.tgt));
+  const node = new Map(nodes.map((n) => [n.id, n]));
+  const flows = pools.flatMap((p) => p.flows).filter((f) => node.has(f.src) && node.has(f.tgt));
+  const msgs = messages.filter((m) => node.has(m.src) && node.has(m.tgt));
 
   // ---- 1. layers --------------------------------------------------------------------------------------
   const out = new Map<string, string[]>();
@@ -90,20 +132,23 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
     }
     state.set(id, 2);
   };
-  const hasIn = new Set(flows.map(f => f.tgt));
+  const hasIn = new Set(flows.map((f) => f.tgt));
   for (const n of nodes) if (!hasIn.has(n.id) && !state.has(n.id)) visit(n.id);
   for (const n of nodes) if (!state.has(n.id)) visit(n.id);
   // Constraints: flow target at least one column right; message target not left of its sender.
   const cons: Array<[string, string, number]> = [
-    ...flows.filter(f => !back.has(`${f.src}>${f.tgt}`)).map(f => [f.src, f.tgt, 1] as [string, string, number]),
-    ...msgs.map(m => [m.src, m.tgt, 0] as [string, string, number]),
+    ...flows.filter((f) => !back.has(`${f.src}>${f.tgt}`)).map((f) => [f.src, f.tgt, 1] as [string, string, number]),
+    ...msgs.map((m) => [m.src, m.tgt, 0] as [string, string, number]),
   ];
-  const layer = new Map(nodes.map(n => [n.id, 0]));
+  const layer = new Map(nodes.map((n) => [n.id, 0]));
   for (let iter = 0; iter <= nodes.length + 1; iter++) {
     let changed = false;
     for (const [a, b, d] of cons) {
       const want = layer.get(a)! + d;
-      if (layer.get(b)! < want) { layer.set(b, want); changed = true; }
+      if (layer.get(b)! < want) {
+        layer.set(b, want);
+        changed = true;
+      }
     }
     if (!changed) break;
   }
@@ -112,27 +157,41 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
   const row = new Map<string, number>();
   const rowsOf = new Map<string, number>();
   for (const p of pools) {
-    if (!p.nodes.length) { rowsOf.set(p.id, 0); continue; }
+    if (!p.nodes.length) {
+      rowsOf.set(p.id, 0);
+      continue;
+    }
     const inPool = (id: string) => poolOf.get(id) === p.id;
     const succ = new Map<string, string[]>();
-    for (const f of p.flows) if (inPool(f.src) && inPool(f.tgt) && layer.get(f.tgt)! > layer.get(f.src)!) succ.set(f.src, [...(succ.get(f.src) ?? []), f.tgt]);
+    for (const f of p.flows)
+      if (inPool(f.src) && inPool(f.tgt) && layer.get(f.tgt)! > layer.get(f.src)!)
+        succ.set(f.src, [...(succ.get(f.src) ?? []), f.tgt]);
     // Longest remaining path from each node (forward edges only).
     const depth = new Map<string, number>();
-    const byLayerDesc = [...p.nodes].sort((a, b) => layer.get(b.id)! - layer.get(a.id)! || order.get(a.id)! - order.get(b.id)!);
-    for (const n of byLayerDesc) depth.set(n.id, Math.max(0, ...(succ.get(n.id) ?? []).map(s => depth.get(s)! + 1)));
-    const pick = (cands: string[]) => [...cands].sort((a, b) =>
-      (node.get(a)!.rowHint ?? 0) - (node.get(b)!.rowHint ?? 0) || depth.get(b)! - depth.get(a)! || order.get(a)! - order.get(b)!)[0];
-    const pIn = new Set(p.flows.filter(f => inPool(f.src) && inPool(f.tgt)).map(f => f.tgt));
-    const starts = p.nodes.filter(n => !pIn.has(n.id));
-    const first = pick((starts.length ? starts : p.nodes).map(n => n.id));
+    const byLayerDesc = [...p.nodes].sort(
+      (a, b) => layer.get(b.id)! - layer.get(a.id)! || order.get(a.id)! - order.get(b.id)!,
+    );
+    for (const n of byLayerDesc) depth.set(n.id, Math.max(0, ...(succ.get(n.id) ?? []).map((s) => depth.get(s)! + 1)));
+    const pick = (cands: string[]) =>
+      [...cands].sort(
+        (a, b) =>
+          (node.get(a)!.rowHint ?? 0) - (node.get(b)!.rowHint ?? 0) ||
+          depth.get(b)! - depth.get(a)! ||
+          order.get(a)! - order.get(b)!,
+      )[0];
+    const pIn = new Set(p.flows.filter((f) => inPool(f.src) && inPool(f.tgt)).map((f) => f.tgt));
+    const starts = p.nodes.filter((n) => !pIn.has(n.id));
+    const first = pick((starts.length ? starts : p.nodes).map((n) => n.id));
     const used = new Set<string>(); // `${row}:${layer}`
-    for (let cur: string | undefined = first; cur; ) {
-      row.set(cur, 0); used.add(`0:${layer.get(cur)}`);
-      const next: string[] = (succ.get(cur) ?? []).filter(s => !row.has(s));
+    for (let cur: string | undefined = first; cur;) {
+      row.set(cur, 0);
+      used.add(`0:${layer.get(cur)}`);
+      const next: string[] = (succ.get(cur) ?? []).filter((s) => !row.has(s));
       cur = next.length ? pick(next) : undefined;
     }
     // Branches: chains of short hops, packed into the lowest free row.
-    const rest = [...p.nodes].filter(n => !row.has(n.id))
+    const rest = [...p.nodes]
+      .filter((n) => !row.has(n.id))
       .sort((a, b) => layer.get(a.id)! - layer.get(b.id)! || order.get(a.id)! - order.get(b.id)!);
     let rows = 1;
     for (const n of rest) {
@@ -140,13 +199,19 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
       const chain = [n.id];
       for (;;) {
         const cur = chain[chain.length - 1];
-        const next = (succ.get(cur) ?? []).filter(s => !row.has(s) && !chain.includes(s) && layer.get(s)! - layer.get(cur)! <= 2);
+        const next = (succ.get(cur) ?? []).filter(
+          (s) => !row.has(s) && !chain.includes(s) && layer.get(s)! - layer.get(cur)! <= 2,
+        );
         if (!next.length) break;
         chain.push(pick(next));
       }
-      const lo = layer.get(chain[0])!, hi = layer.get(chain[chain.length - 1])!;
+      const lo = layer.get(chain[0])!,
+        hi = layer.get(chain[chain.length - 1])!;
       let r = 1;
-      const free = (rr: number) => { for (let l = lo; l <= hi; l++) if (used.has(`${rr}:${l}`)) return false; return true; };
+      const free = (rr: number) => {
+        for (let l = lo; l <= hi; l++) if (used.has(`${rr}:${l}`)) return false;
+        return true;
+      };
       while (!free(r)) r++;
       for (const id of chain) row.set(id, r);
       for (let l = lo; l <= hi; l++) used.add(`${r}:${l}`);
@@ -156,7 +221,7 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
   }
 
   // ---- geometry ---------------------------------------------------------------------------------------
-  const maxLayer = Math.max(0, ...nodes.map(n => layer.get(n.id)!));
+  const maxLayer = Math.max(0, ...nodes.map((n) => layer.get(n.id)!));
   const width = X0 - POOL_X + (maxLayer + 1) * COL_W + 10;
   const poolBox: Record<string, Box> = {};
   const shapes: Record<string, Box> = {};
@@ -181,7 +246,8 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
   const colRight = (id: string) => X0 + layer.get(id)! * COL_W + 150; // right edge of the column's cell
   const chanAfter = (id: string) => colRight(id) + Math.floor((COL_W - 150) / 2);
   const chanBefore = (id: string) => X0 + layer.get(id)! * COL_W - Math.floor((COL_W - 150) / 2);
-  const rowBoundary = (id: string, below: boolean) => rowY0.get(poolOf.get(id)!)! + (row.get(id)! + (below ? 1 : 0)) * ROW_H;
+  const rowBoundary = (id: string, below: boolean) =>
+    rowY0.get(poolOf.get(id)!)! + (row.get(id)! + (below ? 1 : 0)) * ROW_H;
 
   const clear = (pts: Pt[], skip: Set<string>, within?: string) => {
     for (let i = 0; i + 1 < pts.length; i++) {
@@ -199,7 +265,8 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
       if (o.length && o[o.length - 1][0] === r[0] && o[o.length - 1][1] === r[1]) continue;
       // Drop the middle of three collinear points.
       if (o.length >= 2) {
-        const a = o[o.length - 2], b = o[o.length - 1];
+        const a = o[o.length - 2],
+          b = o[o.length - 1];
         if ((a[0] === b[0] && b[0] === r[0]) || (a[1] === b[1] && b[1] === r[1])) o.pop();
       }
       o.push(r);
@@ -217,40 +284,75 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
   // ---- 3. routing -------------------------------------------------------------------------------------
   const edges: Record<string, Pt[]> = {};
   for (const f of flows) {
-    const s = shapes[f.src], t = shapes[f.tgt];
-    const [sx, sy] = center.get(f.src)!, [tx, ty] = center.get(f.tgt)!;
+    const s = shapes[f.src],
+      t = shapes[f.tgt];
+    const [sx, sy] = center.get(f.src)!,
+      [tx, ty] = center.get(f.tgt)!;
     const skip = new Set([f.src, f.tgt]);
     const pool = poolOf.get(f.src);
-    const sR = s.x + s.w, tL = t.x, sB = s.y + s.h, sT = s.y, tB = t.y + t.h, tT = t.y;
+    const sR = s.x + s.w,
+      tL = t.x,
+      sB = s.y + s.h,
+      sT = s.y,
+      tB = t.y + t.h,
+      tT = t.y;
     const gw = kindOf(node.get(f.src)!.type) === 'gateway';
     const cands: Pt[][] = [];
-    if (sy === ty && tx > sx) cands.push([[sR, sy], [tL, ty]]);
+    if (sy === ty && tx > sx)
+      cands.push([
+        [sR, sy],
+        [tL, ty],
+      ]);
     if (tx > sx && ty !== sy) {
       // Down or up out of the source, then straight into the target's side.
       const ex: Pt = ty > sy ? [sx, sB] : [sx, sT];
       if (gw) cands.push([ex, [sx, ty], [tL, ty]]);
-      cands.push([[sR, sy], [tx, sy], [tx, ty > sy ? tT : tB]]);
+      cands.push([
+        [sR, sy],
+        [tx, sy],
+        [tx, ty > sy ? tT : tB],
+      ]);
       if (!gw) cands.push([ex, [sx, ty], [tL, ty]]);
       const a = chanAfter(f.src) + lane(`v${chanAfter(f.src)}`, f.src);
-      cands.push([[sR, sy], [a, sy], [a, ty], [tL, ty]]);
+      cands.push([
+        [sR, sy],
+        [a, sy],
+        [a, ty],
+        [tL, ty],
+      ]);
       const b = chanBefore(f.tgt) + lane(`v${chanBefore(f.tgt)}`, f.tgt);
-      cands.push([[sR, sy], [b, sy], [b, ty], [tL, ty]]);
+      cands.push([
+        [sR, sy],
+        [b, sy],
+        [b, ty],
+        [tL, ty],
+      ]);
     }
     // Through the channels: always clear (no shape sits in a channel).
     const a = chanAfter(f.src) + lane(`v${chanAfter(f.src)}`, f.src);
     const b = chanBefore(f.tgt) + lane(`v${chanBefore(f.tgt)}`, f.tgt);
-    const viaRows: Pt[][] = [true, false].map(below => {
+    const viaRows: Pt[][] = [true, false].map((below) => {
       const h = rowBoundary(f.tgt, below) + lane(`h${rowBoundary(f.tgt, below)}`, f.tgt);
-      return [[sR, sy], [a, sy], [a, h], [b, h], [b, ty], [tL, ty]] as Pt[];
+      return [
+        [sR, sy],
+        [a, sy],
+        [a, h],
+        [b, h],
+        [b, ty],
+        [tL, ty],
+      ] as Pt[];
     });
     // Prefer the row channel on the source's side of the target.
-    if (sy > ty) cands.push(viaRows[0], viaRows[1]); else cands.push(viaRows[1], viaRows[0]);
-    const route = cands.map(tidy).find(c => clear(c, skip, pool)) ?? tidy(cands[cands.length - 1]);
+    if (sy > ty) cands.push(viaRows[0], viaRows[1]);
+    else cands.push(viaRows[1], viaRows[0]);
+    const route = cands.map(tidy).find((c) => clear(c, skip, pool)) ?? tidy(cands[cands.length - 1]);
     edges[f.id] = route;
   }
   for (const m of msgs) {
-    const s = shapes[m.src], t = shapes[m.tgt];
-    const [sx, sy] = center.get(m.src)!, [tx, ty] = center.get(m.tgt)!;
+    const s = shapes[m.src],
+      t = shapes[m.tgt];
+    const [sx, sy] = center.get(m.src)!,
+      [tx, ty] = center.get(m.tgt)!;
     const skip = new Set([m.src, m.tgt]);
     const down = ty > sy;
     const sOut: Pt = down ? [sx, s.y + s.h] : [sx, s.y];
@@ -263,32 +365,40 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
     cands.push([sOut, [sx, sCh], [tx, sCh], tIn]);
     cands.push([sOut, [sx, tCh], [tx, tCh], tIn]);
     cands.push([sOut, [sx, sCh], [v, sCh], [v, tCh], [tx, tCh], tIn]);
-    edges[m.id] = cands.map(tidy).find(c => clear(c, skip)) ?? tidy(cands[cands.length - 1]);
+    edges[m.id] = cands.map(tidy).find((c) => clear(c, skip)) ?? tidy(cands[cands.length - 1]);
   }
 
   // ---- 4. labels --------------------------------------------------------------------------------------
   const labels: Record<string, Box> = {};
   const placed: Box[] = [];
   const free = (b: Box, avoidSegs: Array<[Pt, Pt]>) =>
-    !shapeList.some(([, s]) => overlaps(b, s, 2)) && !placed.some(l => overlaps(b, l, 1)) &&
+    !shapeList.some(([, s]) => overlaps(b, s, 2)) &&
+    !placed.some((l) => overlaps(b, l, 1)) &&
     !avoidSegs.some(([p, q]) => segmentHits(p, q, b, 1));
   const segsOf = (pts: Pt[]) => pts.slice(1).map((q, i) => [pts[i], q] as [Pt, Pt]);
   const incident = new Map<string, Array<[Pt, Pt]>>();
-  for (const f of [...flows, ...msgs]) for (const id of [f.src, f.tgt]) incident.set(id, [...(incident.get(id) ?? []), ...segsOf(edges[f.id])]);
+  for (const f of [...flows, ...msgs])
+    for (const id of [f.src, f.tgt]) incident.set(id, [...(incident.get(id) ?? []), ...segsOf(edges[f.id])]);
   const allSegs = Object.values(edges).flatMap(segsOf);
   // Element labels: events below, gateways above (then the other side, then beside).
   for (const n of nodes) {
     const k = kindOf(n.type);
     if (k === 'task' || !n.name) continue;
     const [w, h] = labelSize(n.name);
-    const b = shapes[n.id], cx = b.x + b.w / 2;
-    const above: Box = { x: cx - w / 2, y: b.y - 4 - h, w, h }, below: Box = { x: cx - w / 2, y: b.y + b.h + 4, w, h };
-    const right: Box = { x: b.x + b.w + 4, y: b.y - h - 2, w, h }, left: Box = { x: b.x - 4 - w, y: b.y - h - 2, w, h };
-    const rightLow: Box = { x: b.x + b.w + 4, y: b.y + b.h + 2, w, h }, leftLow: Box = { x: b.x - 4 - w, y: b.y + b.h + 2, w, h };
-    const cands = k === 'gateway' ? [above, below, left, right, leftLow, rightLow] : [below, above, right, left, rightLow, leftLow];
+    const b = shapes[n.id],
+      cx = b.x + b.w / 2;
+    const above: Box = { x: cx - w / 2, y: b.y - 4 - h, w, h },
+      below: Box = { x: cx - w / 2, y: b.y + b.h + 4, w, h };
+    const right: Box = { x: b.x + b.w + 4, y: b.y - h - 2, w, h },
+      left: Box = { x: b.x - 4 - w, y: b.y - h - 2, w, h };
+    const rightLow: Box = { x: b.x + b.w + 4, y: b.y + b.h + 2, w, h },
+      leftLow: Box = { x: b.x - 4 - w, y: b.y + b.h + 2, w, h };
+    const cands =
+      k === 'gateway' ? [above, below, left, right, leftLow, rightLow] : [below, above, right, left, rightLow, leftLow];
     const avoid = incident.get(n.id) ?? [];
-    const pick = cands.find(c => free(c, avoid)) ?? cands.find(c => free(c, [])) ?? cands[0];
-    labels[n.id] = pick; placed.push(pick);
+    const pick = cands.find((c) => free(c, avoid)) ?? cands.find((c) => free(c, [])) ?? cands[0];
+    labels[n.id] = pick;
+    placed.push(pick);
   }
   // Flow labels: beside the first segments of the edge.
   for (const f of flows) {
@@ -300,21 +410,24 @@ export function layoutCollaboration(pools: LayoutPool[], messages: LayoutMessage
     for (let i = 0; i + 1 < pts.length; i++) {
       const [p, q] = [pts[i], pts[i + 1]];
       if (p[1] === q[1]) {
-        const lo = Math.min(p[0], q[0]), hi = Math.max(p[0], q[0]);
+        const lo = Math.min(p[0], q[0]),
+          hi = Math.max(p[0], q[0]);
         // A short segment (a gateway into its neighbour) gets a narrower, wrapped label that fits beside it.
         const [ww, hh] = w > hi - lo - 10 ? labelSize(f.name, Math.max(48, hi - lo - 10)) : [w, h];
         const xs = q[0] > p[0] ? [lo + 5, (lo + hi - ww) / 2, hi - 5 - ww] : [hi - 5 - ww, (lo + hi - ww) / 2, lo + 5];
         for (const x of xs) cands.push({ x, y: p[1] - 3 - hh, w: ww, h: hh }, { x, y: p[1] + 3, w: ww, h: hh });
       } else {
-        const lo = Math.min(p[1], q[1]), hi = Math.max(p[1], q[1]);
+        const lo = Math.min(p[1], q[1]),
+          hi = Math.max(p[1], q[1]);
         const ys = q[1] > p[1] ? [lo + 6, (lo + hi - h) / 2, hi - 6 - h] : [hi - 6 - h, (lo + hi - h) / 2, lo + 6];
         for (const y of ys) cands.push({ x: p[0] + 4, y, w, h }, { x: p[0] - 4 - w, y, w, h });
       }
     }
     const own = segsOf(pts);
-    const others = allSegs.filter(sg => !own.some(o => o[0] === sg[0] && o[1] === sg[1]));
-    const pick = cands.find(c => free(c, others)) ?? cands.find(c => free(c, own.length ? [] : [])) ?? cands[0];
-    labels[f.id] = pick; placed.push(pick);
+    const others = allSegs.filter((sg) => !own.some((o) => o[0] === sg[0] && o[1] === sg[1]));
+    const pick = cands.find((c) => free(c, others)) ?? cands.find((c) => free(c, own.length ? [] : [])) ?? cands[0];
+    labels[f.id] = pick;
+    placed.push(pick);
   }
   return { pools: poolBox, shapes, edges, labels };
 }

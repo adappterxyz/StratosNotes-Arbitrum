@@ -108,13 +108,21 @@ export const MIGRATIONS: string[] = [
 export async function migrate(db: Queryable & { tx<T>(fn: (q: Queryable) => Promise<T>): Promise<T> }) {
   // One transaction under an advisory lock, so migrators starting together (indexer and API) serialise. The lock
   // must come first: two concurrent CREATE TABLE IF NOT EXISTS can still collide on the catalog in Postgres.
-  await db.tx(async q => {
+  await db.tx(async (q) => {
     await q.query('SELECT pg_advisory_xact_lock(7710001)');
-    await q.query('CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
-    const done = new Set((await q.query<{ version: number }>('SELECT version FROM schema_migrations')).map(r => Number(r.version)));
+    await q.query(
+      'CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
+    );
+    const done = new Set(
+      (await q.query<{ version: number }>('SELECT version FROM schema_migrations')).map((r) => Number(r.version)),
+    );
     for (let v = 1; v <= MIGRATIONS.length; v++) {
       if (done.has(v)) continue;
-      for (const stmt of MIGRATIONS[v - 1].split(/;\s*\n/).map(s => s.trim()).filter(Boolean)) await q.query(stmt);
+      for (const stmt of MIGRATIONS[v - 1]
+        .split(/;\s*\n/)
+        .map((s) => s.trim())
+        .filter(Boolean))
+        await q.query(stmt);
       await q.query('INSERT INTO schema_migrations (version) VALUES ($1)', [v]);
     }
   });

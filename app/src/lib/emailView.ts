@@ -3,7 +3,8 @@
  * with no scripts and no same-origin access; on top of that this adds a CSP that blocks scripts, forms, frames and
  * remote images (tracking pixels), and makes links open in a new tab.
  */
-const CSP = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'";
+const CSP =
+  "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'";
 
 export function emailSrcDoc(html: string): string {
   const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_blank"><style>a{overflow-wrap:anywhere;word-break:break-word}</style>`;
@@ -13,7 +14,7 @@ export function emailSrcDoc(html: string): string {
     .replace(/<(iframe|object|embed|form)\b[\s\S]*?(<\/\1\s*>|\/>)/gi, '')
     .replace(/<meta\b[^>]*http-equiv[^>]*>/gi, '')
     .replace(/<base\b[^>]*>/gi, '');
-  if (/<head[^>]*>/i.test(clean)) return clean.replace(/<head[^>]*>/i, m => `${m}${head}`);
+  if (/<head[^>]*>/i.test(clean)) return clean.replace(/<head[^>]*>/i, (m) => `${m}${head}`);
   return `<!doctype html><html><head><meta charset="utf-8">${head}</head><body>${clean}</body></html>`;
 }
 

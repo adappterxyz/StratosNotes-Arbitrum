@@ -25,14 +25,36 @@ const prod = instantiateProduct(EXAMPLE_PRODUCTS.phoenix);
 const c = compile(parseBpmn(prod.bpmnXml, prod.assets), { product: prod.params });
 const coreLen = evmCoreLength(c.bytes);
 const defId = bytesToHex(c.hash);
-const field = (n: string) => c.def.fields.findIndex(f => f.name === n);
+const field = (n: string) => c.def.fields.findIndex((f) => f.name === n);
 const NOTE = 'local:' + ENGINE + ':1';
 
-const registered: FakeEvent = { eventName: 'DefinitionRegistered', args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) } };
-const started = (pid = 1n): FakeEvent => ({ eventName: 'ProcessStarted', args: { pid, definition: defId, creator: ISSUER, ref: pid, roles: [ISSUER, ISSUER, ZERO], assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'] } });
-const num = (f: string, v: bigint, pid = 1n): FakeEvent => ({ eventName: 'FieldSet', args: { pid, field: field(f), tag: 1, value: `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` } });
-const hold = (owner: string, asset: number, units: number, pid = 1n): FakeEvent => ({ eventName: 'HoldingChanged', args: { pid, asset, owner, balance: dec(units) } });
-const tokens = (t: number[], status = 0, pid = 1n): FakeEvent => ({ eventName: 'TokensUpdated', args: { pid, status, stepsRun: 1, tokens: t } });
+const registered: FakeEvent = {
+  eventName: 'DefinitionRegistered',
+  args: { id: defId, creator: ISSUER, pointer: ZERO, meta: hex(c.bytes.subarray(coreLen)) },
+};
+const started = (pid = 1n): FakeEvent => ({
+  eventName: 'ProcessStarted',
+  args: {
+    pid,
+    definition: defId,
+    creator: ISSUER,
+    ref: pid,
+    roles: [ISSUER, ISSUER, ZERO],
+    assetTokens: [ZERO, '0x00000000000000000000000000000000000000c1'],
+  },
+});
+const num = (f: string, v: bigint, pid = 1n): FakeEvent => ({
+  eventName: 'FieldSet',
+  args: { pid, field: field(f), tag: 1, value: `0x${BigInt.asUintN(256, v).toString(16).padStart(64, '0')}` },
+});
+const hold = (owner: string, asset: number, units: number, pid = 1n): FakeEvent => ({
+  eventName: 'HoldingChanged',
+  args: { pid, asset, owner, balance: dec(units) },
+});
+const tokens = (t: number[], status = 0, pid = 1n): FakeEvent => ({
+  eventName: 'TokensUpdated',
+  args: { pid, status, stepsRun: 1, tokens: t },
+});
 
 let d1: Awaited<ReturnType<typeof localD1>>;
 let store: Store;
@@ -48,12 +70,14 @@ beforeEach(async () => {
   ing = new D1Ingestor(store, cfg, chain);
   await ing.init();
 }, 30_000);
-afterEach(async () => { await d1.dispose(); });
+afterEach(async () => {
+  await d1.dispose();
+});
 
 function issueAndSubscribe() {
-  chain.mine([registered]);                                                                                    // 1
+  chain.mine([registered]); // 1
   chain.mine([started(), num('notional', dec(1000)), hold(ISSUER, 0, 1000), tokens([c.stepIndex.Task_Subscribe])]); // 2
-  chain.mine([hold(ISSUER, 0, 400), hold(ALICE, 0, 600)]);                                                     // 3
+  chain.mine([hold(ISSUER, 0, 400), hold(ALICE, 0, 600)]); // 3
 }
 
 const state = async () => (await loadNote(store, NOTE)) as NoteState;
@@ -71,11 +95,22 @@ describe('D1 indexer', () => {
     const def = await loadDef(store, 'local', defId);
     expect(def?.name).toBe(c.def.name);
     expect(noteView(def!, s, 0).sold).toBe(600);
-    const row = await store.first<{ product_type: string; underlyings: string; window_open: number; last_seq: number }>('SELECT product_type, underlyings, window_open, last_seq FROM notes WHERE id = ?1', [NOTE]);
-    expect({ ...row, underlyings: JSON.parse(row!.underlyings) }).toMatchObject({ product_type: 'phoenix', underlyings: ['ETH'], window_open: 1 });
+    const row = await store.first<{ product_type: string; underlyings: string; window_open: number; last_seq: number }>(
+      'SELECT product_type, underlyings, window_open, last_seq FROM notes WHERE id = ?1',
+      [NOTE],
+    );
+    expect({ ...row, underlyings: JSON.parse(row!.underlyings) }).toMatchObject({
+      product_type: 'phoenix',
+      underlyings: ['ETH'],
+      window_open: 1,
+    });
     expect(row!.last_seq).toBe(await count(`SELECT max(seq) AS n FROM events WHERE note_id = '${NOTE}'`));
-    expect(await store.all('SELECT symbol FROM note_underlyings WHERE note_id = ?1', [NOTE])).toEqual([{ symbol: 'ETH' }]);
-    expect((await store.first<{ owner: string }>('SELECT owner FROM holdings WHERE owner = ?1', [ALICE]))!.owner).toBe(ALICE);
+    expect(await store.all('SELECT symbol FROM note_underlyings WHERE note_id = ?1', [NOTE])).toEqual([
+      { symbol: 'ETH' },
+    ]);
+    expect((await store.first<{ owner: string }>('SELECT owner FROM holdings WHERE owner = ?1', [ALICE]))!.owner).toBe(
+      ALICE,
+    );
   });
 
   it('is idempotent: re-ingesting the same blocks changes nothing', async () => {
@@ -92,7 +127,7 @@ describe('D1 indexer', () => {
   it('undoes a reorg: orphaned events are removed and the note is rebuilt from the new chain', async () => {
     issueAndSubscribe();
     await ing.catchUp();
-    expect((await state()).holdings.find(h => h.owner === ALICE)).toBeTruthy();
+    expect((await state()).holdings.find((h) => h.owner === ALICE)).toBeTruthy();
     chain.reorg(3n, [[], [hold(ISSUER, 0, 750), hold(BOB, 0, 250)]]);
     const r = await ing.step();
     expect(r.reorgedTo).toBe(2);
@@ -102,7 +137,9 @@ describe('D1 indexer', () => {
       { asset: 0, owner: ISSUER, balance: dec(750).toString() },
     ]);
     expect(await store.all('SELECT owner FROM holdings WHERE owner = ?1', [ALICE])).toEqual([]);
-    expect((await store.all<{ block: number }>('SELECT DISTINCT block FROM events ORDER BY block')).map(b => b.block)).toEqual([1, 2, 4]);
+    expect(
+      (await store.all<{ block: number }>('SELECT DISTINCT block FROM events ORDER BY block')).map((b) => b.block),
+    ).toEqual([1, 2, 4]);
   });
 
   it('undoes a reorg that removes the note itself', async () => {
@@ -119,17 +156,25 @@ describe('D1 indexer', () => {
     await deep.init();
     issueAndSubscribe();
     await deep.catchUp();
-    expect(Number((await store.first<{ cursor: number }>("SELECT cursor FROM chains WHERE chain = 'deep'"))!.cursor)).toBe(1);
+    expect(
+      Number((await store.first<{ cursor: number }>("SELECT cursor FROM chains WHERE chain = 'deep'"))!.cursor),
+    ).toBe(1);
   });
 
   it('tells CRE reports from fallback ones, by the fallback reporter in force at the time', async () => {
     issueAndSubscribe();
-    const report = (reporter: string): FakeEvent => ({ eventName: 'ReportProcessed', args: { pid: 1n, step: c.stepIndex.Task_FixStrike, values: [dec(2500)], reporter } });
+    const report = (reporter: string): FakeEvent => ({
+      eventName: 'ReportProcessed',
+      args: { pid: 1n, step: c.stepIndex.Task_FixStrike, values: [dec(2500)], reporter },
+    });
     chain.mine([report(FORWARDER)]);
     chain.mine([{ eventName: 'FallbackReporterUpdated', args: { previous: ZERO, next: FALLBACK } }, report(FALLBACK)]);
     await ing.catchUp();
     expect((await state()).reports).toEqual({ cre: 1, fallback: 1, last: 'fallback' });
-    expect((await store.first<{ fallback_reporter: string }>("SELECT fallback_reporter FROM chains WHERE chain = 'local'"))!.fallback_reporter).toBe(FALLBACK);
+    expect(
+      (await store.first<{ fallback_reporter: string }>("SELECT fallback_reporter FROM chains WHERE chain = 'local'"))!
+        .fallback_reporter,
+    ).toBe(FALLBACK);
   });
 
   it('records the notes that changed for live updates', async () => {
@@ -144,14 +189,19 @@ describe('D1 indexer', () => {
     chain.mine([registered]);
     await expect(ing.step()).rejects.toThrow(/does not hash/);
     expect(await count('SELECT count(*) AS n FROM events')).toBe(0);
-    expect(Number((await store.first<{ cursor: number }>("SELECT cursor FROM chains WHERE chain = 'local'"))!.cursor)).toBe(0);
+    expect(
+      Number((await store.first<{ cursor: number }>("SELECT cursor FROM chains WHERE chain = 'local'"))!.cursor),
+    ).toBe(0);
   });
 
   it('a second writer whose cursor moved commits nothing (the batch guard rolls it back)', async () => {
     issueAndSubscribe();
     // Simulate a concurrent cron that already ingested: move the cursor under this step after it has read it.
     const real = store.batch.bind(store);
-    store.batch = async stmts => { await d1.db.prepare("UPDATE chains SET cursor = 2 WHERE chain = 'local'").run(); return real(stmts); };
+    store.batch = async (stmts) => {
+      await d1.db.prepare("UPDATE chains SET cursor = 2 WHERE chain = 'local'").run();
+      return real(stmts);
+    };
     const r = await ing.step();
     store.batch = real;
     expect(r.raced).toBe(true);

@@ -34,7 +34,8 @@ export const HTTP_FEED_CHAINS: Record<string, { rpc: string; chainId: number } &
 };
 
 /** The JSON-RPC body asking for the head block number. */
-export const blockNumberBody = (): string => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] });
+export const blockNumberBody = (): string =>
+  JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] });
 
 /** The head block number from an eth_blockNumber reply; throws on anything else. */
 export function decodeBlockNumber(body: string): number {
@@ -46,7 +47,8 @@ export function decodeBlockNumber(body: string): number {
 }
 
 /** The block a pinned read uses: `lagBlocks` below the agreed head, as a JSON-RPC block parameter. */
-export const pinnedBlock = (head: number, lagBlocks: number): string => '0x' + Math.max(0, head - lagBlocks).toString(16);
+export const pinnedBlock = (head: number, lagBlocks: number): string =>
+  '0x' + Math.max(0, head - lagBlocks).toString(16);
 
 /** latestRoundData() and decimals() selectors. */
 export const SELECTOR_LATEST_ROUND = '0xfeaf968c';
@@ -60,18 +62,19 @@ export const FEEDS_PER_BATCH = 40;
 
 /** One feed's reading as decimal strings (consensus-safe), or why it could not be read. */
 export type FeedReading =
-  | { roundId: string; answer: string; updatedAt: string; answeredInRound: string; decimals: number }
-  | { error: string };
+  { roundId: string; answer: string; updatedAt: string; answeredInRound: string; decimals: number } | { error: string };
 
 /**
  * The JSON-RPC batch body for `feeds` (addresses): ids 2i = latestRoundData, 2i+1 = decimals of feeds[i], at a
  * block tag or a 0x-hex block number.
  */
 export function feedBatchBody(feeds: readonly string[], blockTag: FeedBlockTag | string): string {
-  return JSON.stringify(feeds.flatMap((to, i) => [
-    { jsonrpc: '2.0', id: 2 * i, method: 'eth_call', params: [{ to, data: SELECTOR_LATEST_ROUND }, blockTag] },
-    { jsonrpc: '2.0', id: 2 * i + 1, method: 'eth_call', params: [{ to, data: SELECTOR_DECIMALS }, blockTag] },
-  ]));
+  return JSON.stringify(
+    feeds.flatMap((to, i) => [
+      { jsonrpc: '2.0', id: 2 * i, method: 'eth_call', params: [{ to, data: SELECTOR_LATEST_ROUND }, blockTag] },
+      { jsonrpc: '2.0', id: 2 * i + 1, method: 'eth_call', params: [{ to, data: SELECTOR_DECIMALS }, blockTag] },
+    ]),
+  );
 }
 
 const word = (hex: string, i: number): bigint => BigInt('0x' + (hex.slice(2 + 64 * i, 2 + 64 * (i + 1)) || '0'));
@@ -100,7 +103,8 @@ export function decodeFeedBatch(body: string, feeds: readonly string[]): FeedRea
   const hexOf = (id: number, words: number): string | { error: string } => {
     const r = byId.get(id);
     if (!r) return { error: 'feed RPC: no reply' };
-    if (r.error) return { error: `feed RPC: eth_call failed${r.error.code !== undefined ? ` (code ${r.error.code})` : ''}` };
+    if (r.error)
+      return { error: `feed RPC: eth_call failed${r.error.code !== undefined ? ` (code ${r.error.code})` : ''}` };
     if (typeof r.result !== 'string' || !/^0x[0-9a-fA-F]*$/.test(r.result) || r.result.length < 2 + 64 * words) {
       return { error: 'feed RPC: short or malformed result (not a Chainlink feed?)' };
     }
@@ -124,10 +128,18 @@ export function decodeFeedBatch(body: string, feeds: readonly string[]): FeedRea
 }
 
 /** A reading as checkRound's input; throws the reading's error. */
-export function readingToRound(r: FeedReading): { round: { roundId: bigint; answer: bigint; updatedAt: bigint; answeredInRound: bigint }; decimals: number } {
+export function readingToRound(r: FeedReading): {
+  round: { roundId: bigint; answer: bigint; updatedAt: bigint; answeredInRound: bigint };
+  decimals: number;
+} {
   if ('error' in r) throw new Error(r.error);
   return {
-    round: { roundId: BigInt(r.roundId), answer: BigInt(r.answer), updatedAt: BigInt(r.updatedAt), answeredInRound: BigInt(r.answeredInRound) },
+    round: {
+      roundId: BigInt(r.roundId),
+      answer: BigInt(r.answer),
+      updatedAt: BigInt(r.updatedAt),
+      answeredInRound: BigInt(r.answeredInRound),
+    },
     decimals: r.decimals,
   };
 }

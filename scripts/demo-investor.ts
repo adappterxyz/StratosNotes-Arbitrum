@@ -24,55 +24,96 @@ const t = http(process.env.RPC ?? 'https://sepolia-rollup.arbitrum.io/rpc');
 const pub = createPublicClient({ chain: arbitrumSepolia, transport: t });
 const wal = createWalletClient({ chain: arbitrumSepolia, account: inv, transport: t });
 const USDG = '0xFFC95faa3d63Cde504a05B567C600B78C0b41892' as const;
-const erc20 = parseAbi(['function approve(address,uint256) returns (bool)', 'function balanceOf(address) view returns (uint256)']);
+const erc20 = parseAbi([
+  'function approve(address,uint256) returns (bool)',
+  'function balanceOf(address) view returns (uint256)',
+]);
 const NO = 0xffff;
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
-const startCount = await pub.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' }) as bigint;
+const startCount = (await pub.readContract({
+  address: dep.engine,
+  abi: engineAbi,
+  functionName: 'processCount',
+})) as bigint;
 log(`investor ${inv.address}; watching notes after pid ${startCount} named "${NAME}"`);
 const subscribed = new Set<bigint>();
 const defs = new Map<string, ReturnType<typeof decodeEvmDef>>();
 
 async function claimAll(upTo: bigint) {
   for (let pid = 1n; pid <= upTo; pid++) {
-    const owed = await pub.readContract({ address: dep.engine, abi: flowEngineAbi, functionName: 'pendingOf', args: [pid, inv.address, 1n] }).catch(() => 0n) as bigint;
+    const owed = (await pub
+      .readContract({
+        address: dep.engine,
+        abi: flowEngineAbi,
+        functionName: 'pendingOf',
+        args: [pid, inv.address, 1n],
+      })
+      .catch(() => 0n)) as bigint;
     if (owed <= 0n) continue;
     try {
-      const h = await wal.writeContract({ address: dep.engine, abi: flowEngineAbi, functionName: 'pushTo', args: [pid, 1, [inv.address]] });
+      const h = await wal.writeContract({
+        address: dep.engine,
+        abi: flowEngineAbi,
+        functionName: 'pushTo',
+        args: [pid, 1, [inv.address]],
+      });
       await pub.waitForTransactionReceipt({ hash: h });
       log(`claimed note ${pid} payout to the wallet (${h})`);
-    } catch (e) { log(`claim on ${pid} failed: ${(e as Error).message.split('\n')[0]}`); }
+    } catch (e) {
+      log(`claim on ${pid} failed: ${(e as Error).message.split('\n')[0]}`);
+    }
   }
 }
 
 async function trySubscribe(pid: bigint) {
-  const proc = await pub.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processOf', args: [pid] }).catch(() => null) as { definition: Hex } | null;
+  const proc = (await pub
+    .readContract({ address: dep.engine, abi: engineAbi, functionName: 'processOf', args: [pid] })
+    .catch(() => null)) as { definition: Hex } | null;
   const id = proc?.definition;
   if (!id) return;
   if (!defs.has(id)) {
-    const bytes = await pub.readContract({ address: dep.lens, abi: lensAbi, functionName: 'definitionBytes', args: [id] }) as Hex;
+    const bytes = (await pub.readContract({
+      address: dep.lens,
+      abi: lensAbi,
+      functionName: 'definitionBytes',
+      args: [id],
+    })) as Hex;
     if (bytes === '0x') return;
     defs.set(id, decodeEvmDef(Uint8Array.from(Buffer.from(bytes.slice(2), 'hex'))));
   }
   const def = defs.get(id)!;
   if (!def.name.includes(NAME)) return;
-  const step = def.steps.findIndex(s => s.id === 'Task_Subscribe');
+  const step = def.steps.findIndex((s) => s.id === 'Task_Subscribe');
   if (step < 0) return;
   const cost = BigInt(UNITS) * 10n ** 6n;
   try {
-    await wal.writeContract({ address: USDG, abi: erc20, functionName: 'approve', args: [dep.engine, cost] }).then(h => pub.waitForTransactionReceipt({ hash: h }));
-    const { request } = await pub.simulateContract({ account: inv, address: dep.engine, abi: engineAbi, functionName: 'executeStep', args: [pid, step, NO, [evmInput.number(dec(UNITS))]] });
-    const h = await wal.writeContract(request); await pub.waitForTransactionReceipt({ hash: h });
+    await wal
+      .writeContract({ address: USDG, abi: erc20, functionName: 'approve', args: [dep.engine, cost] })
+      .then((h) => pub.waitForTransactionReceipt({ hash: h }));
+    const { request } = await pub.simulateContract({
+      account: inv,
+      address: dep.engine,
+      abi: engineAbi,
+      functionName: 'executeStep',
+      args: [pid, step, NO, [evmInput.number(dec(UNITS))]],
+    });
+    const h = await wal.writeContract(request);
+    await pub.waitForTransactionReceipt({ hash: h });
     subscribed.add(pid);
     log(`subscribed ${UNITS} units to note ${pid} (${h})`);
-  } catch (e) { log(`subscribe to ${pid} not yet: ${(e as Error).message.split('\n')[0]}`); }
+  } catch (e) {
+    log(`subscribe to ${pid} not yet: ${(e as Error).message.split('\n')[0]}`);
+  }
 }
 
 for (;;) {
   try {
-    const n = await pub.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' }) as bigint;
+    const n = (await pub.readContract({ address: dep.engine, abi: engineAbi, functionName: 'processCount' })) as bigint;
     await claimAll(n);
     for (let pid = startCount + 1n; pid <= n; pid++) if (!subscribed.has(pid)) await trySubscribe(pid);
-  } catch (e) { log('tick error', (e as Error).message.split('\n')[0]); }
-  await new Promise(r => setTimeout(r, 15_000));
+  } catch (e) {
+    log('tick error', (e as Error).message.split('\n')[0]);
+  }
+  await new Promise((r) => setTimeout(r, 15_000));
 }

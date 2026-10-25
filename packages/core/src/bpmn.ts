@@ -8,14 +8,44 @@
  */
 import { DOMParser } from '@xmldom/xmldom';
 import { layoutCollaboration, type Box, type Pt } from './layout';
-import { MILESTONES, type AssetDefinition, type IrFlow, type IrMessageFlow, type IrNode, type IrPool, type Milestone, type NodeProps, type NodeType, type PropsMap, type TemplateField, type WorkflowIR } from './types';
+import {
+  MILESTONES,
+  type AssetDefinition,
+  type IrFlow,
+  type IrMessageFlow,
+  type IrNode,
+  type IrPool,
+  type Milestone,
+  type NodeProps,
+  type NodeType,
+  type PropsMap,
+  type TemplateField,
+  type WorkflowIR,
+} from './types';
 
 export const FLOW_NS = 'https://stratosnotes.dev/bpmn';
 
-const NODE_TYPES: NodeType[] = ['startEvent', 'endEvent', 'userTask', 'serviceTask', 'task', 'receiveTask', 'sendTask', 'exclusiveGateway', 'parallelGateway', 'intermediateCatchEvent'];
+const NODE_TYPES: NodeType[] = [
+  'startEvent',
+  'endEvent',
+  'userTask',
+  'serviceTask',
+  'task',
+  'receiveTask',
+  'sendTask',
+  'exclusiveGateway',
+  'parallelGateway',
+  'intermediateCatchEvent',
+];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- structural DOM shape shared by the browser DOMParser and @xmldom; child nodes are narrowed by nodeType below
-type El = { localName: string; getAttribute(n: string): string | null; childNodes: ArrayLike<any>; textContent: string | null };
+// Structural DOM shape shared by the browser DOMParser and @xmldom; child nodes are narrowed by nodeType below.
+type El = {
+  localName: string;
+  getAttribute(n: string): string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  childNodes: ArrayLike<any>;
+  textContent: string | null;
+};
 
 const local = (e: El) => e.localName || '';
 const kids = (e: El, name?: string): El[] => {
@@ -30,12 +60,16 @@ const kids = (e: El, name?: string): El[] => {
 function readProps(el: El): NodeProps {
   const props: NodeProps = {};
   const ext = kids(el, 'extensionElements')[0];
-  const p = ext && kids(ext).find(c => local(c) === 'Properties' || local(c) === 'properties');
+  const p = ext && kids(ext).find((c) => local(c) === 'Properties' || local(c) === 'properties');
   if (p) {
-    const json = <T,>(name: string): T | undefined => {
+    const json = <T>(name: string): T | undefined => {
       const v = p.getAttribute(name);
       if (!v) return undefined;
-      try { return JSON.parse(v) as T; } catch { throw new Error(`${el.getAttribute('id')}: ${name} is not valid JSON`); }
+      try {
+        return JSON.parse(v) as T;
+      } catch {
+        throw new Error(`${el.getAttribute('id')}: ${name} is not valid JSON`);
+      }
     };
     const tf = json<TemplateField[]>('templateFields');
     if (tf?.length) props.templateFields = tf;
@@ -50,7 +84,11 @@ function readProps(el: El): NodeProps {
     const guard = p.getAttribute('receiveGuard');
     if (guard) props.receiveGuard = guard;
     const ctrl = p.getAttribute('controllers');
-    if (ctrl) props.controllers = ctrl.split(',').map(s => s.trim()).filter(Boolean);
+    if (ctrl)
+      props.controllers = ctrl
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     const ms = p.getAttribute('milestone');
     if (ms) {
       if (!(ms in MILESTONES)) throw new Error(`${el.getAttribute('id')}: unknown milestone '${ms}'`);
@@ -77,7 +115,10 @@ export function parseBpmn(xml: string, assets: AssetDefinition[] = []): Workflow
   const procToPool = new Map<string, IrPool>();
   const pools: IrPool[] = [];
   for (const part of collab ? kids(collab, 'participant') : []) {
-    const pool: IrPool = { id: part.getAttribute('id') || '', name: part.getAttribute('name') || part.getAttribute('id') || '' };
+    const pool: IrPool = {
+      id: part.getAttribute('id') || '',
+      name: part.getAttribute('name') || part.getAttribute('id') || '',
+    };
     if (part.getAttribute('flow:escrow') === 'true') pool.escrow = true;
     if (part.getAttribute('flow:open') === 'true') pool.open = true;
     pools.push(pool);
@@ -98,24 +139,48 @@ export function parseBpmn(xml: string, assets: AssetDefinition[] = []): Workflow
       const t = local(el) as NodeType;
       if (NODE_TYPES.includes(t)) {
         const id = el.getAttribute('id') || '';
-        nodes.push({ id, type: t, name: el.getAttribute('name') || id, pool: pool.id, props: readProps(el), incoming: [], outgoing: [], ...(el.getAttribute('default') ? { defaultFlow: el.getAttribute('default')! } : {}) });
+        nodes.push({
+          id,
+          type: t,
+          name: el.getAttribute('name') || id,
+          pool: pool.id,
+          props: readProps(el),
+          incoming: [],
+          outgoing: [],
+          ...(el.getAttribute('default') ? { defaultFlow: el.getAttribute('default')! } : {}),
+        });
       } else if (local(el) === 'sequenceFlow') {
         const cond = kids(el, 'conditionExpression')[0]?.textContent?.trim();
-        flows.push({ id: el.getAttribute('id') || '', source: el.getAttribute('sourceRef') || '', target: el.getAttribute('targetRef') || '', ...(el.getAttribute('name') ? { name: el.getAttribute('name')! } : {}), ...(cond ? { condition: cond } : {}) });
+        flows.push({
+          id: el.getAttribute('id') || '',
+          source: el.getAttribute('sourceRef') || '',
+          target: el.getAttribute('targetRef') || '',
+          ...(el.getAttribute('name') ? { name: el.getAttribute('name')! } : {}),
+          ...(cond ? { condition: cond } : {}),
+        });
       }
     }
   }
-  const byId = new Map(nodes.map(n => [n.id, n]));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const f of flows) {
     byId.get(f.source)?.outgoing.push(f.id);
     byId.get(f.target)?.incoming.push(f.id);
   }
   const messageFlows = (collab ? kids(collab, 'messageFlow') : []).map((m): IrMessageFlow => ({
-    id: m.getAttribute('id') || '', source: m.getAttribute('sourceRef') || '', target: m.getAttribute('targetRef') || '',
+    id: m.getAttribute('id') || '',
+    source: m.getAttribute('sourceRef') || '',
+    target: m.getAttribute('targetRef') || '',
     ...(m.getAttribute('flow:notice') === 'true' ? { notice: true } : {}),
   }));
   const defs = root.getAttribute('id') || 'Workflow';
-  return { name: collab?.getAttribute('name') || defs.replace(/^Definitions_/, ''), pools, nodes, flows, messageFlows, assets };
+  return {
+    name: collab?.getAttribute('name') || defs.replace(/^Definitions_/, ''),
+    pools,
+    nodes,
+    flows,
+    messageFlows,
+    assets,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,16 +196,51 @@ export interface SpecNode {
   row?: number;
   props?: NodeProps;
 }
-export interface SpecFlow { id: string; src: string; tgt: string; name?: string; cond?: string; isDefault?: boolean }
-export interface SpecPool { id: string; name: string; proc: string; nodes: SpecNode[]; flows: SpecFlow[]; escrow?: boolean; open?: boolean }
-export interface SpecMessage { id: string; src: string; tgt: string; notice?: boolean }
-export interface BuildSpec { key: string; name: string; pools: SpecPool[]; messages: SpecMessage[]; assets: AssetDefinition[] }
-export interface BuiltWorkflow { bpmnXml: string; props: PropsMap; assets: AssetDefinition[] }
+export interface SpecFlow {
+  id: string;
+  src: string;
+  tgt: string;
+  name?: string;
+  cond?: string;
+  isDefault?: boolean;
+}
+export interface SpecPool {
+  id: string;
+  name: string;
+  proc: string;
+  nodes: SpecNode[];
+  flows: SpecFlow[];
+  escrow?: boolean;
+  open?: boolean;
+}
+export interface SpecMessage {
+  id: string;
+  src: string;
+  tgt: string;
+  notice?: boolean;
+}
+export interface BuildSpec {
+  key: string;
+  name: string;
+  pools: SpecPool[];
+  messages: SpecMessage[];
+  assets: AssetDefinition[];
+}
+export interface BuiltWorkflow {
+  bpmnXml: string;
+  props: PropsMap;
+  assets: AssetDefinition[];
+}
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-export const field = (name: string, type: TemplateField['type'], extra: Partial<TemplateField> = {}): TemplateField => ({ name, type, ...extra });
-export const chain = (prefix: string, ...ids: string[]): SpecFlow[] => ids.slice(1).map((tgt, i) => ({ id: `${prefix}${i + 1}`, src: ids[i], tgt }));
+export const field = (
+  name: string,
+  type: TemplateField['type'],
+  extra: Partial<TemplateField> = {},
+): TemplateField => ({ name, type, ...extra });
+export const chain = (prefix: string, ...ids: string[]): SpecFlow[] =>
+  ids.slice(1).map((tgt, i) => ({ id: `${prefix}${i + 1}`, src: ids[i], tgt }));
 
 function propsXml(p: NodeProps | undefined): string {
   if (!p) return '';
@@ -158,39 +258,61 @@ function propsXml(p: NodeProps | undefined): string {
 
 export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
   const lay = layoutCollaboration(
-    spec.pools.map(p => ({ id: p.id, nodes: p.nodes.map(n => ({ id: n.id, type: n.type, name: n.name, rowHint: n.row })), flows: p.flows })),
+    spec.pools.map((p) => ({
+      id: p.id,
+      nodes: p.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name, rowHint: n.row })),
+      flows: p.flows,
+    })),
     spec.messages,
   );
   const bounds = (b: Box) => `<dc:Bounds x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" />`;
-  const label = (id: string) => lay.labels[id] ? `<bpmndi:BPMNLabel>${bounds(lay.labels[id])}</bpmndi:BPMNLabel>` : '';
-  const shapes: string[] = [], edges: string[] = [], procs: string[] = [];
+  const label = (id: string) =>
+    lay.labels[id] ? `<bpmndi:BPMNLabel>${bounds(lay.labels[id])}</bpmndi:BPMNLabel>` : '';
+  const shapes: string[] = [],
+    edges: string[] = [],
+    procs: string[] = [];
   for (const p of spec.pools) {
-    shapes.push(`      <bpmndi:BPMNShape id="${p.id}_di" bpmnElement="${p.id}" isHorizontal="true">${bounds(lay.pools[p.id])}</bpmndi:BPMNShape>`);
+    shapes.push(
+      `      <bpmndi:BPMNShape id="${p.id}_di" bpmnElement="${p.id}" isHorizontal="true">${bounds(lay.pools[p.id])}</bpmndi:BPMNShape>`,
+    );
     for (const n of p.nodes) {
       const marker = n.type === 'exclusiveGateway' ? ' isMarkerVisible="true"' : '';
-      shapes.push(`      <bpmndi:BPMNShape id="${n.id}_di" bpmnElement="${n.id}"${marker}>${bounds(lay.shapes[n.id])}${label(n.id)}</bpmndi:BPMNShape>`);
+      shapes.push(
+        `      <bpmndi:BPMNShape id="${n.id}_di" bpmnElement="${n.id}"${marker}>${bounds(lay.shapes[n.id])}${label(n.id)}</bpmndi:BPMNShape>`,
+      );
     }
   }
   const pts = (ps: Pt[]) => ps.map(([a, b]) => `<di:waypoint x="${a}" y="${b}" />`).join('');
   for (const p of spec.pools) {
     const lines = [`  <bpmn:process id="${p.proc}" isExecutable="${p.nodes.length ? 'true' : 'false'}">`];
-    const defaults = new Map(p.flows.filter(f => f.isDefault).map(f => [f.src, f.id]));
+    const defaults = new Map(p.flows.filter((f) => f.isDefault).map((f) => [f.src, f.id]));
     for (const n of p.nodes) {
       const d = defaults.has(n.id) ? ` default="${defaults.get(n.id)}"` : '';
       const inner = propsXml(n.props);
-      lines.push(inner ? `    <bpmn:${n.type} id="${n.id}" name="${esc(n.name)}"${d}>${inner}</bpmn:${n.type}>` : `    <bpmn:${n.type} id="${n.id}" name="${esc(n.name)}"${d} />`);
+      lines.push(
+        inner
+          ? `    <bpmn:${n.type} id="${n.id}" name="${esc(n.name)}"${d}>${inner}</bpmn:${n.type}>`
+          : `    <bpmn:${n.type} id="${n.id}" name="${esc(n.name)}"${d} />`,
+      );
     }
     for (const f of p.flows) {
       const nm = f.name ? ` name="${esc(f.name)}"` : '';
-      lines.push(f.cond
-        ? `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${esc(f.cond)}</bpmn:conditionExpression></bpmn:sequenceFlow>`
-        : `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}" />`);
-      edges.push(`      <bpmndi:BPMNEdge id="${f.id}_di" bpmnElement="${f.id}">${pts(lay.edges[f.id])}${label(f.id)}</bpmndi:BPMNEdge>`);
+      lines.push(
+        f.cond
+          ? `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${esc(f.cond)}</bpmn:conditionExpression></bpmn:sequenceFlow>`
+          : `    <bpmn:sequenceFlow id="${f.id}"${nm} sourceRef="${f.src}" targetRef="${f.tgt}" />`,
+      );
+      edges.push(
+        `      <bpmndi:BPMNEdge id="${f.id}_di" bpmnElement="${f.id}">${pts(lay.edges[f.id])}${label(f.id)}</bpmndi:BPMNEdge>`,
+      );
     }
     lines.push('  </bpmn:process>');
     procs.push(lines.join('\n'));
   }
-  for (const m of spec.messages) edges.push(`      <bpmndi:BPMNEdge id="${m.id}_di" bpmnElement="${m.id}">${pts(lay.edges[m.id])}</bpmndi:BPMNEdge>`);
+  for (const m of spec.messages)
+    edges.push(
+      `      <bpmndi:BPMNEdge id="${m.id}_di" bpmnElement="${m.id}">${pts(lay.edges[m.id])}</bpmndi:BPMNEdge>`,
+    );
   const k = spec.key;
   const bpmnXml = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flow="${FLOW_NS}"
@@ -200,8 +322,8 @@ export function buildWorkflow(spec: BuildSpec): BuiltWorkflow {
                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                   id="Definitions_${k}" targetNamespace="${FLOW_NS}">
   <bpmn:collaboration id="Collab_${k}" name="${esc(spec.name)}">
-${spec.pools.map(p => `    <bpmn:participant id="${p.id}" name="${esc(p.name)}" processRef="${p.proc}"${p.escrow ? ' flow:escrow="true"' : ''}${p.open ? ' flow:open="true"' : ''} />`).join('\n')}
-${spec.messages.map(m => `    <bpmn:messageFlow id="${m.id}"${m.notice ? ' flow:notice="true"' : ''} sourceRef="${m.src}" targetRef="${m.tgt}" />`).join('\n')}
+${spec.pools.map((p) => `    <bpmn:participant id="${p.id}" name="${esc(p.name)}" processRef="${p.proc}"${p.escrow ? ' flow:escrow="true"' : ''}${p.open ? ' flow:open="true"' : ''} />`).join('\n')}
+${spec.messages.map((m) => `    <bpmn:messageFlow id="${m.id}"${m.notice ? ' flow:notice="true"' : ''} sourceRef="${m.src}" targetRef="${m.tgt}" />`).join('\n')}
   </bpmn:collaboration>
 ${procs.join('\n')}
   <bpmndi:BPMNDiagram id="BPMNDiagram_${k}">

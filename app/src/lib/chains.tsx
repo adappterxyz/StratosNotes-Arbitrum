@@ -7,7 +7,13 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { connectorsForWallets, darkTheme, lightTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit';
-import { injectedWallet, metaMaskWallet, rainbowWallet, trustWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets';
+import {
+  injectedWallet,
+  metaMaskWallet,
+  rainbowWallet,
+  trustWallet,
+  walletConnectWallet,
+} from '@rainbow-me/rainbowkit/wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, defineChain, http, type Chain, type PublicClient, type WalletClient } from 'viem';
 import { createConfig, deserialize, WagmiProvider, useAccount, type State } from 'wagmi';
@@ -17,7 +23,18 @@ import { CASH_TOKEN, CASH_TOKENS, EXTERNAL_TOKENS, TEST_CASH_TOKEN } from '@sn/c
 import type { AppConfig, ChainConfig } from './api';
 import { entryFor, legacyConfig, type ByKey, type EngineEntry } from './engines';
 
-export { COLLATERAL_CHAIN, engineOf, entryFor, issueChains, legacyConfig, marketplaceNotes, onRobinhoodChain, ROBINHOOD_LEGACY_LABEL, type ByKey, type EngineEntry } from './engines';
+export {
+  COLLATERAL_CHAIN,
+  engineOf,
+  entryFor,
+  issueChains,
+  legacyConfig,
+  marketplaceNotes,
+  onRobinhoodChain,
+  ROBINHOOD_LEGACY_LABEL,
+  type ByKey,
+  type EngineEntry,
+} from './engines';
 import '@rainbow-me/rainbowkit/styles.css';
 
 /**
@@ -37,13 +54,17 @@ export function prepareConfig(config: AppConfig): AppConfig {
   const rank = (k: string) => (k === PREFERRED_CHAIN ? 0 : 1);
   const chains = [...config.chains]
     .sort((a, b) => rank(a.key) - rank(b.key))
-    .map(c => {
+    .map((c) => {
       const usdg = CASH_TOKENS[c.key];
       const tokens: Record<string, `0x${string}`> = { ...(EXTERNAL_TOKENS[c.key] ?? {}), ...c.tokens };
       if (!usdg) return { ...c, tokens };
       // An older deployment's own test dollar, when the API still names it the stablecoin. Never overwrite a tUSD the
       // API already lists: that would relabel every tUSD note as USDG.
-      if (c.stablecoin?.address && c.stablecoin.address.toLowerCase() !== usdg.toLowerCase() && !tokens[TEST_CASH_TOKEN.token]) {
+      if (
+        c.stablecoin?.address &&
+        c.stablecoin.address.toLowerCase() !== usdg.toLowerCase() &&
+        !tokens[TEST_CASH_TOKEN.token]
+      ) {
         tokens[TEST_CASH_TOKEN.token] = c.stablecoin.address;
       }
       return { ...c, tokens, stablecoin: { symbol: CASH_TOKEN.token, address: usdg, decimals: CASH_TOKEN.decimals } };
@@ -64,7 +85,9 @@ const NATIVE: Record<string, { name: string; symbol: string }> = {};
 
 function toChain(c: ChainConfig): Chain {
   return defineChain({
-    id: c.chainId!, name: c.name, testnet: c.testnet,
+    id: c.chainId!,
+    name: c.name,
+    testnet: c.testnet,
     nativeCurrency: { ...(NATIVE[c.key] ?? { name: 'Ether', symbol: 'ETH' }), decimals: 18 },
     rpcUrls: { default: { http: [c.rpc] } },
     ...(c.explorer ? { blockExplorers: { default: { name: 'Explorer', url: c.explorer } } } : {}),
@@ -75,7 +98,9 @@ function toChain(c: ChainConfig): Chain {
 export function announcedWallets(): number {
   if (typeof window === 'undefined') return 0;
   let n = 0;
-  const on = () => { n++; };
+  const on = () => {
+    n++;
+  };
   window.addEventListener('eip6963:announceProvider', on);
   window.dispatchEvent(new Event('eip6963:requestProvider'));
   window.removeEventListener('eip6963:announceProvider', on);
@@ -93,9 +118,17 @@ export function savedWalletState(): State | undefined {
   try {
     const raw = localStorage.getItem('wagmi.store');
     const saved = raw ? (deserialize(raw) as { state?: Partial<State> }).state : undefined;
-    if (!saved?.current || !(saved.connections instanceof Map) || !saved.connections.has(saved.current)) return undefined;
-    return { chainId: saved.chainId ?? 0, connections: saved.connections, current: saved.current, status: 'reconnecting' };
-  } catch { return undefined; }
+    if (!saved?.current || !(saved.connections instanceof Map) || !saved.connections.has(saved.current))
+      return undefined;
+    return {
+      chainId: saved.chainId ?? 0,
+      connections: saved.connections,
+      current: saved.current,
+      status: 'reconnecting',
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 interface Chains {
@@ -114,21 +147,40 @@ const Ctx = createContext<Chains | null>(null);
 
 export function ChainsProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const value = useMemo<Chains>(() => {
-    const evm = config.chains.filter(c => c.family === 'evm' && c.chainId);
+    const evm = config.chains.filter((c) => c.family === 'evm' && c.chainId);
     const byKey: Chains['byKey'] = {};
     for (const cfg of evm) {
       const chain = toChain(cfg);
       const client = createPublicClient({ chain, transport: http(cfg.rpc) }) as PublicClient;
-      const current: EngineEntry = { cfg, chain, client, version: 4, legacy: false, adapter: new EvmAdapter(cfg, client, { engine: cfg.engine, lens: cfg.lens, fromBlock: BigInt(cfg.fromBlock) }) };
+      const current: EngineEntry = {
+        cfg,
+        chain,
+        client,
+        version: 4,
+        legacy: false,
+        adapter: new EvmAdapter(cfg, client, { engine: cfg.engine, lens: cfg.lens, fromBlock: BigInt(cfg.fromBlock) }),
+      };
       const engines: Record<string, EngineEntry> = { [cfg.engine.toLowerCase()]: current };
       for (const l of cfg.legacyEngines ?? []) {
         const version = (l.version < 4 ? 3 : 4) as EngineVersion; // earlier engines use the v3 ABI subset
         const lc = legacyConfig(cfg, l);
-        engines[l.engine.toLowerCase()] = { cfg: lc, chain, client, version, legacy: version < 4, adapter: new EvmAdapter(lc, client, { engine: l.engine, lens: l.lens, fromBlock: BigInt(l.fromBlock), version }) };
+        engines[l.engine.toLowerCase()] = {
+          cfg: lc,
+          chain,
+          client,
+          version,
+          legacy: version < 4,
+          adapter: new EvmAdapter(lc, client, {
+            engine: l.engine,
+            lens: l.lens,
+            fromBlock: BigInt(l.fromBlock),
+            version,
+          }),
+        };
       }
       byKey[cfg.key] = { ...current, engines };
     }
-    const chains = Object.values(byKey).map(x => x.chain);
+    const chains = Object.values(byKey).map((x) => x.chain);
     const initialState = savedWalletState(); // before createConfig, which can write its empty state over the saved one
     // Injected wallets only (MetaMask, Rabby, Coinbase Wallet extension…), each discovered via EIP-6963 as its own
     // connector. The generic "Browser Wallet" connector is only a fallback for a wallet that does not announce
@@ -138,16 +190,24 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
     // desktop with a browser wallet, one "WalletConnect" entry (a QR code for a phone wallet); on a phone browser
     // with no wallet inside it, MetaMask, Rainbow and Trust by name (each opens its app to approve) plus WalletConnect.
     const announced = announcedWallets();
-    const mobile = announced === 0 && typeof window !== 'undefined' && !(window as unknown as { ethereum?: unknown }).ethereum;
+    const mobile =
+      announced === 0 && typeof window !== 'undefined' && !(window as unknown as { ethereum?: unknown }).ethereum;
     const groups = [
       ...(announced === 0 && !mobile ? [{ groupName: 'Browser wallets', wallets: [injectedWallet] }] : []),
-      { groupName: mobile ? 'Wallet apps' : 'Phone wallets', wallets: mobile ? [metaMaskWallet, rainbowWallet, trustWallet, walletConnectWallet] : [walletConnectWallet] },
+      {
+        groupName: mobile ? 'Wallet apps' : 'Phone wallets',
+        wallets: mobile ? [metaMaskWallet, rainbowWallet, trustWallet, walletConnectWallet] : [walletConnectWallet],
+      },
     ];
-    const connectors = connectorsForWallets(groups, { appName: 'notes.markets', appUrl: 'https://notes.markets', projectId: WC_PROJECT_ID });
+    const connectors = connectorsForWallets(groups, {
+      appName: 'notes.markets',
+      appUrl: 'https://notes.markets',
+      projectId: WC_PROJECT_ID,
+    });
     const wagmi = createConfig({
       chains: chains as [Chain, ...Chain[]],
       connectors,
-      transports: Object.fromEntries(Object.values(byKey).map(x => [x.chain.id, http(x.cfg.rpc)])),
+      transports: Object.fromEntries(Object.values(byKey).map((x) => [x.chain.id, http(x.cfg.rpc)])),
       multiInjectedProviderDiscovery: true,
       ssr: false,
     });
@@ -155,15 +215,31 @@ export function ChainsProvider({ config, children }: { config: AppConfig; childr
   }, [config]);
   const queryClient = useMemo(() => new QueryClient(), []);
   // The wallet modal follows the app theme: light by default, navy when the user picks the dark theme.
-  const [dark, setDark] = useState(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+  const [dark, setDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
+  );
   useEffect(() => {
     const on = () => setDark(document.documentElement.classList.contains('dark'));
     window.addEventListener('sn-theme', on);
     return () => window.removeEventListener('sn-theme', on);
   }, []);
-  const rkTheme = useMemo(() => (dark
-    ? darkTheme({ accentColor: '#12A971', accentColorForeground: '#0E1116', borderRadius: 'medium', fontStack: 'system' })
-    : lightTheme({ accentColor: '#0E1116', accentColorForeground: '#FFFFFF', borderRadius: 'medium', fontStack: 'system' })), [dark]);
+  const rkTheme = useMemo(
+    () =>
+      dark
+        ? darkTheme({
+            accentColor: '#12A971',
+            accentColorForeground: '#0E1116',
+            borderRadius: 'medium',
+            fontStack: 'system',
+          })
+        : lightTheme({
+            accentColor: '#0E1116',
+            accentColorForeground: '#FFFFFF',
+            borderRadius: 'medium',
+            fontStack: 'system',
+          }),
+    [dark],
+  );
   return (
     <Ctx.Provider value={value}>
       <WagmiProvider config={value.wagmi} initialState={value.initialState}>
@@ -187,7 +263,9 @@ export function useChains() {
  * The engine that runs a note: its chain's current engine or an earlier one (by the note's engine address, or its
  * id). Undefined when this deployment does not serve that chain or engine.
  */
-export function useNoteChain(note: { chain: string; engine?: string; id?: string } | null | undefined): EngineEntry | undefined {
+export function useNoteChain(
+  note: { chain: string; engine?: string; id?: string } | null | undefined,
+): EngineEntry | undefined {
   const { byKey } = useChains();
   return note ? entryFor(byKey, note) : undefined;
 }
@@ -201,12 +279,15 @@ export function useAddress(): string | null {
 /** A WalletClient on `chainKey`, switching the wallet's network first when needed. */
 export function useSigner() {
   const { wagmi, byKey } = useChains();
-  return useCallback(async (chainKey: string): Promise<WalletClient> => {
-    const target = byKey[chainKey];
-    if (!target) throw new Error(`This app is not configured for ${chainKey}.`);
-    const acct = getAccount(wagmi);
-    if (!acct.address) throw new Error('Connect a wallet first.');
-    if (acct.chainId !== target.chain.id) await switchChain(wagmi, { chainId: target.chain.id });
-    return (await getWalletClient(wagmi, { chainId: target.chain.id })) as WalletClient;
-  }, [wagmi, byKey]);
+  return useCallback(
+    async (chainKey: string): Promise<WalletClient> => {
+      const target = byKey[chainKey];
+      if (!target) throw new Error(`This app is not configured for ${chainKey}.`);
+      const acct = getAccount(wagmi);
+      if (!acct.address) throw new Error('Connect a wallet first.');
+      if (acct.chainId !== target.chain.id) await switchChain(wagmi, { chainId: target.chain.id });
+      return (await getWalletClient(wagmi, { chainId: target.chain.id })) as WalletClient;
+    },
+    [wagmi, byKey],
+  );
 }

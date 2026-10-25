@@ -86,10 +86,13 @@ export const MILESTONES = {
   'margin-cured': 5,
   'payment-made': 6,
   'payment-missed': 7,
-  'defaulted': 8,
+  defaulted: 8,
 } as const;
 export type Milestone = keyof typeof MILESTONES;
-export const MILESTONE_NAMES = Object.fromEntries(Object.entries(MILESTONES).map(([k, v]) => [v, k])) as Record<number, Milestone>;
+export const MILESTONE_NAMES = Object.fromEntries(Object.entries(MILESTONES).map(([k, v]) => [v, k])) as Record<
+  number,
+  Milestone
+>;
 
 export type PropsMap = Record<string, NodeProps>;
 
@@ -109,8 +112,16 @@ export interface AssetDefinition {
 }
 
 export type NodeType =
-  | 'startEvent' | 'endEvent' | 'userTask' | 'serviceTask' | 'task' | 'receiveTask' | 'sendTask'
-  | 'exclusiveGateway' | 'parallelGateway' | 'intermediateCatchEvent';
+  | 'startEvent'
+  | 'endEvent'
+  | 'userTask'
+  | 'serviceTask'
+  | 'task'
+  | 'receiveTask'
+  | 'sendTask'
+  | 'exclusiveGateway'
+  | 'parallelGateway'
+  | 'intermediateCatchEvent';
 
 export interface IrNode {
   id: string;
@@ -123,14 +134,25 @@ export interface IrNode {
   defaultFlow?: string;
 }
 
-export interface IrFlow { id: string; source: string; target: string; name?: string; condition?: string }
+export interface IrFlow {
+  id: string;
+  source: string;
+  target: string;
+  name?: string;
+  condition?: string;
+}
 
 /**
  * A pool. `escrow`: an account the engine holds for the note itself (pledged collateral, funded payments).
  * Nobody signs for it: no person can run its steps, withdraw from it or move its balances; only the
  * workflow's own operations do (FlowEngine.ESCROW). An escrow pool has no steps.
  */
-export interface IrPool { id: string; name: string; escrow?: boolean; open?: boolean }
+export interface IrPool {
+  id: string;
+  name: string;
+  escrow?: boolean;
+  open?: boolean;
+}
 
 /**
  * Pools anyone may act in (OPEN roles: the engine takes address(0) for them), e.g. the investors' book. Marked
@@ -138,10 +160,10 @@ export interface IrPool { id: string; name: string; escrow?: boolean; open?: boo
  * window and no start event.
  */
 export function openPoolIds(ir: Pick<WorkflowIR, 'pools' | 'nodes'>): Set<string> {
-  if (ir.pools.some(p => p.open)) return new Set(ir.pools.filter(p => p.open).map(p => p.id));
-  const windows = new Set(ir.nodes.filter(n => n.props.until).map(n => n.pool));
-  const starts = new Set(ir.nodes.filter(n => n.type === 'startEvent').map(n => n.pool));
-  return new Set(ir.pools.filter(p => windows.has(p.id) && !starts.has(p.id) && !p.escrow).map(p => p.id));
+  if (ir.pools.some((p) => p.open)) return new Set(ir.pools.filter((p) => p.open).map((p) => p.id));
+  const windows = new Set(ir.nodes.filter((n) => n.props.until).map((n) => n.pool));
+  const starts = new Set(ir.nodes.filter((n) => n.type === 'startEvent').map((n) => n.pool));
+  return new Set(ir.pools.filter((p) => windows.has(p.id) && !starts.has(p.id) && !p.escrow).map((p) => p.id));
 }
 
 /**
@@ -149,7 +171,12 @@ export function openPoolIds(ir: Pick<WorkflowIR, 'pools' | 'nodes'>): Set<string
  * paying agent) but not a token handoff: the receiving pool reads the state it needs (an escrow balance)
  * itself, so the engine ignores it.
  */
-export interface IrMessageFlow { id: string; source: string; target: string; notice?: boolean }
+export interface IrMessageFlow {
+  id: string;
+  source: string;
+  target: string;
+  notice?: boolean;
+}
 
 export interface WorkflowIR {
   name: string;
@@ -160,4 +187,8 @@ export interface WorkflowIR {
   assets: AssetDefinition[];
 }
 
-export interface Issue { code: string; message: string; nodeId?: string }
+export interface Issue {
+  code: string;
+  message: string;
+  nodeId?: string;
+}

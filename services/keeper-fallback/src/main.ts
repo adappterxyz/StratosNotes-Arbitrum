@@ -17,7 +17,15 @@
  * in production; this process only reads the path it is given and never logs the key.
  */
 import { readFileSync } from 'node:fs';
-import { createPublicClient, createWalletClient, defineChain, http, type Address, type Hex, type PublicClient } from 'viem';
+import {
+  createPublicClient,
+  createWalletClient,
+  defineChain,
+  http,
+  type Address,
+  type Hex,
+  type PublicClient,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { HTTP_FEED_CHAINS, type FeedReadAt } from '@sn/core';
 import { runOnce } from './keeper';
@@ -39,28 +47,51 @@ const keyPath = process.env.KEEPER_KEY_FILE;
 if (!cfgPath || !keyPath) throw new Error('set KEEPER_CONFIG and KEEPER_KEY_FILE');
 const fc = JSON.parse(readFileSync(cfgPath, 'utf8')) as FileConfig;
 const account = privateKeyToAccount(readFileSync(keyPath, 'utf8').trim() as Hex);
-const chain = defineChain({ id: fc.chain.chainId, name: fc.chain.name, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [fc.chain.rpc] } } });
+const chain = defineChain({
+  id: fc.chain.chainId,
+  name: fc.chain.name,
+  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [fc.chain.rpc] } },
+});
 const client = createPublicClient({ chain, transport: http(fc.chain.rpc) }) as PublicClient;
 const wallet = createWalletClient({ chain, account, transport: http(fc.chain.rpc) });
-const feedRpcs = { ...Object.fromEntries(Object.entries(HTTP_FEED_CHAINS).map(([k, c]) => [k, c.rpc])), ...fc.feedRpcs };
+const feedRpcs = {
+  ...Object.fromEntries(Object.entries(HTTP_FEED_CHAINS).map(([k, c]) => [k, c.rpc])),
+  ...fc.feedRpcs,
+};
 const feedReadAt: Record<string, FeedReadAt> = {
-  ...Object.fromEntries(Object.entries(HTTP_FEED_CHAINS).map(([k, c]) => [k, { blockTag: c.blockTag, lagBlocks: c.lagBlocks }])),
+  ...Object.fromEntries(
+    Object.entries(HTTP_FEED_CHAINS).map(([k, c]) => [k, { blockTag: c.blockTag, lagBlocks: c.lagBlocks }]),
+  ),
   ...fc.feedReadAt,
 };
-const feedClients = Object.fromEntries(Object.entries(feedRpcs).map(([k, url]) => [k, createPublicClient({ transport: http(url) }) as PublicClient]));
+const feedClients = Object.fromEntries(
+  Object.entries(feedRpcs).map(([k, url]) => [k, createPublicClient({ transport: http(url) }) as PublicClient]),
+);
 
 const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
-const pass = () => runOnce({
-  chain: { name: fc.chain.name, client, wallet, engine: fc.chain.engine, lens: fc.chain.lens },
-  feedClients, feedReadAt, blockTag: fc.blockTag ?? 'finalized', finalityAllowanceSec: fc.finalityAllowanceSec ?? 1800,
-  maxReportsPerRun: fc.maxReportsPerRun ?? 5, gasLimit: BigInt(fc.gasLimit ?? '2500000'), feedRoutes: fc.feedRoutes, log,
-});
+const pass = () =>
+  runOnce({
+    chain: { name: fc.chain.name, client, wallet, engine: fc.chain.engine, lens: fc.chain.lens },
+    feedClients,
+    feedReadAt,
+    blockTag: fc.blockTag ?? 'finalized',
+    finalityAllowanceSec: fc.finalityAllowanceSec ?? 1800,
+    maxReportsPerRun: fc.maxReportsPerRun ?? 5,
+    gasLimit: BigInt(fc.gasLimit ?? '2500000'),
+    feedRoutes: fc.feedRoutes,
+    log,
+  });
 
 if (process.argv.includes('--once')) {
   console.log(JSON.stringify(await pass()));
 } else {
   for (;;) {
-    try { await pass(); } catch (e) { log(`error: ${(e as Error).message}`); }
-    await new Promise(r => setTimeout(r, (fc.intervalSec ?? 60) * 1000));
+    try {
+      await pass();
+    } catch (e) {
+      log(`error: ${(e as Error).message}`);
+    }
+    await new Promise((r) => setTimeout(r, (fc.intervalSec ?? 60) * 1000));
   }
 }
