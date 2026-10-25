@@ -128,6 +128,21 @@ describe('planning (pure)', () => {
     expect(plan(state(), view(), events).filter(p => p.template === 'payment-made')).toEqual([]);
   });
 
+  it('an event the indexer re-inserts (new seq, same transaction) keeps its dedupe key: no second email', () => {
+    const run = (seq: number) => [
+      { ...ev('0xt7', 'StepRun', { step: step('Task_Pay1'), kind: 3, actor: ZERO }), seq },
+      { ...ev('0xt7', 'HoldingChanged', { asset: CASH, owner: ALICE, balance: fx(5) }), seq: seq + 1 },
+    ];
+    const keys = (seq: number) => plan(state(), view(), run(seq)).filter(p => p.template === 'payment-made').map(p => p.dedupe);
+    expect(keys(100)).toEqual(keys(9_000));
+    expect(keys(100).length).toBe(1);
+  });
+
+  it('an event older than a few hours is not planned (a rewind re-inserting it cannot re-send it)', () => {
+    const events = [ev('0xt8', 'StepRun', { step: step('Task_Pay1'), kind: 3, actor: ZERO }, NOW - 4 * 3600), ev('0xt8', 'HoldingChanged', { asset: CASH, owner: ALICE, balance: fx(1) }, NOW - 4 * 3600)];
+    expect(plan(state(), view(), events).filter(p => p.template === 'payment-made')).toEqual([]);
+  });
+
   it('a definition\'s own declarations replace the defaults', () => {
     const own: WorkflowDef = { ...def, meta: JSON.stringify({ notify: { Task_Pay1: [{ on: 'done', audience: 'role:Paying Agent', category: 'payouts', subject: 'Paid {{period}}', body: 'On {{note}}' }] } }) };
     const events = [ev('0xt6', 'StepRun', { step: step('Task_Pay1'), kind: 3, actor: ZERO })];

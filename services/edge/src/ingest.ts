@@ -140,7 +140,10 @@ export class D1Ingestor {
       const stored = await this.store.first<{ hash: string }>('SELECT hash FROM blocks WHERE chain = ?1 AND number = ?2', [this.rowKey, cursor]);
       if (stored) {
         const now = await this.src.block(BigInt(cursor));
-        if (!now || now.hash !== stored.hash) return this.rewind(cursor);
+        // A load-balanced RPC can answer from a node that doesn't have the block yet: that is "try again later", not
+        // a reorg. Only a different hash rewinds.
+        if (!now) return { from: cursor + 1, to: cursor, events: 0, notes: [], idle: true };
+        if (now.hash !== stored.hash) return this.rewind(cursor);
       }
     }
     const safe = await this.safeHead();

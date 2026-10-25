@@ -136,7 +136,9 @@ export function planNote(p: PlanInput): Planned[] {
   const noteAsset = 0;
   const base: Vars = { note: v.name || def.name, link: p.link, chain: p.chainLabel };
   const econ = v.economics;
-  const minTs = now - (p.maxEventAge ?? 2 * DAY);
+  // Only events from the last few hours: emails go out within a minute or two of an event, and an old event that
+  // reappears (an indexer that rewound and re-inserted it) must not send again.
+  const minTs = now - (p.maxEventAge ?? 3 * 3600);
 
   const everHeld = new Set<string>();
   for (const e of p.events) if (e.name === 'HoldingChanged' && Number(e.data.asset) === noteAsset && BigInt(String(e.data.balance)) > 0n) everHeld.add(String(e.data.owner).toLowerCase());
@@ -184,7 +186,7 @@ export function planNote(p: PlanInput): Planned[] {
       const got = txDeltas(p.events, e.tx).get(actor)?.get(noteAsset) ?? 0;
       if (got > 0) {
         push({
-          dedupe: `${p.noteId}|subscribed|${e.seq}|${actor}`, address: actor, category: 'account', template: 'subscribed',
+          dedupe: `${p.noteId}|subscribed|${e.tx}|${actor}`, address: actor, category: 'account', template: 'subscribed',
           vars: {
             ...base, units: got.toLocaleString('en-US', { maximumFractionDigits: 4 }), schedule: schedule(),
             protection: econ ? `the issuer pledged collateral of ${collateralText()}. If they miss a payment past its grace period, holders take ${econ.defaultRule === 'cap-at-owed' ? 'what they are owed (the missed payment plus par)' : 'all of it, pro rata'} from the collateral.` : 'none declared',
@@ -209,7 +211,7 @@ export function planNote(p: PlanInput): Planned[] {
       for (const t of targets) {
         if (!t.address || t.address === ZERO) continue;
         push({
-          dedupe: `${p.noteId}|${st.id}|${d.on}|${e.seq}|${di}|${t.address}`, address: t.address, category: d.category,
+          dedupe: `${p.noteId}|${st.id}|${d.on}|${e.tx}|${di}|${t.address}`, address: t.address, category: d.category,
           template: d.template, subject: d.subject, body: d.body,
           vars: { ...base, period: k ? String(k) : '', ...t.vars }, sendAfter: now, expiresAt: now + 3 * DAY,
         });
