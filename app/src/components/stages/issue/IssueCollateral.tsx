@@ -78,13 +78,13 @@ export function IssueCollateral({
                     {' '}
                     · haircut{' '}
                     <input
+                      className="w-64 inline-block"
                       aria-label={`${lockedAsset(tok)} share of value counted, %`}
                       type="number"
                       min={0}
                       max={100}
                       value={haircuts[c] ?? 100}
                       onChange={(e) => setHaircuts((h) => ({ ...h, [c]: Number(e.target.value) }))}
-                      style={{ width: 64, display: 'inline-block' }}
                     />
                     % counted
                   </>

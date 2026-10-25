@@ -9,7 +9,7 @@ export function CcipStatus({ state }: { state: { text: string; bad?: boolean; ms
       {state.text}{' '}
       {state.msg && (
         <a href={ccipLink(state.msg)} target="_blank" rel="noreferrer">
-          Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+          Follow on CCIP <ExternalLink className="i ic-11" />
         </a>
       )}
     </div>

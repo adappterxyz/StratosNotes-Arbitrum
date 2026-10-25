@@ -60,8 +60,9 @@ export function ScheduleStep({
         />
         <div className="field">
           <label htmlFor="is-every">Observe every</label>
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <div className="row flex-nowrap">
             <input
+              className="w-64"
               id="is-every"
               type="number"
               min={1}
@@ -70,7 +71,6 @@ export function ScheduleStep({
                 setEvery({ ...every, n: Number(e.target.value) || 1 });
                 setTiming(null);
               }}
-              style={{ width: 64 }}
             />
             <select
               aria-label="Interval unit"

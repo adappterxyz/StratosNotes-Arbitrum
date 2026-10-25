@@ -90,7 +90,7 @@ export default function App() {
   const extras = (
     <>
       <span className="pill plain" title="Networks this deployment serves">
-        <span className="dot" style={{ color: 'hsl(var(--success))' }} />
+        <span className="dot text-success" />
         {networks}
       </span>
       <FaucetButton />

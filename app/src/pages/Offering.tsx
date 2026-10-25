@@ -228,13 +228,13 @@ export default function OfferingPage() {
 
   return (
     <main className="page">
-      <Link to="/" className="small row" style={{ gap: 4 }}>
+      <Link to="/" className="small row gap-4">
         <ArrowLeft className="i" />
         Marketplace
       </Link>
       <div className="page-head">
-        <div className="stack" style={{ gap: 6 }}>
-          <span className="label row" style={{ gap: 8 }}>
+        <div className="stack gap-6">
+          <span className="label row gap-8">
             <AssetStack
               syms={o.unds.length ? o.unds.map((u) => u.symbol) : o.params.underlyings.map((u) => u.symbol)}
               size={18}
@@ -268,12 +268,12 @@ export default function OfferingPage() {
             )}
           </div>
         </div>
-        <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
+        <div className="stack gap-6 items-end">
           <span
             className="pill plain"
             title="This page updates when the indexer sees anything happen to the note: a report, a subscription, a transfer."
           >
-            <Radio className="i" style={{ width: 12, height: 12, color: 'hsl(var(--success))' }} />
+            <Radio className="i ic-12 text-success" />
             Live · updated {secsAgo < 5 ? 'just now' : `${secsAgo}s ago`}
           </span>
           {agent && (
@@ -282,7 +282,7 @@ export default function OfferingPage() {
               data-agent={o.reports.last ?? ''}
               title="Who submitted this note's price reports: Chainlink CRE through its forwarder, or the fallback keeper where CRE cannot write"
             >
-              <ShieldCheck className="i" style={{ width: 12, height: 12 }} />
+              <ShieldCheck className="i ic-12" />
               {agent}
             </span>
           )}
@@ -367,7 +367,7 @@ export default function OfferingPage() {
                       return (
                         <tr key={u.symbol}>
                           <td>
-                            <span className="row" style={{ gap: 6, display: 'inline-flex' }}>
+                            <span className="row gap-6 inline-flex">
                               <AssetIcon sym={u.symbol} size={18} />
                               {u.symbol}/USD
                             </span>{' '}
@@ -406,7 +406,7 @@ export default function OfferingPage() {
                         <When t={e.when} />
                       </span>
                     </span>
-                    <span className="num small" style={{ textAlign: 'right' }}>
+                    <span className="num small text-right">
                       {e.value ?? (e.state === 'now' ? (now >= e.when ? 'due: waiting for the report' : 'next') : '')}
                     </span>
                   </div>
@@ -474,7 +474,7 @@ export default function OfferingPage() {
                 </div>
               </div>
               {Number(units) > remaining && <p className="xs err">Only {fmtMoney(remaining, 0)} units are left.</p>}
-              <p className="xs muted" data-how-paid style={{ margin: 0 }}>
+              <p className="xs muted m-0" data-how-paid>
                 <strong>How you get paid:</strong> {pay.detail}
               </p>
               <button
@@ -610,7 +610,7 @@ export default function OfferingPage() {
                 );
               })}
               {mine.units > 0 && o.phase !== 'redeemed' && o.phase !== 'defaulted' && (
-                <div className="stack" style={{ gap: 8, borderTop: '1px solid hsl(var(--border))', paddingTop: 10 }}>
+                <div className="stack gap-8 divider-top">
                   <span className="label">Transfer notes</span>
                   <div className="field">
                     <label htmlFor="x-to">To wallet</label>

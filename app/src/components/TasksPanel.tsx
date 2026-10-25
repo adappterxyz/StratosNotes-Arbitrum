@@ -87,11 +87,7 @@ export default function TasksPanel({
         const decision = s.kind === KIND.XOR;
         const dep = s.ops.some((op) => op.kind === OP.DEPOSIT);
         return (
-          <div
-            key={s.id}
-            className="stack"
-            style={{ gap: 8, borderTop: '1px solid hsl(var(--border))', paddingTop: 10 }}
-          >
+          <div key={s.id} className="stack gap-8 divider-top">
             <div className="spread">
               <strong>{names[s.id] ?? s.id}</strong>
               <span className="xs muted">

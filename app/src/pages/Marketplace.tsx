@@ -158,7 +158,7 @@ export default function Marketplace() {
           ))}
         </div>
       )}
-      <p className="xs muted" style={{ marginTop: 14 }}>
+      <p className="xs muted mt-14">
         Rates are annualised from each note's terms. "Up to" rates depend on prices staying above a level and are not
         guaranteed. Testnet only.
       </p>

@@ -65,9 +65,9 @@ export function RedeemLeg({ leg }: { leg: Leg }) {
 
   return (
     <section className="card stack">
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row gap-8">
         <ArrowRightLeft className="i" />
-        <h3 style={{ margin: 0 }}>Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3>
+        <h3 className="m-0">Collateral receipts{leg.version ? ` (earlier engine, v${leg.version})` : ''}</h3>
       </div>
       <p className="xs muted">
         Tokens you locked on {leg.asset.name}
@@ -76,12 +76,12 @@ export function RedeemLeg({ leg }: { leg: Leg }) {
         issue. Send them back only if you no longer want to issue with them.
       </p>
       {held.map((s) => (
-        <div key={s} className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+        <div key={s} className="row justify-between gap-8">
           <span>
             {formatUnits(bal[s], leg.receipts[s].decimals)} {receiptLabel(s)} locked on {leg.asset.name}
           </span>
           {confirming === s ? (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row gap-6">
               <button className="btn" onClick={() => setConfirming(null)}>
                 Keep locked
               </button>

@@ -420,11 +420,7 @@ export default function Workspace() {
     {
       id: 'validate',
       label: issues.errors.length ? `Check (${issues.errors.length})` : 'Check',
-      icon: issues.errors.length ? (
-        <AlertCircle className="i" style={{ color: 'hsl(var(--destructive))' }} />
-      ) : (
-        <CheckCircle2 className="i" />
-      ),
+      icon: issues.errors.length ? <AlertCircle className="i text-destructive" /> : <CheckCircle2 className="i" />,
     },
     { id: 'payoff', label: 'Payoff', icon: <LineChart className="i" /> },
     { id: 'template', label: 'Ready-made note', icon: <BookOpen className="i" /> },
@@ -469,7 +465,7 @@ export default function Workspace() {
             </button>
           )}
           {doc && (
-            <span className="row" style={{ gap: 4 }}>
+            <span className="row gap-4">
               <ChevronRight className="i dim" />
               <span className="name" title={doc.name}>
                 {doc.name}
@@ -481,9 +477,9 @@ export default function Workspace() {
             AI
           </button>
           {doc && (
-            <nav className="seg" aria-label="Stages" style={{ marginLeft: 'auto' }}>
+            <nav className="seg ml-auto" aria-label="Stages">
               {stages.map((s, i) => (
-                <span key={s.id} className="row" style={{ gap: 2, flexWrap: 'nowrap' }}>
+                <span key={s.id} className="row gap-2 flex-nowrap">
                   {i > 0 && (
                     <span className="arrow" aria-hidden="true">
                       ›
@@ -515,7 +511,7 @@ export default function Workspace() {
                 <div className="ws-start-inner">
                   <div>
                     <h1>Workflow studio</h1>
-                    <p className="small muted" style={{ marginTop: 6, maxWidth: '64ch' }}>
+                    <p className="small muted mt-6 maxw-64ch">
                       Edit a note's workflow on the BPMN canvas: add steps, change who does what, connect services.
                       Check the payoff, then issue it, or save it as a ready-made note for others. Import a .bpmn file,
                       or ask the AI for a change.

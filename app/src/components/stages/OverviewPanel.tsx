@@ -66,9 +66,7 @@ export function OverviewPanel({
               ))}
             </div>
             <span className="label">Fields</span>
-            <div className="xs muted num" style={{ lineHeight: 1.7 }}>
-              {info.fields.join(', ') || 'none'}
-            </div>
+            <div className="xs muted num lh-1-7">{info.fields.join(', ') || 'none'}</div>
           </div>
         </details>
       </div>

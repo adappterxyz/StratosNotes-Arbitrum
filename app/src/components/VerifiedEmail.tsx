@@ -194,8 +194,7 @@ function VerifyDialog({
   return (
     <div className="scrim" role="presentation" onClick={onClose}>
       <div
-        className="modal"
-        style={{ width: 'min(460px, 100%)' }}
+        className="modal dialog-narrow"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ve-title"
@@ -215,7 +214,7 @@ function VerifyDialog({
             <X className="i" />
           </button>
         </div>
-        <div className="stack" style={{ padding: 16, gap: 12 }}>
+        <div className="stack p-16 gap-12">
           {status?.verified && step === 'email' && (
             <div className="notice info">Alerts go to {status.email}. Enter a new address to change it.</div>
           )}
@@ -237,10 +236,10 @@ function VerifyDialog({
                   prove which email you bound.
                 </span>
               </div>
-              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+              <fieldset className="field fieldset-bare">
                 <legend className="lbl">Email me about</legend>
                 {NOTIFY_CATEGORIES.map((c) => (
-                  <label key={c} className="row small" style={{ gap: 8, minHeight: 32 }}>
+                  <label key={c} className="row small gap-8 min-h-32">
                     <input
                       type="checkbox"
                       checked={cats.includes(c)}
@@ -277,7 +276,7 @@ function VerifyDialog({
                 />
                 <span className="hint">You can also open the link in the email, then press Continue.</span>
               </div>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <div className="row gap-8 flex-wrap">
                 <button
                   className="btn primary"
                   disabled={!!busy || code.length !== 6}

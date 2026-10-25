@@ -81,19 +81,19 @@ export default function WrapEth({ chainKey }: { chainKey: string }) {
     }
   };
   return (
-    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }} data-wrap-eth>
+    <div className="row gap-8 items-center flex-wrap" data-wrap-eth>
       <span className="xs muted">
         ETH collateral is pledged as WETH.
         {bal ? ` You hold ${fmtMoney(bal.eth, 4)} ETH and ${fmtMoney(bal.weth, 4)} WETH on ${entry.cfg.name}.` : ''}
       </span>
       <input
+        className="w-96"
         aria-label="ETH to wrap"
         type="number"
         min={0}
         step="any"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        style={{ width: 96 }}
       />
       <button className="btn" disabled={state.busy} onClick={() => void wrap()}>
         {state.busy ? 'Wrapping…' : 'Wrap ETH into WETH'}

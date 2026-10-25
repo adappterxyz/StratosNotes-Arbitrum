@@ -289,7 +289,7 @@ export default function Portfolio() {
             }
           />
         ) : (
-          <div className="card scroll-x" style={{ padding: 0 }}>
+          <div className="card scroll-x p-0">
             <table className="t">
               <thead>
                 <tr>
@@ -345,13 +345,13 @@ export default function Portfolio() {
             }
           />
         ) : (
-          <div className="card scroll-x" style={{ padding: 0 }}>
+          <div className="card scroll-x p-0">
             <table className="t">
               <thead>
                 <tr>
                   <th>Note</th>
                   <th>State</th>
-                  <th style={{ minWidth: 130 }}>Sold</th>
+                  <th className="minw-130">Sold</th>
                   <th>Collateral</th>
                   <th className="r">Coverage</th>
                   <th>Next payment</th>
@@ -378,13 +378,13 @@ export default function Portfolio() {
                         <div className="bar">
                           <span style={{ width: `${pct}%` }} />
                         </div>
-                        <div className="xs muted num" style={{ marginTop: 3 }}>
+                        <div className="xs muted num mt-3">
                           {fmtMoney(o.sold, 0)} of {fmtMoney(o.notional, 0)}
                         </div>
                       </td>
                       <td>
                         {o.economics?.collateral.length ? (
-                          <span className="coll-line" style={{ justifyContent: 'flex-start' }}>
+                          <span className="coll-line justify-start">
                             {o.economics.collateral.map((c) => (
                               <Asset
                                 key={c.asset}
@@ -430,7 +430,7 @@ export default function Portfolio() {
             body="Each claim of a coupon or redemption shows here, with a receipt id you can check on-chain. Payouts wait in the note until you claim them under Claimable."
           />
         ) : (
-          <div className="card scroll-x" style={{ padding: 0 }} data-paid>
+          <div className="card scroll-x p-0" data-paid>
             <table className="t">
               <thead>
                 <tr>
@@ -459,7 +459,7 @@ export default function Portfolio() {
                       </td>
                       <td className="r num">#{p.period}</td>
                       <td className="r num">
-                        <span className="asset" style={{ justifyContent: 'flex-end' }}>
+                        <span className="asset justify-end">
                           <span className="num">{cashAsset ? fmtMoney(amount) : amount}</span>
                           {cashAsset && <Asset sym={sym} size={16} />}
                         </span>
@@ -506,7 +506,7 @@ export default function Portfolio() {
             return (
               <div className="stack">
                 <div className="spread">
-                  <p className="small muted" style={{ margin: 0 }}>
+                  <p className="small muted m-0">
                     Coupons and redemptions accrue in each note until you claim them. One claim collects everything a
                     note owes you so far, with a receipt; you pay the network fee.
                   </p>
@@ -521,7 +521,7 @@ export default function Portfolio() {
                     </button>
                   )}
                 </div>
-                <div className="card scroll-x" style={{ padding: 0 }}>
+                <div className="card scroll-x p-0">
                   <table className="t">
                     <thead>
                       <tr>
@@ -549,7 +549,7 @@ export default function Portfolio() {
                               </div>
                             </td>
                             <td className="r num" data-cash>
-                              <span className="asset" style={{ justifyContent: 'flex-end' }}>
+                              <span className="asset justify-end">
                                 <span className="num">{fmtMoney(cash)}</span>
                                 <Asset sym={sym} size={16} />
                               </span>
@@ -597,7 +597,7 @@ export default function Portfolio() {
         <div className="stack">
           {!readOnly && <RedeemOnRobinhood />}
           {issued.some((n) => n.view.economics?.collateral.length) ? (
-            <div className="card scroll-x" style={{ padding: 0 }}>
+            <div className="card scroll-x p-0">
               <table className="t">
                 <thead>
                   <tr>

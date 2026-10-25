@@ -78,7 +78,7 @@ export default function DescribeIt({
         }}
       />
       <div className="row dz-row">
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row gap-6">
           {EXAMPLES.map((x) => (
             <button key={x} type="button" className="chip dz-ex" title={x} onClick={() => ask(x)} disabled={busy}>
               {x.split(',')[0]}

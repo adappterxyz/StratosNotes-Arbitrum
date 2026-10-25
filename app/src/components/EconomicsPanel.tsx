@@ -155,13 +155,13 @@ export default function EconomicsPanel({
             )}
             . Holders are paid from it on the payment date.
           </div>
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <div className="row flex-nowrap">
             <input
+              className="maxw-160"
               aria-label="Amount to fund"
               inputMode="decimal"
               value={amounts.fund ?? proposed}
               onChange={(ev) => setAmounts((a) => ({ ...a, fund: ev.target.value }))}
-              style={{ maxWidth: 160 }}
             />
             <button
               className="btn primary"
@@ -316,14 +316,10 @@ export default function EconomicsPanel({
       </div>
 
       {isIssuer && running && (
-        <div
-          className="stack"
-          style={{ gap: 10, borderTop: '1px solid hsl(var(--border))', paddingTop: 10 }}
-          data-issuer-actions
-        >
+        <div className="stack gap-10 divider-top" data-issuer-actions>
           {call && fundStep && call.funded && (
             <div className="small row">
-              <ShieldCheck className="i" style={{ color: 'hsl(var(--success))' }} />
+              <ShieldCheck className="i text-success" />
               Payment {call.period} is funded: holders are paid on <When t={call.payDate} />.
             </div>
           )}
@@ -334,7 +330,7 @@ export default function EconomicsPanel({
             </p>
           )}
           {actions.topUp.map((t) => (
-            <div key={t.symbol} className="row" style={{ flexWrap: 'nowrap' }}>
+            <div key={t.symbol} className="row flex-nowrap">
               <input
                 aria-label={`Top up ${tokenName(t.symbol)}`}
                 inputMode="decimal"
@@ -354,7 +350,7 @@ export default function EconomicsPanel({
             </div>
           ))}
           {actions.delivery.map((d) => (
-            <div key={d.symbol} className="row" style={{ flexWrap: 'nowrap' }}>
+            <div key={d.symbol} className="row flex-nowrap">
               <input
                 aria-label={`Fund t${d.symbol} delivery`}
                 inputMode="decimal"

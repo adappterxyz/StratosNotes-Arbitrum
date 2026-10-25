@@ -39,14 +39,14 @@ export function IssueSchedule({
         </div>
         <div className="field">
           <label htmlFor="is-every">Observe every</label>
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <div className="row flex-nowrap">
             <input
+              className="w-70"
               id="is-every"
               type="number"
               min={1}
               value={every.n}
               onChange={(e) => setEvery({ ...every, n: Number(e.target.value) || 1 })}
-              style={{ width: 70 }}
             />
             <select
               aria-label="Interval unit"

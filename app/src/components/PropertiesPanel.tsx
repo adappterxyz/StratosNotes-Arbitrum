@@ -95,9 +95,7 @@ export default function PropertiesPanel({
             </label>
           </>
         ) : (
-          <p className="small muted" style={{ margin: 0 }}>
-            Conditions apply on flows out of an exclusive gateway.
-          </p>
+          <p className="small muted m-0">Conditions apply on flows out of an exclusive gateway.</p>
         )}
       </div>
     );
@@ -140,7 +138,7 @@ export default function PropertiesPanel({
       </div>
 
       {isTask && (
-        <section className="stack" style={{ gap: 8 }}>
+        <section className="stack gap-8">
           <div className="spread">
             <h3>Fields</h3>
             <button
@@ -151,7 +149,7 @@ export default function PropertiesPanel({
             </button>
           </div>
           {fields.length === 0 && (
-            <p className="small muted" style={{ margin: 0 }}>
+            <p className="small muted m-0">
               No fields.{' '}
               {type === 'UserTask'
                 ? 'A person enters fields here.'
@@ -163,12 +161,8 @@ export default function PropertiesPanel({
             const upd = (patch: Partial<TemplateField>) =>
               setFields(fields.map((x, j) => (j === i ? { ...x, ...patch } : x)));
             return (
-              <div
-                key={i}
-                className="stack"
-                style={{ gap: 6, padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}
-              >
-                <div className="row field-row" style={{ flexWrap: 'nowrap' }}>
+              <div key={i} className="stack gap-6 boxed">
+                <div className="row field-row flex-nowrap">
                   <input
                     aria-label="Field name"
                     className="num field-name"
@@ -310,7 +304,7 @@ export default function PropertiesPanel({
       )}
 
       {isTask && (
-        <section className="stack" style={{ gap: 8 }}>
+        <section className="stack gap-8">
           <div className="spread">
             <h3>Payments</h3>
             <button
@@ -346,12 +340,8 @@ export default function PropertiesPanel({
               </select>
             );
             return (
-              <div
-                key={i}
-                className="stack"
-                style={{ gap: 6, padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}
-              >
-                <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <div key={i} className="stack gap-6 boxed">
+                <div className="row flex-nowrap">
                   <select
                     aria-label="Operation"
                     value={o.operation}
@@ -416,12 +406,12 @@ export default function PropertiesPanel({
                   </div>
                 )}
                 {o.operation === 'swap' && (
-                  <div className="stack" style={{ gap: 6 }}>
+                  <div className="stack gap-6">
                     <div className="row">
                       {party('deliveryParty', 'Delivers')}
                       {party('paymentParty', 'Pays')}
                     </div>
-                    <div className="row" style={{ flexWrap: 'nowrap' }}>
+                    <div className="row flex-nowrap">
                       <select
                         aria-label="Paid in"
                         value={o.params.counterAssetId ?? ''}

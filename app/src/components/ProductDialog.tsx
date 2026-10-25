@@ -111,7 +111,7 @@ export function ProductForm({ p, set }: { p: ProductParams; set: (patch: Partial
           ))}
         </select>
       </div>
-      <div className="field" style={{ gridColumn: 'span 2' }}>
+      <div className="field span-2">
         <label htmlFor="pd-name">Name</label>
         <input id="pd-name" value={p.name} onChange={(e) => set({ name: e.target.value })} />
       </div>
@@ -425,7 +425,7 @@ export default function ProductDialog({
         <div className="modal-body">
           <div className="modal-cols">
             <ProductForm p={p} set={(patch) => setP((prev) => ({ ...prev, ...patch }))} />
-            <div className="stack" style={{ gap: 8 }}>
+            <div className="stack gap-8">
               <span className="label">Payout per 100 at maturity</span>
               {errors.length ? (
                 <ul className="issues">

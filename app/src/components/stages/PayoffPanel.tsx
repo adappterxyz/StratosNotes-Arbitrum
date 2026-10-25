@@ -45,7 +45,7 @@ export function PayoffPanel({ doc }: { doc: DocInfo }) {
         <span className="label">
           What if: {basket ? 'worst performance' : 'level'} at each observation, % of strike
         </span>
-        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))' }}>
+        <div className="form-grid whatif-grid">
           {Array.from({ length: n }, (_, k) => (
             <div key={k} className="field">
               <label htmlFor={`wi-${k}`}>Obs {k + 1}</label>

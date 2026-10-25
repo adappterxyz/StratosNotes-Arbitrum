@@ -58,7 +58,7 @@ export default function FaucetButton() {
       </span>
     );
     return (
-      <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+      <span className="row gap-6 flex-nowrap">
         {status}
         <button className="btn" onClick={get} disabled={state.busy}>
           <Droplet className="i" />
@@ -104,12 +104,10 @@ function TokenMenu({ gas, stocks }: { gas: Array<{ name: string; url: string }>;
       </button>
       {open && (
         <div className="menu-pop" role="menu">
-          <span className="label" style={{ padding: '4px 10px' }}>
-            1 · Gas (testnet ETH)
-          </span>
+          <span className="label pad-4-10">1 · Gas (testnet ETH)</span>
           {gas.map((g) => (
             <a key={g.url} className="mi" role="menuitem" href={g.url} target="_blank" rel="noreferrer">
-              <span className="row" style={{ gap: 8 }}>
+              <span className="row gap-8">
                 <AssetIcon sym="ETH" size={20} />
                 <span>
                   ETH on {g.name}
@@ -120,11 +118,9 @@ function TokenMenu({ gas, stocks }: { gas: Array<{ name: string; url: string }>;
             </a>
           ))}
           <div className="sep" />
-          <span className="label" style={{ padding: '4px 10px' }}>
-            2 · {CASH_TOKEN.token} to subscribe
-          </span>
+          <span className="label pad-4-10">2 · {CASH_TOKEN.token} to subscribe</span>
           <a className="mi" role="menuitem" href={FAUCETS.usdg} target="_blank" rel="noreferrer">
-            <span className="row" style={{ gap: 8 }}>
+            <span className="row gap-8">
               <AssetIcon sym={CASH_TOKEN.token} size={20} />
               <span>
                 {CASH_TOKEN.token} from Paxos<small>The stablecoin notes are paid in, on both chains</small>
@@ -133,11 +129,9 @@ function TokenMenu({ gas, stocks }: { gas: Array<{ name: string; url: string }>;
             <ExternalLink className="i" />
           </a>
           <div className="sep" />
-          <span className="label" style={{ padding: '4px 10px' }}>
-            Collateral and delivery
-          </span>
+          <span className="label pad-4-10">Collateral and delivery</span>
           <span className="mi" role="menuitem" aria-disabled="true">
-            <span className="row" style={{ gap: 8 }}>
+            <span className="row gap-8">
               <AssetIcon sym="WETH" size={20} />
               <span>
                 WETH: wrap your testnet ETH<small>Offered when you issue a note with ETH collateral</small>
@@ -146,7 +140,7 @@ function TokenMenu({ gas, stocks }: { gas: Array<{ name: string; url: string }>;
           </span>
           {stocks && (
             <a className="mi" role="menuitem" href={FAUCETS.robinhood} target="_blank" rel="noreferrer">
-              <span className="row" style={{ gap: 8 }}>
+              <span className="row gap-8">
                 <AssetStack syms={STOCKS} size={20} label={false} />
                 <span>
                   {STOCKS.join(', ')} from Robinhood<small>Stock tokens on Robinhood Chain testnet</small>

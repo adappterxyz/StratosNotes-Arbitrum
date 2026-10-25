@@ -77,8 +77,8 @@ export default function AlertsPage() {
           subscribing need a verified email.
         </p>
       </div>
-      <div className="alerts-config stack" style={{ gap: 12 }}>
-        <section className="card stack" style={{ gap: 12 }}>
+      <div className="alerts-config stack gap-12">
+        <section className="card stack gap-12">
           {status?.verified ? (
             <div className="notice ok">
               Alerts go to {status.email}
@@ -102,10 +102,10 @@ export default function AlertsPage() {
           </button>
         </section>
         {status?.verified && (
-          <section className="card stack" style={{ gap: 10 }}>
+          <section className="card stack gap-10">
             <h3>Email me about</h3>
             {NOTIFY_CATEGORIES.map((c) => (
-              <label key={c} className="row small" style={{ gap: 8, minHeight: 40 }}>
+              <label key={c} className="row small gap-8 min-h-40">
                 <input
                   type="checkbox"
                   checked={cats.includes(c)}
@@ -129,7 +129,7 @@ export default function AlertsPage() {
             >
               Save
             </button>
-            <h3 style={{ marginTop: 8 }}>Proof of your binding</h3>
+            <h3 className="mt-8">Proof of your binding</h3>
             <p className="xs muted">
               On-chain there is only keccak256(abi.encode(salt, your email)). Download the salt to prove later which
               email this wallet bound.
@@ -184,7 +184,7 @@ export function AlertsConfirm() {
       .catch((e) => setState({ ok: false, text: e instanceof Error ? e.message : String(e) }));
   }, [params]);
   return (
-    <main className="page" style={{ maxWidth: 560 }}>
+    <main className="page page-narrow">
       <h1>Verify your email</h1>
       {state ? (
         <div className={`notice ${state.ok ? 'ok' : 'err'}`}>{state.text}</div>
@@ -199,7 +199,7 @@ export function AlertsUnsubscribe() {
   const [params] = useSearchParams();
   const [state, setState] = useState<{ ok: boolean; text: string } | null>(null);
   return (
-    <main className="page" style={{ maxWidth: 560 }}>
+    <main className="page page-narrow">
       <h1>Stop email alerts</h1>
       {state ? (
         <div className={`notice ${state.ok ? 'ok' : 'err'}`}>{state.text}</div>
@@ -221,7 +221,7 @@ export function AlertsUnsubscribe() {
           Stop all alert emails
         </button>
       )}
-      <p className="xs muted" style={{ marginTop: 12 }}>
+      <p className="xs muted mt-12">
         <Link to="/alerts">Email alerts</Link>
       </p>
     </main>

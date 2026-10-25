@@ -54,7 +54,7 @@ export function LockTracker({ leg, address, tick }: { leg: Leg; address: string 
                 <b>{done ? 'Delivered by Chainlink CCIP' : 'Chainlink CCIP delivering'}</b>
                 {done ? '' : ` · ${mins(now - l.at)} so far, usually 15–25`} ·{' '}
                 <a href={ccipLink(l.messageId)} target="_blank" rel="noreferrer">
-                  Follow on CCIP <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+                  Follow on CCIP <ExternalLink className="i ic-11" />
                 </a>
               </span>
             </li>

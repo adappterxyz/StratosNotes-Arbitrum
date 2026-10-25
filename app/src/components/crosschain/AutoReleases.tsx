@@ -120,9 +120,9 @@ export function AutoReleases({ leg }: { leg: Leg }) {
 
   return (
     <section className="card stack" data-auto-releases>
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row gap-8">
         <ArrowRightLeft className="i" />
-        <h3 style={{ margin: 0 }}>Collateral released to {leg.asset.name}</h3>
+        <h3 className="m-0">Collateral released to {leg.asset.name}</h3>
       </div>
       <p className="xs muted">
         Collateral a note paid you (your share after a default, or an issuer's collateral back at maturity) stays on{' '}
@@ -130,11 +130,7 @@ export function AutoReleases({ leg }: { leg: Leg }) {
         address, over Chainlink CCIP. Nothing to redeem.
       </p>
       {rows.map((row) => (
-        <div
-          key={String(row.index)}
-          className="row"
-          style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}
-        >
+        <div key={String(row.index)} className="row justify-between gap-8 flex-wrap">
           <span>
             {formatUnits(row.amount, row.decimals)} {receiptLabel(row.sym)}
             {row.to.toLowerCase() !== address.toLowerCase() ? (
@@ -146,16 +142,14 @@ export function AutoReleases({ leg }: { leg: Leg }) {
           </span>
           {row.sent ? (
             <span className="xs">
-              <CheckCircle2 className="i" style={{ width: 12, height: 12 }} /> Released to your wallet on{' '}
-              {leg.asset.name}{' '}
+              <CheckCircle2 className="i ic-12" /> Released to your wallet on {leg.asset.name}{' '}
               <a href={ccipLink(row.sent.messageId)} target="_blank" rel="noreferrer">
-                CCIP msg {row.sent.messageId.slice(0, 10)}…{' '}
-                <ExternalLink className="i" style={{ width: 11, height: 11 }} />
+                CCIP msg {row.sent.messageId.slice(0, 10)}… <ExternalLink className="i ic-11" />
               </a>
             </span>
           ) : (
-            <span className="row xs" style={{ gap: 8 }}>
-              <Clock className="i" style={{ width: 12, height: 12 }} /> Queued: goes out with the next release run
+            <span className="row xs gap-8">
+              <Clock className="i ic-12" /> Queued: goes out with the next release run
               <button className="btn sm" onClick={() => sendNow(row)} disabled={!!state.busy}>
                 {state.busy === String(row.index) ? 'Sending…' : 'Send now'}
               </button>

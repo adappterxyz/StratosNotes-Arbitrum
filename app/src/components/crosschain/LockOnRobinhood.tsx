@@ -90,7 +90,7 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
 
   return (
     <div className="xc-panel stack">
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row gap-8">
         <Lock className="i" />
         <strong>Lock collateral on {leg.asset.name}</strong>
       </div>
@@ -99,7 +99,7 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
         receipts to you on {leg.home.name} to pledge at Approve Terms. The tokens never leave {leg.asset.name}. Delivery
         takes about 15–25 minutes, so lock well before the strike.
       </p>
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <div className="row gap-8 flex-wrap">
         <label className="field" htmlFor="xc-token">
           <span className="lbl">Token</span>
           <select id="xc-token" value={sym} onChange={(e) => setSym(e.target.value)}>
@@ -118,7 +118,7 @@ export function LockOnRobinhood({ needed }: { needed: Array<{ receipt: string; a
           Lock on {leg.asset.name}
         </button>
       </div>
-      <ul className="xs" style={{ margin: 0, paddingLeft: 18 }}>
+      <ul className="xs m-0 pl-18">
         {needed.map((n) => (
           <li key={n.receipt}>
             {receiptLabel(n.receipt)} locked on {leg.asset.name}, ready to pledge:{' '}

@@ -170,7 +170,7 @@ export default function ReadyMadeList({ onPick }: { onPick: (r: ReadyMade) => vo
     });
 
   return (
-    <div className="stack" style={{ gap: 12 }}>
+    <div className="stack gap-12">
       <div className="filters" role="group" aria-label="Filter ready-made notes">
         {FILTERS.map((f) => (
           <button

@@ -74,7 +74,7 @@ export function EmailsSent({ address, chainKey }: { address: string; chainKey: s
 
   const all = [...queued, ...(emails ?? [])];
   return (
-    <section className="card stack" style={{ gap: 10 }} data-emails-sent>
+    <section className="card stack gap-10" data-emails-sent>
       <div className="spread">
         <h3>
           <Inbox className="i" /> Emails sent

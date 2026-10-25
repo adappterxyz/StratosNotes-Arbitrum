@@ -2612,3 +2612,184 @@ tr.link:focus-visible {
 .xc-steps li.used .i {
   color: hsl(var(--muted-foreground));
 }
+
+/* ---- Utilities -------------------------------------------------------------
+   Small one-purpose classes for spacing and alignment tweaks that used to be inline style={{…}} props. They come last
+   so that they win over the component rules above at equal specificity, as the inline styles did. */
+.gap-2 {
+  gap: 2px;
+}
+.gap-4 {
+  gap: 4px;
+}
+.gap-6 {
+  gap: 6px;
+}
+.gap-8 {
+  gap: 8px;
+}
+.gap-10 {
+  gap: 10px;
+}
+.gap-12 {
+  gap: 12px;
+}
+.flex-wrap {
+  flex-wrap: wrap;
+}
+.flex-nowrap {
+  flex-wrap: nowrap;
+}
+.items-center {
+  align-items: center;
+}
+.items-end {
+  align-items: flex-end;
+}
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.inline-block {
+  display: inline-block;
+}
+.inline-flex {
+  display: inline-flex;
+}
+.span-2 {
+  grid-column: span 2;
+}
+.m-0 {
+  margin: 0;
+}
+.mt-3 {
+  margin-top: 3px;
+}
+.mt-6 {
+  margin-top: 6px;
+}
+.mt-8 {
+  margin-top: 8px;
+}
+.mt-12 {
+  margin-top: 12px;
+}
+.mt-14 {
+  margin-top: 14px;
+}
+.ml-auto {
+  margin-left: auto;
+}
+.p-0 {
+  padding: 0;
+}
+.p-16 {
+  padding: 16px;
+}
+.pad-0-6 {
+  padding: 0 6px;
+}
+.pad-4-10 {
+  padding: 4px 10px;
+}
+.pl-18 {
+  padding-left: 18px;
+}
+.w-64 {
+  width: 64px;
+}
+.w-70 {
+  width: 70px;
+}
+.w-96 {
+  width: 96px;
+}
+.minw-130 {
+  min-width: 130px;
+}
+.maxw-160 {
+  max-width: 160px;
+}
+.maxw-64ch {
+  max-width: 64ch;
+}
+.min-h-32 {
+  min-height: 32px;
+}
+.min-h-40 {
+  min-height: 40px;
+}
+.lh-1-7 {
+  line-height: 1.7;
+}
+.fw-600 {
+  font-weight: 600;
+}
+.text-right {
+  text-align: right;
+}
+.text-success {
+  color: hsl(var(--success));
+}
+.text-accent {
+  color: hsl(var(--accent-text));
+}
+.text-destructive {
+  color: hsl(var(--destructive));
+}
+/* Icon sizes: `svg.i` and `.xc-steps li .i` size icons, so these match their specificity. */
+svg.i.ic-11 {
+  width: 11px;
+  height: 11px;
+}
+svg.i.ic-12 {
+  width: 12px;
+  height: 12px;
+}
+svg.i.ic-13 {
+  width: 13px;
+  height: 13px;
+}
+/* An icon leading an issue's message (Validate). */
+svg.i.issue-ic {
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+/* A rule above a group of controls. */
+.divider-top {
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 10px;
+}
+/* A light outlined box around one item of a list (fields, connectors in the properties panel). */
+.boxed {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.page-narrow {
+  max-width: 560px;
+}
+.dialog-narrow {
+  width: min(460px, 100%);
+}
+.fieldset-bare {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+/* A button that looks like the text it wraps (an AI suggestion). */
+.btn-bare {
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+/* The what-if inputs of the payoff stage: one narrow column per observation. */
+.whatif-grid {
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+}

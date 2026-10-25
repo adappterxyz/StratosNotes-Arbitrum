@@ -68,9 +68,9 @@ export default function AiPanel({
 
   return (
     <aside className="ws-ai" aria-label="AI assistant">
-      <div className="ws-bar" style={{ justifyContent: 'space-between' }}>
-        <span className="row small" style={{ fontWeight: 600 }}>
-          <Sparkles className="i" style={{ color: 'hsl(var(--accent-text))' }} />
+      <div className="ws-bar justify-between">
+        <span className="row small fw-600">
+          <Sparkles className="i text-accent" />
           AI assistant
         </span>
         <button className="btn" onClick={onClose} aria-label="Hide the AI assistant">
@@ -79,18 +79,13 @@ export default function AiPanel({
       </div>
       <div className="chat">
         {msgs.length === 0 && (
-          <div className="stack" style={{ gap: 8 }}>
+          <div className="stack gap-8">
             <p className="xs muted">
               Describe a note, paste a term sheet, or ask for a change to the open workflow. The answer is checked by
               the validator and compiler before it reaches the canvas.
             </p>
             {EXAMPLES.map((x) => (
-              <button
-                key={x}
-                className="msg ai"
-                style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}
-                onClick={() => ask(x)}
-              >
+              <button key={x} className="msg ai btn-bare" onClick={() => ask(x)}>
                 {x}
               </button>
             ))}

@@ -25,11 +25,7 @@ export function Addr({ value, href }: { value: string; href?: string }) {
         short(value)
       )}
       <button type="button" onClick={copy} aria-label={copied ? 'Copied' : `Copy ${value}`}>
-        {copied ? (
-          <Check className="i" style={{ width: 13, height: 13 }} />
-        ) : (
-          <Copy className="i" style={{ width: 13, height: 13 }} />
-        )}
+        {copied ? <Check className="i ic-13" /> : <Copy className="i ic-13" />}
       </button>
     </span>
   );

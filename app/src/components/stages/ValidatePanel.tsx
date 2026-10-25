@@ -27,7 +27,7 @@ export function ValidatePanel({
               className={`err ${e.nodeId ? 'click' : ''}`}
               onClick={() => e.nodeId && onSelect(e.nodeId)}
             >
-              <AlertCircle className="i" style={{ verticalAlign: -2, marginRight: 6 }} />
+              <AlertCircle className="i issue-ic" />
               {e.message}
             </li>
           ))}
@@ -37,7 +37,7 @@ export function ValidatePanel({
               className={`warn ${w.nodeId ? 'click' : ''}`}
               onClick={() => w.nodeId && onSelect(w.nodeId)}
             >
-              <AlertTriangle className="i" style={{ verticalAlign: -2, marginRight: 6 }} />
+              <AlertTriangle className="i issue-ic" />
               {w.message}
             </li>
           ))}

@@ -20,9 +20,7 @@ export default function RoleSwitch() {
       aria-label="Test account"
       title="Dev build: anvil test accounts in the test wallet"
     >
-      <span className="xs muted" style={{ padding: '0 6px' }}>
-        Test
-      </span>
+      <span className="xs muted pad-0-6">Test</span>
       {TEST_ROLES.map((r, i) => (
         <button
           key={r.label}
